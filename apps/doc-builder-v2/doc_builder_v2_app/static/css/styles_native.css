@@ -1,0 +1,172 @@
+/* Document Builder Native Gradio Styles */
+
+/* Main container styling */
+.gradio-container {
+    max-width: 1400px !important;
+    background-color: #f5f5f5 !important;
+}
+
+/* Hide labels for cleaner look */
+.block-heading label,
+.block-content label {
+    display: none !important;
+}
+
+/* Block container styling */
+.gradio-group {
+    background-color: white !important;
+    border: 1px solid #e0e0e0 !important;
+    border-radius: 8px !important;
+    padding: 16px !important;
+    margin-bottom: 12px !important;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05) !important;
+}
+
+/* Block type label */
+.block-type-label p {
+    margin: 0 0 12px 0;
+    color: #666;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* Heading input styling */
+.block-heading textarea {
+    font-size: 18px !important;
+    font-weight: 600 !important;
+    border: none !important;
+    border-bottom: 2px solid #e0e0e0 !important;
+    border-radius: 0 !important;
+    padding: 8px 0 !important;
+    background: transparent !important;
+    resize: none !important;
+    min-height: 40px !important;
+}
+
+.block-heading textarea:focus {
+    border-bottom-color: #4a9d9e !important;
+    box-shadow: none !important;
+    outline: none !important;
+}
+
+/* Content textarea styling */
+.block-content textarea {
+    border: 1px solid #e0e0e0 !important;
+    border-radius: 4px !important;
+    font-size: 14px !important;
+    padding: 12px !important;
+    background-color: #fafafa !important;
+    min-height: 120px !important;
+}
+
+.block-content textarea:focus {
+    border-color: #4a9d9e !important;
+    background-color: white !important;
+    box-shadow: 0 0 0 2px rgba(74, 157, 158, 0.1) !important;
+}
+
+/* Delete button styling */
+.delete-btn {
+    min-width: 28px !important;
+    width: 28px !important;
+    height: 28px !important;
+    padding: 0 !important;
+    font-size: 16px !important;
+    line-height: 1 !important;
+    border-radius: 4px !important;
+    background-color: #f5f5f5 !important;
+    border: 1px solid #e0e0e0 !important;
+    color: #666 !important;
+    transition: all 0.2s ease !important;
+}
+
+.delete-btn:hover {
+    background-color: #ff6b6b !important;
+    border-color: #ff6b6b !important;
+    color: white !important;
+}
+
+/* Block resources info */
+.block-resources-info {
+    background-color: #f8f8f8;
+    padding: 10px;
+    border-radius: 4px;
+    border: 1px dashed #d0d0d0;
+    font-size: 13px;
+    color: #999;
+    text-align: center;
+    margin-top: 8px;
+}
+
+/* Add block buttons */
+button[value="Add AI Block"],
+button[value="Add Text Block"] {
+    min-width: 120px !important;
+}
+
+/* Primary button styling */
+button[variant="primary"] {
+    background-color: #4a9d9e !important;
+    border-color: #4a9d9e !important;
+}
+
+button[variant="primary"]:hover {
+    background-color: #3a8d8e !important;
+    border-color: #3a8d8e !important;
+}
+
+/* Resources column */
+.gradio-markdown h3 {
+    font-size: 16px;
+    margin-bottom: 12px;
+    color: #333;
+}
+
+/* File upload area */
+.gradio-file {
+    border: 2px dashed #d0d0d0 !important;
+    border-radius: 8px !important;
+    background-color: #fafafa !important;
+}
+
+.gradio-file:hover {
+    border-color: #4a9d9e !important;
+    background-color: #f5f5f5 !important;
+}
+
+/* Generated content area */
+.gradio-markdown.generated-content {
+    background-color: white;
+    padding: 24px;
+    border-radius: 8px;
+    min-height: 400px;
+    border: 1px solid #e0e0e0;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+/* Workspace area */
+.gradio-column:has(.block-container) {
+    max-height: 600px;
+    overflow-y: auto;
+    padding-right: 8px;
+}
+
+/* Custom scrollbar */
+.gradio-column:has(.block-container)::-webkit-scrollbar {
+    width: 6px;
+}
+
+.gradio-column:has(.block-container)::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 3px;
+}
+
+.gradio-column:has(.block-container)::-webkit-scrollbar-thumb {
+    background: #888;
+    border-radius: 3px;
+}
+
+.gradio-column:has(.block-container)::-webkit-scrollbar-thumb:hover {
+    background: #555;
+}
