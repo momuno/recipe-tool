@@ -690,6 +690,11 @@
     font-family: monospace !important;
     line-height: 1.2 !important;
     background-color: #f5f5f5 !important; /* Same as resource-item background */
+    word-wrap: break-word !important;
+    word-break: break-word !important;
+    overflow-wrap: break-word !important;
+    white-space: normal !important;
+    overflow: hidden !important;
 }
 
 /* Target any child elements inside resource-filename */
