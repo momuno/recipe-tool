@@ -678,10 +678,9 @@ def generate_resource_html(resources):
             f'<button class="desc-expand-btn" onclick="toggleResourceDescription(\'{resource_id}\')">⌵</button>'
             f"</div>"
             f'<div class="resource-filename">{resource["name"]}</div>'
-            f'<div class="resource-upload-zone" data-resource-path="{path}">'
+            f'<div class="resource-upload-zone" data-resource-path="{path}" '
+            f"onclick=\"handleResourceFileUpload('{path}', this)\">"
             f'<span class="upload-text">Drop file here to replace</span>'
-            f'<input type="file" class="resource-file-input" accept=".txt,.md,.py,.c,.cpp,.h,.java,.js,.ts,.jsx,.tsx,.json,.xml,.yaml,.yml,.toml,.ini,.cfg,.conf,.sh,.bash,.zsh,.fish,.ps1,.bat,.cmd,.rs,.go,.rb,.php,.pl,.lua,.r,.m,.swift,.kt,.scala,.clj,.ex,.exs,.elm,.fs,.ml,.sql,.html,.htm,.css,.scss,.sass,.less,.vue,.svelte,.astro,.tex,.rst,.adoc,.org,.csv" '
-            f"onchange=\"handleResourceFileUpload('{path}', this)\" />"
             f"</div>"
             f"</div>"
             f"</div>"

@@ -1558,12 +1558,8 @@ function setupResourceDescriptions() {
     });
 }
 
-// Handle resource file upload
-function handleResourceFileUpload(resourcePath, fileInput) {
-    const file = fileInput.files[0];
-    if (!file) return;
-    
-    console.log('Uploading file to replace resource:', resourcePath, file.name);
+function handleResourceFileUpload(resourcePath, uploadZone) {
+    console.log('Resource file upload triggered for:', resourcePath);
     
     // Set the resource path
     const pathInput = document.getElementById('replace-resource-path');
@@ -1575,44 +1571,62 @@ function handleResourceFileUpload(resourcePath, fileInput) {
         }
     }
     
-    // Find the hidden file input component and set the file
+    // Store which upload zone we're working with
+    window.currentUploadZone = uploadZone;
+    
+    // Find and click the hidden Gradio file input
     const hiddenFileInput = document.querySelector('#replace-resource-file input[type="file"]');
     if (hiddenFileInput) {
-        // Create a new DataTransfer to set files on the hidden input
-        const dataTransfer = new DataTransfer();
-        dataTransfer.items.add(file);
-        hiddenFileInput.files = dataTransfer.files;
-        
-        // Trigger change event on the hidden file input
-        hiddenFileInput.dispatchEvent(new Event('change', { bubbles: true }));
-        
-        // Trigger the replace button after a delay
-        setTimeout(() => {
-            const replaceBtn = document.getElementById('replace-resource-trigger');
-            if (replaceBtn) {
-                replaceBtn.click();
-                
-                // Add visual feedback to the upload zone
-                const uploadZone = fileInput.closest('.resource-upload-zone');
-                if (uploadZone) {
-                    uploadZone.classList.add('upload-success');
-                    const uploadText = uploadZone.querySelector('.upload-text');
-                    if (uploadText) {
-                        uploadText.textContent = '✓ File replaced';
-                    }
+        // Add a one-time change listener
+        const handleFileChange = function() {
+            hiddenFileInput.removeEventListener('change', handleFileChange);
+            
+            // Trigger the replace button after file is selected
+            setTimeout(() => {
+                const replaceBtn = document.getElementById('replace-resource-trigger');
+                if (replaceBtn) {
+                    replaceBtn.click();
                     
-                    // Reset after 2 seconds
+                    // Add visual feedback to the correct upload zone
+                    if (window.currentUploadZone) {
+                        window.currentUploadZone.classList.add('upload-success');
+                        const uploadText = window.currentUploadZone.querySelector('.upload-text');
+                        if (uploadText) {
+                            uploadText.textContent = '✓ File replaced';
+                        }
+                        
+                        // Reset after 2 seconds
+                        setTimeout(() => {
+                            window.currentUploadZone.classList.remove('upload-success');
+                            uploadText.textContent = 'Drop file here to replace';
+                            window.currentUploadZone = null;
+                        }, 2000);
+                    }
+                }
+            }, 500);
+        };
+        
+        hiddenFileInput.addEventListener('change', handleFileChange);
+        
+        // Click to open file dialog immediately (required for browser security)
+        try {
+            hiddenFileInput.click();
+        } catch (e) {
+            console.error('Failed to open file dialog:', e);
+            // Fallback: show error message
+            if (window.currentUploadZone) {
+                const uploadText = window.currentUploadZone.querySelector('.upload-text');
+                if (uploadText) {
+                    uploadText.textContent = '❌ File dialog blocked';
+                    uploadText.style.color = '#ff5252';
                     setTimeout(() => {
-                        uploadZone.classList.remove('upload-success');
                         uploadText.textContent = 'Drop file here to replace';
-                    }, 2000);
+                        uploadText.style.color = '';
+                    }, 3000);
                 }
             }
-        }, 100);
+        }
     }
-    
-    // Clear the file input
-    fileInput.value = '';
 }
 
 // Prevent drops on resource textareas and inputs
@@ -1686,17 +1700,11 @@ function setupResourceUploadZones() {
             
             // Handle external file drops
             if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-                const fileInput = this.querySelector('.resource-file-input');
                 const resourcePath = this.getAttribute('data-resource-path');
                 
-                if (fileInput && resourcePath) {
-                    // Create a new DataTransfer to set files on input
-                    const dataTransfer = new DataTransfer();
-                    dataTransfer.items.add(e.dataTransfer.files[0]);
-                    fileInput.files = dataTransfer.files;
-                    
-                    // Trigger the change event
-                    handleResourceFileUpload(resourcePath, fileInput);
+                if (resourcePath) {
+                    // Trigger the file upload handler
+                    handleResourceFileUpload(resourcePath, this);
                 }
             }
         });
