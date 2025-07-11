@@ -98,12 +98,6 @@ def add_ai_block(blocks, focused_block_id=None):
     return blocks + [new_block]
 
 
-def add_heading_block(blocks):
-    """Add a heading block."""
-    new_block = {"id": str(uuid.uuid4()), "type": "heading", "content": "Heading"}
-    return blocks + [new_block]
-
-
 def add_text_block(blocks, focused_block_id=None):
     """Add a text block."""
     new_block = {
@@ -315,19 +309,6 @@ def update_block_indent(blocks, block_id, direction, title, description, resourc
     # Regenerate outline and JSON
     outline, json_str = regenerate_outline_from_state(title, description, resources, blocks)
     return blocks, outline, json_str
-
-
-def save_inline_resources(blocks, output_dir):
-    """Save inline resources from edited text blocks to disk."""
-    saved_resources = []
-    for block in blocks:
-        if block.get("type") == "text" and block.get("edited") and block.get("text_content"):
-            # Save the inline resource
-            filename = f"inline_{block['id']}.txt"
-            filepath = Path(output_dir) / filename
-            filepath.write_text(block["text_content"], encoding="utf-8")
-            saved_resources.append({"block_id": block["id"], "path": str(filepath)})
-    return saved_resources
 
 
 async def handle_document_generation(title, description, resources, blocks, session_id=None):
@@ -2676,39 +2657,3 @@ def create_app():
         )
 
     return app
-
-
-def check_deployment_status():
-    """Quick deployment status check."""
-    # Verify essential configuration
-    app_root = Path(__file__).resolve().parents[1]
-    bundled_recipe_path = app_root / "document_generator_v2_app" / "recipes" / "document_generator_recipe.json"
-
-    print("Document Generator starting...")
-    print(f"Recipe source: {'bundled' if bundled_recipe_path.exists() else 'development'}")
-
-    # Show LLM provider configuration
-    provider = os.getenv("LLM_PROVIDER", "openai")
-    model = os.getenv("DEFAULT_MODEL", "gpt-4o")
-    print(f"LLM: {provider}/{model}")
-
-
-def main():
-    """Main entry point for the Document Builder app."""
-    # Load environment variables from .env file
-    load_dotenv()
-
-    # Run diagnostic check
-    check_deployment_status()
-
-    # Configuration for hosting - Azure App Service uses PORT environment variable
-    server_name = os.getenv("GRADIO_SERVER_NAME", "0.0.0.0")
-    server_port = int(os.getenv("PORT", os.getenv("GRADIO_SERVER_PORT", "8000")))
-    print(f"Server: {server_name}:{server_port}")
-
-    app = create_app()
-    app.launch(server_name=server_name, server_port=server_port, mcp_server=True, pwa=True)
-
-
-if __name__ == "__main__":
-    main()

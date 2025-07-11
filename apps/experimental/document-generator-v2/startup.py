@@ -10,6 +10,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 if __name__ == "__main__":
-    from document_generator_v2_app.app import main
+    from document_generator_v2_app.main import main
 
     main()
