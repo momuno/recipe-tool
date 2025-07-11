@@ -646,53 +646,6 @@ def update_resource_description(blocks, block_id, resource_path, description_tex
     return blocks, outline, json_str
 
 
-def generate_resource_html(resources):
-    """Generate HTML for resource panel display."""
-    if not resources:
-        return (
-            "<p style='color: #666; font-size: 12px'>(.md, .csv, .py, .json, .txt, etc.)</p>"
-            "<p style='color: #666; font-size: 12px'>These reference files will be used for AI context.</p>"
-        )
-
-    html_items = []
-    for idx, resource in enumerate(resources):
-        css_class = "resource-item text"
-        path = resource["path"].replace("'", "\\'")  # Escape single quotes
-        title = resource.get("title", resource["name"])
-        description = resource.get("description", "")
-        resource_id = f"resource-{idx}"  # Unique ID for each resource
-
-        html_items.append(
-            f'<div class="{css_class}" id="{resource_id}" draggable="true" data-resource-name="{resource["name"]}" '
-            f'data-resource-title="{title}" data-resource-type="text" data-resource-path="{resource["path"]}">'
-            f'<div class="resource-content">'
-            f'<div class="resource-header">'
-            f'<input type="text" class="resource-title-input" value="{title}" '
-            f'placeholder="Title" '
-            f"oninput=\"updateResourceTitle('{path}', this.value)\" "
-            f'onclick="event.stopPropagation()" />'
-            f'<span class="resource-delete" onclick="deleteResourceFromPanel(\'{path}\')">🗑</span>'
-            f"</div>"
-            f'<div class="resource-description-container">'
-            f'<textarea class="resource-panel-description" '
-            f'placeholder="Add a description for this resource..." '
-            f"oninput=\"updateResourcePanelDescription('{path}', this.value)\" "
-            f'onclick="event.stopPropagation()">{description}</textarea>'
-            f'<button class="desc-expand-btn" onclick="toggleResourceDescription(\'{resource_id}\')">⌵</button>'
-            f"</div>"
-            f'<div class="resource-filename">{resource["name"]}</div>'
-            f'<div class="resource-upload-zone" data-resource-path="{path}">'
-            f'<span class="upload-text">Drop file here to replace</span>'
-            f'<input type="file" class="resource-file-input" accept=".txt,.md,.py,.c,.cpp,.h,.java,.js,.ts,.jsx,.tsx,.json,.xml,.yaml,.yml,.toml,.ini,.cfg,.conf,.sh,.bash,.zsh,.fish,.ps1,.bat,.cmd,.rs,.go,.rb,.php,.pl,.lua,.r,.m,.swift,.kt,.scala,.clj,.ex,.exs,.elm,.fs,.ml,.sql,.html,.htm,.css,.scss,.sass,.less,.vue,.svelte,.astro,.tex,.rst,.adoc,.org,.csv" '
-            f"onchange=\"handleResourceFileUpload('{path}', this)\" />"
-            f"</div>"
-            f"</div>"
-            f"</div>"
-        )
-
-    return "\n".join(html_items)
-
-
 def delete_resource_from_panel(resources, resource_path, title, description, blocks):
     """Delete a resource from the resource panel and all blocks that use it."""
     print(f"Deleting resource from panel: {resource_path}")
@@ -794,13 +747,12 @@ def replace_resource_file(
                     # Keep the existing title - don't update it
 
     # Generate HTML for resources display
-    resources_html = generate_resource_html(resources)
 
     # Regenerate outline with updated resources
     outline, json_str = regenerate_outline_from_state(doc_title, doc_description, resources, blocks)
 
     # Return updated values including a success flag
-    return resources, blocks, gr.update(value=resources_html), outline, json_str, "Resource replaced successfully!"
+    return resources, blocks, gr.update(), outline, json_str, "Resource replaced successfully!"
 
 
 def load_example(example_id, session_id=None):
@@ -1134,9 +1086,6 @@ def import_outline(file_path, session_id=None):
 
         # Regenerate outline and JSON
         outline, json_str = regenerate_outline_from_state(title, description, resources, blocks)
-
-        # Generate resources HTML using the proper function
-        resources_html = generate_resource_html(resources)
 
         # Return values matching what import_file.change expects
         return (
@@ -1782,11 +1731,11 @@ def create_app():
 
                 # Hidden file component for import
                 import_file = gr.File(
-                    label="Import Docpack", 
-                    file_types=[".docpack"], 
+                    label="Import Docpack",
+                    file_types=[".docpack"],
                     visible=True,
                     elem_id="import-file-input",
-                    elem_classes="hidden-component"
+                    elem_classes="hidden-component",
                 )
 
         # Document title and description
@@ -2112,15 +2061,10 @@ def create_app():
 
                     # Hidden components for JS communication
                     delete_block_id = gr.Textbox(
-                        visible=True, 
-                        elem_id="delete-block-id",
-                        elem_classes="hidden-component"
+                        visible=True, elem_id="delete-block-id", elem_classes="hidden-component"
                     )
                     delete_trigger = gr.Button(
-                        "Delete", 
-                        visible=True, 
-                        elem_id="delete-trigger",
-                        elem_classes="hidden-component"
+                        "Delete", visible=True, elem_id="delete-trigger", elem_classes="hidden-component"
                     )
 
                     # Hidden HTML for JavaScript execution
@@ -2128,154 +2072,98 @@ def create_app():
 
                     # Hidden components for content updates
                     update_block_id = gr.Textbox(
-                        visible=True, 
-                        elem_id="update-block-id",
-                        elem_classes="hidden-component"
+                        visible=True, elem_id="update-block-id", elem_classes="hidden-component"
                     )
                     update_content_input = gr.Textbox(
-                        visible=True, 
-                        elem_id="update-content-input",
-                        elem_classes="hidden-component"
+                        visible=True, elem_id="update-content-input", elem_classes="hidden-component"
                     )
                     update_trigger = gr.Button(
-                        "Update", 
-                        visible=True, 
-                        elem_id="update-trigger",
-                        elem_classes="hidden-component"
+                        "Update", visible=True, elem_id="update-trigger", elem_classes="hidden-component"
                     )
 
                     # Hidden components for toggle collapse
                     toggle_block_id = gr.Textbox(
-                        visible=True, 
-                        elem_id="toggle-block-id",
-                        elem_classes="hidden-component"
+                        visible=True, elem_id="toggle-block-id", elem_classes="hidden-component"
                     )
                     toggle_trigger = gr.Button(
-                        "Toggle", 
-                        visible=True, 
-                        elem_id="toggle-trigger",
-                        elem_classes="hidden-component"
+                        "Toggle", visible=True, elem_id="toggle-trigger", elem_classes="hidden-component"
                     )
 
                     # Hidden components for heading updates
                     update_heading_block_id = gr.Textbox(
-                        visible=True, 
-                        elem_id="update-heading-block-id",
-                        elem_classes="hidden-component"
+                        visible=True, elem_id="update-heading-block-id", elem_classes="hidden-component"
                     )
                     update_heading_input = gr.Textbox(
-                        visible=True, 
-                        elem_id="update-heading-input",
-                        elem_classes="hidden-component"
+                        visible=True, elem_id="update-heading-input", elem_classes="hidden-component"
                     )
                     update_heading_trigger = gr.Button(
-                        "Update Heading", 
-                        visible=True, 
+                        "Update Heading",
+                        visible=True,
                         elem_id="update-heading-trigger",
-                        elem_classes="hidden-component"
+                        elem_classes="hidden-component",
                     )
 
                     # Hidden components for indent updates
                     indent_block_id = gr.Textbox(
-                        visible=True, 
-                        elem_id="indent-block-id",
-                        elem_classes="hidden-component"
+                        visible=True, elem_id="indent-block-id", elem_classes="hidden-component"
                     )
                     indent_direction = gr.Textbox(
-                        visible=True, 
-                        elem_id="indent-direction",
-                        elem_classes="hidden-component"
+                        visible=True, elem_id="indent-direction", elem_classes="hidden-component"
                     )
                     indent_trigger = gr.Button(
-                        "Update Indent", 
-                        visible=True, 
-                        elem_id="indent-trigger",
-                        elem_classes="hidden-component"
+                        "Update Indent", visible=True, elem_id="indent-trigger", elem_classes="hidden-component"
                     )
 
                     # Hidden components for focus tracking
-                    focus_block_id = gr.Textbox(
-                        visible=True, 
-                        elem_id="focus-block-id",
-                        elem_classes="hidden-component"
-                    )
+                    focus_block_id = gr.Textbox(visible=True, elem_id="focus-block-id", elem_classes="hidden-component")
                     focus_trigger = gr.Button(
-                        "Set Focus", 
-                        visible=True, 
-                        elem_id="focus-trigger",
-                        elem_classes="hidden-component"
+                        "Set Focus", visible=True, elem_id="focus-trigger", elem_classes="hidden-component"
                     )
 
                     # Hidden components for adding block after
                     add_after_block_id = gr.Textbox(
-                        visible=True, 
-                        elem_id="add-after-block-id",
-                        elem_classes="hidden-component"
+                        visible=True, elem_id="add-after-block-id", elem_classes="hidden-component"
                     )
-                    add_after_type = gr.Textbox(
-                        visible=True, 
-                        elem_id="add-after-type",
-                        elem_classes="hidden-component"
-                    )
+                    add_after_type = gr.Textbox(visible=True, elem_id="add-after-type", elem_classes="hidden-component")
                     add_after_trigger = gr.Button(
-                        "Add After", 
-                        visible=True, 
-                        elem_id="add-after-trigger",
-                        elem_classes="hidden-component"
+                        "Add After", visible=True, elem_id="add-after-trigger", elem_classes="hidden-component"
                     )
 
                     # Hidden components for converting block type
                     convert_block_id = gr.Textbox(
-                        visible=True, 
-                        elem_id="convert-block-id",
-                        elem_classes="hidden-component"
+                        visible=True, elem_id="convert-block-id", elem_classes="hidden-component"
                     )
-                    convert_type = gr.Textbox(
-                        visible=True, 
-                        elem_id="convert-type",
-                        elem_classes="hidden-component"
-                    )
+                    convert_type = gr.Textbox(visible=True, elem_id="convert-type", elem_classes="hidden-component")
                     convert_trigger = gr.Button(
-                        "Convert", 
-                        visible=True, 
-                        elem_id="convert-trigger",
-                        elem_classes="hidden-component"
+                        "Convert", visible=True, elem_id="convert-trigger", elem_classes="hidden-component"
                     )
 
                     # Hidden components for updating block resources
                     update_resources_block_id = gr.Textbox(
-                        visible=True, 
-                        elem_id="update-resources-block-id",
-                        elem_classes="hidden-component"
+                        visible=True, elem_id="update-resources-block-id", elem_classes="hidden-component"
                     )
                     update_resources_input = gr.Textbox(
-                        visible=True, 
-                        elem_id="update-resources-input",
-                        elem_classes="hidden-component"
+                        visible=True, elem_id="update-resources-input", elem_classes="hidden-component"
                     )
                     update_resources_trigger = gr.Button(
-                        "Update Resources", 
-                        visible=True, 
+                        "Update Resources",
+                        visible=True,
                         elem_id="update-resources-trigger",
-                        elem_classes="hidden-component"
+                        elem_classes="hidden-component",
                     )
 
                     # Hidden components for removing block resources
                     remove_resource_block_id = gr.Textbox(
-                        visible=True, 
-                        elem_id="remove-resource-block-id",
-                        elem_classes="hidden-component"
+                        visible=True, elem_id="remove-resource-block-id", elem_classes="hidden-component"
                     )
                     remove_resource_path = gr.Textbox(
-                        visible=True, 
-                        elem_id="remove-resource-path",
-                        elem_classes="hidden-component"
+                        visible=True, elem_id="remove-resource-path", elem_classes="hidden-component"
                     )
                     remove_resource_trigger = gr.Button(
-                        "Remove Resource", 
-                        visible=True, 
+                        "Remove Resource",
+                        visible=True,
                         elem_id="remove-resource-trigger",
-                        elem_classes="hidden-component"
+                        elem_classes="hidden-component",
                     )
 
                     # Hidden components for deleting resources from panel
@@ -2292,15 +2180,10 @@ def create_app():
 
                     # Hidden components for loading examples
                     example_id_input = gr.Textbox(
-                        visible=True,
-                        elem_id="example-id-input",
-                        elem_classes="hidden-component"
+                        visible=True, elem_id="example-id-input", elem_classes="hidden-component"
                     )
                     load_example_trigger = gr.Button(
-                        "Load Example", 
-                        visible=True,
-                        elem_id="load-example-trigger",
-                        elem_classes="hidden-component"
+                        "Load Example", visible=True, elem_id="load-example-trigger", elem_classes="hidden-component"
                     )
 
                     # Hidden components for updating resource titles
