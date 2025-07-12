@@ -2,8 +2,9 @@ import json
 import os
 import tempfile
 import uuid
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Literal
 
 import gradio as gr
 from dotenv import load_dotenv
@@ -16,123 +17,77 @@ from .session import session_manager
 # Load environment variables from .env file
 load_dotenv()
 
+@dataclass
+class Reference:
+    key: str = ""
+    filepath: str = ""
+    title: str = ""
+    description: str = ""
 
-def json_to_outline(json_data: Dict[str, Any]) -> Outline:
-    """Convert JSON structure to Outline dataclasses."""
-    # Create outline with basic metadata
-    outline = Outline(title=json_data.get("title", ""), general_instruction=json_data.get("general_instruction", ""))
+    def __init__(self, key: str, title: str, description: str, filepath: str):
+        self.key = key
+        self.filepath = filepath
+        self.title = title if title else os.path.basename(filepath)
+        self.description = description
 
-    # Convert resources
-    for res_data in json_data.get("resources", []):
-        # Handle backward compatibility - use filename as title if title not present
-        title = res_data.get("title", "")
-        if not title:
-            # Extract filename from path as default title
-            title = os.path.basename(res_data["path"])
 
-        resource = Resource(
-            key=res_data["key"],
-            path=res_data["path"],
-            title=title,
-            description=res_data["description"],
-            merge_mode="concat",  # Default merge mode
+@dataclass
+class SectionBlock:
+    id: str = str(uuid.uuid4())
+    type: Literal["ai", "text"] = "ai"
+    heading: str = ""
+    content: str = ""
+    references: List[Reference] = field(default_factory=list)
+    collapsed: bool = True  # Start collapsed
+    indent_level: int = 0  # Default indent level
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "type": self.type,
+            "heading": self.heading,
+            "content": self.content,
+            "references": [asdict(ref) for ref in self.references],
+            "collapsed": self.collapsed,
+            "indent_level": self.indent_level,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "SectionBlock":
+        ref_list: List[Reference] = []
+        for ref in data.get("references", []):
+            ref_list.append(
+                Reference(
+                    key=ref.get("key", ""),
+                    title=ref.get("title", ""),
+                    description=ref.get("description", ""),
+                    filepath=ref.get("filepath", ""),
+                )
+            )
+
+        return cls(
+            id=data.get("id", str(uuid.uuid4())),
+            type=data.get("type", "ai"),
+            heading=data.get("heading", ""),
+            content=data.get("content", ""),
+            references=ref_list,
+            collapsed=data.get("collapsed", True),
+            indent_level=data.get("indent_level", 0),
         )
-        outline.resources.append(resource)
-
-    # Helper function to convert sections recursively
-    def convert_sections(sections_data: List[Dict[str, Any]]) -> List[Section]:
-        sections = []
-        for sec_data in sections_data:
-            section = Section(title=sec_data.get("title", ""))
-
-            # Check if it has prompt (AI block) or resource_key (text block)
-            if "prompt" in sec_data:
-                # AI block
-                section.prompt = sec_data["prompt"]
-                section.refs = sec_data.get("refs", [])
-                section._mode = None  # Default mode
-            elif "resource_key" in sec_data:
-                # Text block
-                section.resource_key = sec_data["resource_key"]
-                section._mode = "Static"
-
-            # Convert nested sections
-            if "sections" in sec_data:
-                section.sections = convert_sections(sec_data["sections"])
-
-            sections.append(section)
-
-        return sections
-
-    # Convert top-level sections
-    outline.sections = convert_sections(json_data.get("sections", []))
-
-    return outline
 
 
-def add_ai_block(blocks, focused_block_id=None):
-    """Add an AI content block."""
-    new_block = {
-        "id": str(uuid.uuid4()),
-        "type": "ai",
-        "heading": "",
-        "content": "",
-        "resources": [],
-        "collapsed": True,  # Start collapsed
-        "indent_level": 0,
-    }
-
-    # If no focused block or focused block not found, add at the end
-    if not focused_block_id:
-        return blocks + [new_block]
-
-    # Find the focused block and insert after it
-    for i, block in enumerate(blocks):
-        if block["id"] == focused_block_id:
-            # Inherit the indent level from the focused block
-            new_block["indent_level"] = block.get("indent_level", 0)
-            # Insert after the focused block
-            return blocks[: i + 1] + [new_block] + blocks[i + 1 :]
-
-    # If focused block not found, add at the end
-    return blocks + [new_block]
-
-
-def add_text_block(blocks, focused_block_id=None):
-    """Add a text block."""
-    new_block = {
-        "id": str(uuid.uuid4()),
-        "type": "text",
-        "heading": "",
-        "content": "",
-        "resources": [],
-        "collapsed": True,  # Start collapsed
-        "indent_level": 0,
-    }
-
-    # If no focused block or focused block not found, add at the end
-    if not focused_block_id:
-        return blocks + [new_block]
-
-    # Find the focused block and insert after it
-    for i, block in enumerate(blocks):
-        if block["id"] == focused_block_id:
-            # Inherit the indent level from the focused block
-            new_block["indent_level"] = block.get("indent_level", 0)
-            # Insert after the focused block
-            return blocks[: i + 1] + [new_block] + blocks[i + 1 :]
-
-    # If focused block not found, add at the end
-    return blocks + [new_block]
-
+def add_section_block(blocks):
+    """Add a section block."""
+    new_block = SectionBlock().to_dict()
+    return blocks + [new_block] #adds at end
 
 def delete_block(blocks, block_id, title, description, resources):
     """Delete a block by its ID and regenerate outline."""
     blocks = [block for block in blocks if block["id"] != block_id]
 
     # Regenerate outline and JSON
-    outline, json_str = regenerate_outline_from_state(title, description, resources, blocks)
-    return blocks, outline, json_str
+    recipe_outline_json = generate_recipe_outline_json(title, description, resources, blocks)
+    return blocks, recipe_outline_json
 
 
 def update_block_content(blocks, block_id, content, title, description, resources):
@@ -155,8 +110,8 @@ def update_block_content(blocks, block_id, content, title, description, resource
             break
 
     # Regenerate outline and JSON
-    outline, json_str = regenerate_outline_from_state(title, description, resources, blocks)
-    return blocks, outline, json_str
+    recipe_outline_json = generate_recipe_outline_json(title, description, resources, blocks)
+    return blocks, recipe_outline_json
 
 
 def update_block_heading(blocks, block_id, heading, title, description, resources):
@@ -167,8 +122,8 @@ def update_block_heading(blocks, block_id, heading, title, description, resource
             break
 
     # Regenerate outline and JSON
-    outline, json_str = regenerate_outline_from_state(title, description, resources, blocks)
-    return blocks, outline, json_str
+    recipe_outline_json = generate_recipe_outline_json(title, description, resources, blocks)
+    return blocks, recipe_outline_json
 
 
 def set_focused_block(block_id):
@@ -182,29 +137,10 @@ def reset_document(session_id=None):
     new_session_id = str(uuid.uuid4())
 
     # Reset to initial blocks
-    initial_blocks = [
-        {
-            "id": str(uuid.uuid4()),
-            "type": "ai",
-            "heading": "",
-            "content": "",
-            "resources": [],
-            "collapsed": False,  # AI block starts expanded
-            "indent_level": 0,
-        },
-        {
-            "id": str(uuid.uuid4()),
-            "type": "text",
-            "heading": "",
-            "content": "",
-            "resources": [],
-            "collapsed": True,  # Text block starts collapsed
-            "indent_level": 0,
-        },
-    ]
+    initial_blocks = gr.State([SectionBlock(collapsed=False).to_dict(), SectionBlock(type="text").to_dict()])
 
     # Generate initial outline
-    outline, json_str = regenerate_outline_from_state("", "", [], initial_blocks)
+    recipe_outline_json = generate_recipe_outline_json("", "", gr.State([]), initial_blocks)
 
     # Return empty title, description, empty resources, initial blocks
     return (
@@ -212,8 +148,7 @@ def reset_document(session_id=None):
         gr.update(value=""),  # description - use gr.update to ensure proper clearing
         [],  # resources
         initial_blocks,  # blocks
-        outline,  # outline
-        json_str,  # json_output
+        recipe_outline_json,  # outline
         None,  # import_file
         new_session_id,  # session_id
         gr.update(
@@ -259,8 +194,8 @@ def convert_block_type(blocks, block_id, to_type, title, description, resources)
             break
 
     # Regenerate outline and JSON
-    outline, json_str = regenerate_outline_from_state(title, description, resources, blocks)
-    return blocks, outline, json_str
+    recipe_outline_json = generate_recipe_outline_json(title, description, resources, blocks)
+    return blocks, recipe_outline_json
 
 
 def toggle_block_collapse(blocks, block_id):
@@ -283,8 +218,8 @@ def update_block_indent(blocks, block_id, direction, title, description, resourc
             break
 
     if block_index is None:
-        outline, json_str = regenerate_outline_from_state(title, description, resources, blocks)
-        return blocks, outline, json_str
+        recipe_outline_json = generate_recipe_outline_json(title, description, resources, blocks)
+        return blocks, recipe_outline_json
 
     block = blocks[block_index]
     current_level = block.get("indent_level", 0)
@@ -292,8 +227,8 @@ def update_block_indent(blocks, block_id, direction, title, description, resourc
     if direction == "in":
         # Check if this is the first block - if so, can't indent at all
         if block_index == 0:
-            outline, json_str = regenerate_outline_from_state(title, description, resources, blocks)
-            return blocks, outline, json_str
+            recipe_outline_json = generate_recipe_outline_json(title, description, resources, blocks)
+            return blocks, recipe_outline_json
 
         # Get the previous block's indent level
         prev_block = blocks[block_index - 1]
@@ -307,8 +242,8 @@ def update_block_indent(blocks, block_id, direction, title, description, resourc
         block["indent_level"] = current_level - 1
 
     # Regenerate outline and JSON
-    outline, json_str = regenerate_outline_from_state(title, description, resources, blocks)
-    return blocks, outline, json_str
+    recipe_outline_json = generate_recipe_outline_json(title, description, resources, blocks)
+    return blocks, recipe_outline_json
 
 
 async def handle_document_generation(title, description, resources, blocks, session_id=None):
@@ -323,19 +258,10 @@ async def handle_document_generation(title, description, resources, blocks, sess
         temp_dir = session_manager.get_temp_dir(session_id)
 
         # Generate the JSON with inline resources saved to temp directory
-        json_str = generate_document_json(title, description, resources, blocks, save_inline=True, inline_dir=temp_dir)
-        json_data = json.loads(json_str)
-
-        # Remove is_inline flags for compatibility with json_to_outline
-        for res in json_data.get("resources", []):
-            if "is_inline" in res:
-                del res["is_inline"]
-
-        # Convert to Outline
-        outline = json_to_outline(json_data)
+        recipe_outline = generate_recipe_outline(title, description, resources, blocks, save_inline=True, inline_dir=temp_dir)
 
         # Generate the document
-        generated_content = await generate_document(outline, session_id)
+        generated_content = await generate_document(recipe_outline, session_id)
 
         # Save to temporary file for download
         filename = f"{title}.md" if title else "document.md"
@@ -350,188 +276,150 @@ async def handle_document_generation(title, description, resources, blocks, sess
         return json_str, error_msg, None, None
 
 
-def generate_document_json(title, description, resources, blocks, save_inline=False, inline_dir=None):
-    """Generate JSON structure from document data following the example format.
+def generate_recipe_outline_json(title, description, references_state, section_blocks_state):
+    outline = generate_recipe_outline(title, description, references_state, section_blocks_state)
+    json_str = json.dumps(outline.to_dict(), indent=2)
+    return json_str
 
-    Args:
-        save_inline: If True, save inline resources to inline_dir and use real paths
-        inline_dir: Directory to save inline resources to (required if save_inline=True)
-    """
-    import json
 
-    # Create the base structure
-    doc_json = {"title": title, "general_instruction": description, "resources": [], "sections": []}
+def generate_recipe_outline(title, description, references_state, section_blocks_state) -> Outline:
+    resources = []
+    for idx, ref in enumerate(references_state):
+        resources.append(
+            Resource(
+                key=ref.get("key", f"resource_{idx + 1}"),
+                path=ref.get("filepath", ref.get("path", "")),  # Handle both filepath and path keys
+                title=ref.get("title"),
+                description=ref.get("description"),
+                merge_mode="concat",  # Default merge mode
+            )
+        )
 
-    # Track inline resources that need to be added
-    inline_resources = []
+    # Helper function to convert sections recursively -- assumes section_blocks_state maintains a correctly ordered list
+    def build_sections_from_blocks(section_blocks: List[Dict[str, Any]], resources: List[Resource]) -> List[Section]:
+        """
+        Convert a flat list of SectionBlock dicts into a nested Section structure based on indent levels.
 
-    # Process resources with their descriptions from the resources list
-    for idx, resource in enumerate(resources):
-        # Get description directly from the resource
-        description = resource.get("description", "")
-        # Get title from resource or default to filename
-        title = resource.get("title", resource.get("name", os.path.basename(resource["path"])))
-        doc_json["resources"].append({
-            "key": f"resource_{idx + 1}",
-            "path": resource["path"],
-            "title": title,
-            "description": description,
-        })
+        Args:
+            section_blocks: List of SectionBlock dictionaries with 'indent_level' field
+            resources: List of Resource objects for mapping references
 
-    # Helper function to build nested sections based on indentation
-    def build_nested_sections(blocks, start_idx=0, parent_level=-1):
-        sections = []
-        i = start_idx
+        Returns:
+            List of top-level Section objects with nested subsections
+        """
+        if not section_blocks:
+            return []
 
-        while i < len(blocks):
-            block = blocks[i]
-            current_level = block.get("indent_level", 0)
+        def build_section_from_block(block_dict: Dict[str, Any], resources: List[Resource]) -> Section:
+            """Convert a single SectionBlock dict to a Section object."""
+            block = SectionBlock.from_dict(block_dict) if isinstance(block_dict, dict) else block_dict
 
-            # If this block is at a lower level than parent, return
-            if current_level <= parent_level:
-                break
+            # Create Section object
+            section = Section(title=block.heading or "Untitled Section")
 
-            # If this block is at the expected level
-            if current_level == parent_level + 1:
-                if block["type"] in ["ai", "text"] and (
-                    block.get("heading") or block.get("content") or block.get("resources")
-                ):
-                    section = {"title": block.get("heading", "Untitled Section")}
+            # Handle AI blocks vs Text blocks
+            if block.type == "ai":
+                section.prompt = block.content
+                for block_ref in block.references:
+                    section.refs.append(block_ref.key)
+                section._mode = None
+            else:
+                section.resource_key = block.references[0].key
+                section._mode = "Static"
 
-                    # Handle AI blocks vs Text blocks differently
-                    if block["type"] == "ai":
-                        # AI blocks always have these keys
-                        section["prompt"] = block.get("content", "")
-                        section["sections"] = []  # Will be populated if there are nested sections
+            return section
 
-                        # Handle refs - always include the key
-                        refs = []
-                        block_resources = block.get("resources", [])
-                        if block_resources:
-                            # Find the resource keys for this block's resources
-                            for block_resource in block_resources:
-                                # Find matching resource in the global resources list
-                                for idx, resource in enumerate(resources):
-                                    if resource["path"] == block_resource.get("path"):
-                                        refs.append(f"resource_{idx + 1}")
-                                        break
-                        section["refs"] = refs
+        def process_blocks_at_level(
+            blocks: List[Dict[str, Any]], start_idx: int, parent_level: int
+        ) -> tuple[List[Section], int]:
+            """Process blocks starting at start_idx that are children of parent_level."""
+            sections = []
+            i = start_idx
 
-                    else:  # block['type'] == 'text'
-                        # Text blocks always have these keys
-                        section["resource_key"] = ""  # Default to empty string
-                        section["sections"] = []  # Will be populated if there are nested sections
+            while i < len(blocks):
+                current_block = blocks[i]
+                current_level = current_block.get("indent_level", 0)
 
-                        # Check if this text block has been edited
-                        if block.get("edited") and block.get("text_content"):
-                            # Create an inline resource for the edited content
-                            inline_resource_key = f"inline_resource_{len(inline_resources) + 1}"
-                            inline_resources.append({
-                                "key": inline_resource_key,
-                                "content": block["text_content"],
-                                "block_id": block["id"],
-                            })
-                            section["resource_key"] = inline_resource_key
-                        else:
-                            # Handle regular file resource
-                            block_resources = block.get("resources", [])
-                            if block_resources:
-                                # For text blocks, just use the first resource as resource_key
-                                for block_resource in block_resources:
-                                    # Find matching resource in the global resources list
-                                    for idx, resource in enumerate(resources):
-                                        if resource["path"] == block_resource.get("path"):
-                                            section["resource_key"] = f"resource_{idx + 1}"
-                                            break
-                                    break  # Only use first resource for resource_key
+                # If we've gone back to parent level or higher, we're done with this level
+                if current_level <= parent_level:
+                    break
 
-                    # Check if next blocks are indented under this one
+                # If this block is a direct child of the parent level
+                if current_level == parent_level + 1:
+                    # Convert block to section
+                    section = build_section_from_block(current_block, resources)
+
+                    # Look ahead to see if there are children
                     next_idx = i + 1
                     if next_idx < len(blocks) and blocks[next_idx].get("indent_level", 0) > current_level:
-                        # Build subsections
-                        subsections, next_idx = build_nested_sections(blocks, next_idx, current_level)
-                        if subsections:
-                            section["sections"] = subsections
-                        i = next_idx - 1  # Adjust because we'll increment at the end
+                        # Recursively process children
+                        children, next_idx = process_blocks_at_level(blocks, next_idx, current_level)
+                        section.sections = children
+                        i = next_idx - 1  # Will be incremented at loop end
 
                     sections.append(section)
 
-            i += 1
+                i += 1
 
-        return sections, i
+            return sections, i
 
-    # Build the sections hierarchy
-    doc_json["sections"], _ = build_nested_sections(blocks, 0, -1)
+        # Process all top-level sections (indent_level 0)
+        top_level_sections, _ = process_blocks_at_level(section_blocks, 0, -1)
+        return top_level_sections
 
-    # Add inline resources to the resources list
-    if save_inline and inline_dir:
-        # Actually save the inline resources and use real paths
-        for inline_res in inline_resources:
-            filename = f"inline_{inline_res['block_id']}.txt"
-            filepath = Path(inline_dir) / filename
-            filepath.write_text(inline_res["content"], encoding="utf-8")
+    sections = build_sections_from_blocks(
+        section_blocks_state, resources
+    )  # section_blocks_state is already a list of dicts
 
-            doc_json["resources"].append({
-                "key": inline_res["key"],
-                "path": str(filepath),
-                "title": filename,  # Use filename as title for inline resources
-                "description": "",  # No description for inline resources
-                "is_inline": True,  # Mark as inline resource
-            })
-    else:
-        # For preview, save to temp gradio directory immediately
-        import tempfile
+    recipe_outline = Outline(title=title, general_instruction=description, resources=resources, sections=sections)
 
-        gradio_temp_dir = Path(tempfile.gettempdir()) / "gradio"
-        gradio_temp_dir.mkdir(exist_ok=True)
+    return recipe_outline
 
-        for inline_res in inline_resources:
-            # Generate unique filename with timestamp
-            import time
-
-            timestamp = str(int(time.time() * 1000000))
-            filename = f"inline_{inline_res['block_id']}_{timestamp}.txt"
-            filepath = gradio_temp_dir / filename
-            filepath.write_text(inline_res["content"], encoding="utf-8")
-
-            doc_json["resources"].append({
-                "key": inline_res["key"],
-                "path": str(filepath),
-                "title": filename,  # Use filename as title for inline resources
-                "description": "",  # No description for inline resources
-                "is_inline": True,  # Mark as inline resource
-            })
-
-    return json.dumps(doc_json, indent=2)
-
-
-def regenerate_outline_from_state(title, description, resources, blocks):
-    """Regenerate the outline whenever any component changes."""
-    try:
-        json_str = generate_document_json(title, description, resources, blocks)
-        json_data = json.loads(json_str)
-        outline = json_to_outline(json_data)
-
-        # Update global state whenever outline is regenerated
-        global current_document_state
-        current_document_state = {"title": title, "outline_json": json_str, "blocks": blocks}
-
-        return outline, json_str
-    except Exception as e:
-        # Return None outline and error message in JSON
-        import traceback
-
-        print(f"ERROR in regenerate_outline_from_state: {str(e)}")
-        print(traceback.format_exc())
-        error_json = json.dumps({"error": str(e), "traceback": traceback.format_exc()}, indent=2)
-        return None, error_json
+    ### DO THIS LATER for inline resource generation when it is added.
+    #    # Add inline resources to the resources list
+    #    if save_inline and inline_dir:
+    #        # Actually save the inline resources and use real paths
+    #        for inline_res in inline_resources:
+    #            filename = f"inline_{inline_res['block_id']}.txt"
+    #            filepath = Path(inline_dir) / filename
+    #            filepath.write_text(inline_res["content"], encoding="utf-8")
+    #
+    #            doc_json["resources"].append({
+    #                "key": inline_res["key"],
+    #                "path": str(filepath),
+    #                "title": filename,  # Use filename as title for inline resources
+    #                "description": "",  # No description for inline resources
+    #                "is_inline": True,  # Mark as inline resource
+    #            })
+    #    else:
+    #        # For preview, save to temp gradio directory immediately
+    #        import tempfile
+    #
+    #        gradio_temp_dir = Path(tempfile.gettempdir()) / "gradio"
+    #        gradio_temp_dir.mkdir(exist_ok=True)
+    #
+    #        for inline_res in inline_resources:
+    #            # Generate unique filename with timestamp
+    #            import time
+    #
+    #            timestamp = str(int(time.time() * 1000000))
+    #            filename = f"inline_{inline_res['block_id']}_{timestamp}.txt"
+    #            filepath = gradio_temp_dir / filename
+    #            filepath.write_text(inline_res["content"], encoding="utf-8")
+    #
+    #            doc_json["resources"].append({
+    #                "key": inline_res["key"],
+    #                "path": str(filepath),
+    #                "title": filename,  # Use filename as title for inline resources
+    #                "description": "",  # No description for inline resources
+    #                "is_inline": True,  # Mark as inline resource
+    #            })
 
 
 def update_document_metadata(title, description, resources, blocks):
     """Update document title/description and regenerate outline."""
-    # Just regenerate the outline with new metadata
-    outline, json_str = regenerate_outline_from_state(title, description, resources, blocks)
-    return outline, json_str
+    outline_json = generate_recipe_outline_json(title, description, resources, blocks)
+    return outline_json
 
 
 def update_block_resources(blocks, block_id, resource_json, title, description, resources):
@@ -590,8 +478,8 @@ def update_block_resources(blocks, block_id, resource_json, title, description, 
             break
 
     # Regenerate outline
-    outline, json_str = regenerate_outline_from_state(title, description, resources, blocks)
-    return blocks, outline, json_str
+    recipe_outline_json = generate_recipe_outline_json(title, description, resources, blocks)
+    return blocks, recipe_outline_json
 
 
 def remove_block_resource(blocks, block_id, resource_path, title, description, resources):
@@ -609,8 +497,8 @@ def remove_block_resource(blocks, block_id, resource_path, title, description, r
             break
 
     # Regenerate outline
-    outline, json_str = regenerate_outline_from_state(title, description, resources, blocks)
-    return blocks, outline, json_str
+    recipe_outline_json = generate_recipe_outline_json(title, description, resources, blocks)
+    return blocks, recipe_outline_json
 
 
 def update_resource_description(blocks, block_id, resource_path, description_text, title, doc_description, resources):
@@ -623,8 +511,8 @@ def update_resource_description(blocks, block_id, resource_path, description_tex
                     res["description"] = description_text
 
     # Regenerate outline
-    outline, json_str = regenerate_outline_from_state(title, doc_description, resources, blocks)
-    return blocks, outline, json_str
+    recipe_outline_json = generate_recipe_outline_json(title, doc_description, resources, blocks)
+    return blocks, recipe_outline_json
 
 
 def delete_resource_from_panel(resources, resource_path, title, description, blocks):
@@ -657,10 +545,10 @@ def delete_resource_from_panel(resources, resource_path, title, description, blo
         updated_blocks.append(block_copy)
 
     # Regenerate outline
-    outline, json_str = regenerate_outline_from_state(title, description, new_resources, updated_blocks)
+    recipe_outline_json = generate_recipe_outline_json(title, description, new_resources, updated_blocks)
 
     # Return the values expected by the handler (4 outputs)
-    return new_resources, updated_blocks, outline, json_str
+    return new_resources, updated_blocks, recipe_outline_json
 
 
 def update_resource_title(resources, resource_path, new_title, doc_title, doc_description, blocks):
@@ -672,9 +560,9 @@ def update_resource_title(resources, resource_path, new_title, doc_title, doc_de
             break
 
     # Regenerate outline with updated resources (for JSON display)
-    outline, json_str = regenerate_outline_from_state(doc_title, doc_description, resources, blocks)
+    recipe_outline_json = generate_recipe_outline_json(doc_title, doc_description, resources, blocks)
 
-    return resources, outline, json_str
+    return resources, recipe_outline_json
 
 
 def update_resource_panel_description(resources, resource_path, new_description, doc_title, doc_description, blocks):
@@ -686,9 +574,9 @@ def update_resource_panel_description(resources, resource_path, new_description,
             break
 
     # Regenerate outline with updated resources (for JSON display)
-    outline, json_str = regenerate_outline_from_state(doc_title, doc_description, resources, blocks)
+    recipe_outline_json = generate_recipe_outline_json(doc_title, doc_description, resources, blocks)
 
-    return resources, outline, json_str
+    return resources, recipe_outline_json
 
 
 def replace_resource_file(
@@ -730,10 +618,10 @@ def replace_resource_file(
     # Generate HTML for resources display
 
     # Regenerate outline with updated resources
-    outline, json_str = regenerate_outline_from_state(doc_title, doc_description, resources, blocks)
+    recipe_outline_json = generate_recipe_outline_json(doc_title, doc_description, resources, blocks)
 
     # Return updated values including a success flag
-    return resources, blocks, gr.update(), outline, json_str, "Resource replaced successfully!"
+    return resources, blocks, gr.update(), recipe_outline_json
 
 
 def load_example(example_id, session_id=None):
@@ -1066,7 +954,7 @@ def import_outline(file_path, session_id=None):
                 blocks[0]["collapsed"] = False
 
         # Regenerate outline and JSON
-        outline, json_str = regenerate_outline_from_state(title, description, resources, blocks)
+        recipe_outline_json = generate_recipe_outline_json(title, description, resources, blocks)
 
         # Return values matching what import_file.change expects
         return (
@@ -1074,8 +962,7 @@ def import_outline(file_path, session_id=None):
             description,
             resources,
             blocks,
-            outline,
-            json_str,
+            recipe_outline_json
             None,  # import_file (clear it)
             session_id,
             gr.update(
@@ -1427,7 +1314,7 @@ def handle_file_upload(files, current_resources, title, description, blocks, ses
                 })
 
     # Regenerate outline with new resources
-    outline, json_str = regenerate_outline_from_state(title, description, new_resources, blocks)
+    recipe_outline_json = generate_recipe_outline_json(title, description, new_resources, blocks)
 
     # Debug: Check what we're returning
     print(f"DEBUG handle_file_upload - returning json_str: {json_str[:100]}...")
@@ -1441,8 +1328,7 @@ def handle_file_upload(files, current_resources, title, description, blocks, ses
     return (
         new_resources,
         None,  # Clear file upload
-        outline,
-        json_str,
+        recipe_outline_json
         session_id,
     )
 
@@ -1466,8 +1352,8 @@ def update_resource_title_gradio(resources, resource_path, new_title, title, des
                     res["title"] = new_title
 
     # Regenerate outline
-    outline, json_str = regenerate_outline_from_state(title, description, resources, blocks)
-    return resources, outline, json_str
+    recipe_outline_json = generate_recipe_outline_json(title, description, resources, blocks)
+    return resources, recipe_outline_json
 
 
 def update_resource_description_gradio(resources, resource_path, new_description, title, description, blocks):
@@ -1485,8 +1371,8 @@ def update_resource_description_gradio(resources, resource_path, new_description
                     res["description"] = new_description
 
     # Regenerate outline
-    outline, json_str = regenerate_outline_from_state(title, description, resources, blocks)
-    return resources, outline, json_str
+    recipe_outline_json = generate_recipe_outline_json(title, description, resources, blocks)
+    return resources, recipe_outline_json
 
 
 def delete_resource_gradio(resources, resource_path, title, description, blocks):
@@ -1516,7 +1402,7 @@ def delete_resource_gradio(resources, resource_path, title, description, blocks)
         updated_blocks.append(block_copy)
 
     # Regenerate outline
-    outline, json_str = regenerate_outline_from_state(title, description, new_resources, updated_blocks)
+    outline, json_str = generate_recipe_outline_json(title, description, new_resources, updated_blocks)
     # Return blocks too so the UI updates
     return new_resources, updated_blocks, outline, json_str
 
@@ -1589,10 +1475,10 @@ def replace_resource_file_gradio(resources, old_resource_path, new_file, title, 
                 break
 
         # Regenerate outline
-        outline, json_str = regenerate_outline_from_state(title, description, resources, blocks)
+        recipe_outline_json = generate_recipe_outline_json(title, description, resources, blocks)
 
         # Return with cleared file input
-        return resources, outline, json_str, None
+        return resources, recipe_outline_json, None
 
     except Exception as e:
         print(f"Error replacing resource file: {e}")
@@ -1616,37 +1502,16 @@ def create_app():
     custom_js = f"<script>{js_content}</script>"
 
     with gr.Blocks(title="Document Generator", css=custom_css, head=custom_js) as app:
-        # State to track resources and blocks
-        resources_state = gr.State([])
+        # State tracking
+        doc_title = ""
+        doc_description = ""
+        references_state = gr.State([])
+        section_blocks_state = gr.State([SectionBlock(collapsed=False).to_dict(), SectionBlock(type="text").to_dict()])
         focused_block_state = gr.State(None)
         session_state = gr.State(None)  # Track session ID
-
-        # Initialize with default blocks
-        initial_blocks = [
-            {
-                "id": str(uuid.uuid4()),
-                "type": "ai",
-                "heading": "",
-                "content": "",
-                "resources": [],
-                "collapsed": False,  # AI block starts expanded
-                "indent_level": 0,
-            },
-            {
-                "id": str(uuid.uuid4()),
-                "type": "text",
-                "heading": "",
-                "content": "",
-                "resources": [],
-                "collapsed": True,  # Text block starts collapsed
-                "indent_level": 0,
-            },
-        ]
-        blocks_state = gr.State(initial_blocks)
-
-        # Initialize outline state with empty values
-        initial_outline, initial_json = regenerate_outline_from_state("", "", [], initial_blocks)
-        outline_state = gr.State(initial_outline)
+        recipe_outline_json = generate_recipe_outline_json(
+            doc_title, doc_description, references_state, section_blocks_state
+        )
 
         with gr.Row():
             # App name and explanation
@@ -1824,15 +1689,15 @@ def create_app():
                 # Container for dynamic resource components
                 with gr.Column(elem_classes="resources-display-area"):
 
-                    @gr.render(inputs=resources_state)
-                    def render_resource_components(resources):
-                        if not resources:
+                    @gr.render(inputs=references_state)
+                    def render_resource_components(references):
+                        if not references:
                             gr.HTML(
                                 value="<p style='color: #666; font-size: 12px'>(.md, .csv, .py, .json, .txt, etc.)</p>"
                                 "<p style='color: #666; font-size: 12px'>These reference files will be used for AI context.</p>"
                             )
                         else:
-                            for idx, resource in enumerate(resources):
+                            for idx, resource in enumerate(references):
                                 with gr.Group(elem_classes="resource-item-gradio"):
                                     # Hidden element containing resource path for drag and drop
                                     gr.HTML(
@@ -1941,39 +1806,39 @@ def create_app():
                                     # Connect events for this resource
                                     resource_path = resource["path"]
 
-                                    # Title update - don't update resources_state to avoid re-render
+                                    # Title update - don't update references_state to avoid re-render
                                     resource_title.change(
                                         fn=update_resource_title_gradio,
                                         inputs=[
-                                            resources_state,
+                                            references_state,
                                             gr.State(resource_path),
                                             resource_title,
                                             doc_title,
                                             doc_description,
-                                            blocks_state,
+                                            section_blocks_state,
                                         ],
                                         outputs=[
                                             gr.State(),
-                                            outline_state,
+                                            recipe_outline_json,
                                             json_output,
                                         ],  # Use dummy State to avoid re-render
                                         trigger_mode="always_last",  # Only trigger after user stops typing
                                     )
 
-                                    # Description update - don't update resources_state to avoid re-render
+                                    # Description update - don't update references_state to avoid re-render
                                     resource_desc.change(
                                         fn=update_resource_description_gradio,
                                         inputs=[
-                                            resources_state,
+                                            references_state,
                                             gr.State(resource_path),
                                             resource_desc,
                                             doc_title,
                                             doc_description,
-                                            blocks_state,
+                                            section_blocks_state,
                                         ],
                                         outputs=[
                                             gr.State(),
-                                            outline_state,
+                                            recipe_outline_json,
                                             json_output,
                                         ],  # Use dummy State to avoid re-render
                                         trigger_mode="always_last",  # Only trigger after user stops typing
@@ -1993,17 +1858,17 @@ def create_app():
                                     delete_btn.click(
                                         fn=delete_gradio_and_render,
                                         inputs=[
-                                            resources_state,
+                                            references_state,
                                             gr.State(resource_path),
                                             doc_title,
                                             doc_description,
-                                            blocks_state,
+                                            section_blocks_state,
                                             focused_block_state,
                                         ],
                                         outputs=[
-                                            resources_state,
-                                            blocks_state,
-                                            outline_state,
+                                            references_state,
+                                            section_blocks_state,
+                                            recipe_outline_json,
                                             json_output,
                                             blocks_display,
                                         ],
@@ -2013,21 +1878,21 @@ def create_app():
                                     replace_file.change(
                                         fn=replace_resource_file_gradio,
                                         inputs=[
-                                            resources_state,
+                                            references_state,
                                             gr.State(resource_path),
                                             replace_file,
                                             doc_title,
                                             doc_description,
-                                            blocks_state,
+                                            section_blocks_state,
                                             session_state,
                                         ],
-                                        outputs=[resources_state, outline_state, json_output, replace_file],
+                                        outputs=[references_state, recipe_outline_json, json_output, replace_file],
                                     ).then(
                                         # Force JSON update after resources render
-                                        fn=lambda title, desc, res, blocks: regenerate_outline_from_state(
+                                        fn=lambda title, desc, res, blocks: generate_recipe_outline_json(
                                             title, desc, res, blocks
                                         )[1],
-                                        inputs=[doc_title, doc_description, resources_state, blocks_state],
+                                        inputs=[doc_title, doc_description, references_state, section_blocks_state],
                                         outputs=[json_output],
                                     )
 
@@ -2038,7 +1903,7 @@ def create_app():
 
                 # Workspace panel for stacking content blocks
                 with gr.Column(elem_classes="workspace-display"):
-                    blocks_display = gr.HTML(value=render_blocks(initial_blocks, None), elem_classes="blocks-container")
+                    blocks_display = gr.HTML(value=render_blocks(section_blocks_state, None), elem_classes="blocks-container")
 
                     # Hidden components for JS communication
                     delete_block_id = gr.Textbox(
@@ -2119,7 +1984,7 @@ def create_app():
                         "Convert", visible=True, elem_id="convert-trigger", elem_classes="hidden-component"
                     )
 
-                    # Hidden components for updating block resources
+                    # Hidden components for updating block references
                     update_resources_block_id = gr.Textbox(
                         visible=True, elem_id="update-resources-block-id", elem_classes="hidden-component"
                     )
@@ -2285,32 +2150,28 @@ def create_app():
                         """)
 
                     with gr.Column(elem_classes="debug-panel-content", elem_id="debug-panel-content", visible=True):
-                        json_output = gr.Code(value=initial_json, language="json", elem_classes="json-debug-output")
+                        json_output = gr.Code(
+                            value=recipe_outline_json, language="json", elem_classes="json-debug-output"
+                        )
 
         # Helper function to add AI block and regenerate outline
-        def handle_add_ai_block_top(blocks, _, title, description, resources):
-            blocks = add_ai_block(blocks, None)
-            outline, json_str = regenerate_outline_from_state(title, description, resources, blocks)
-            return blocks, outline, json_str
-
-        # Helper function to add Text block and regenerate outline
-        def handle_add_text_block_top(blocks, _, title, description, resources):
-            blocks = add_text_block(blocks, None)
-            outline, json_str = regenerate_outline_from_state(title, description, resources, blocks)
+        def handle_add_section(blocks, _, title, description, references):
+            blocks = add_section(blocks, None)
+            outline, json_str = generate_recipe_outline_json(title, description, references, blocks)
             return blocks, outline, json_str
 
         # Connect button click to add AI block
-        ai_btn.click(
-            fn=handle_add_ai_block_top,
+        add_section_btn.click(
+            fn=handle_add_section,
             inputs=[
                 blocks_state,
                 gr.State(None),
                 doc_title,
                 doc_description,
-                resources_state,
+                references_state,
             ],  # Always pass None for focused_block_id
-            outputs=[blocks_state, outline_state, json_output],
-        ).then(fn=render_blocks, inputs=[blocks_state, focused_block_state], outputs=blocks_display)
+            outputs=[section_blocks_state, outline_state, json_output],
+        ).then(fn=render_blocks, inputs=[section_blocks_state, focused_block_state], outputs=blocks_display)
 
         # Connect button click to add Text block
 
@@ -2321,7 +2182,7 @@ def create_app():
             outputs=[
                 doc_title,
                 doc_description,
-                resources_state,
+                references_state,
                 blocks_state,
                 outline_state,
                 json_output,
@@ -2339,14 +2200,14 @@ def create_app():
         # Delete block handler
         delete_trigger.click(
             fn=delete_block,
-            inputs=[blocks_state, delete_block_id, doc_title, doc_description, resources_state],
+            inputs=[blocks_state, delete_block_id, doc_title, doc_description, references_state],
             outputs=[blocks_state, outline_state, json_output],
         ).then(fn=render_blocks, inputs=[blocks_state, focused_block_state], outputs=blocks_display)
 
         # Update block content handler
         update_trigger.click(
             fn=update_block_content,
-            inputs=[blocks_state, update_block_id, update_content_input, doc_title, doc_description, resources_state],
+            inputs=[blocks_state, update_block_id, update_content_input, doc_title, doc_description, references_state],
             outputs=[blocks_state, outline_state, json_output],
         ).then(fn=set_focused_block, inputs=update_block_id, outputs=focused_block_state)
 
@@ -2366,7 +2227,7 @@ def create_app():
                 update_heading_input,
                 doc_title,
                 doc_description,
-                resources_state,
+                references_state,
             ],
             outputs=[blocks_state, outline_state, json_output],
         ).then(fn=set_focused_block, inputs=update_heading_block_id, outputs=focused_block_state)
@@ -2374,7 +2235,7 @@ def create_app():
         # Update indent handler
         indent_trigger.click(
             fn=update_block_indent,
-            inputs=[blocks_state, indent_block_id, indent_direction, doc_title, doc_description, resources_state],
+            inputs=[blocks_state, indent_block_id, indent_direction, doc_title, doc_description, references_state],
             outputs=[blocks_state, outline_state, json_output],
         ).then(fn=render_blocks, inputs=[blocks_state, focused_block_state], outputs=blocks_display).then(
             fn=set_focused_block, inputs=indent_block_id, outputs=focused_block_state
@@ -2386,53 +2247,51 @@ def create_app():
         )
 
         # Add after handler - for + button on content blocks
-        def handle_add_after(blocks, block_id, block_type, title, description, resources):
+        def handle_add_after(blocks, block_id, block_type, title, description, references):
             if block_type == "ai":
-                blocks = add_ai_block(blocks, block_id)
-            else:
-                blocks = add_text_block(blocks, block_id)
+                blocks = add_section_btn(blocks, block_id)
 
             # Regenerate outline and JSON
-            outline, json_str = regenerate_outline_from_state(title, description, resources, blocks)
+            outline, json_str = generate_recipe_outline_json(title, description, references, blocks)
             return blocks, outline, json_str
 
         add_after_trigger.click(
             fn=handle_add_after,
-            inputs=[blocks_state, add_after_block_id, add_after_type, doc_title, doc_description, resources_state],
-            outputs=[blocks_state, outline_state, json_output],
-        ).then(fn=render_blocks, inputs=[blocks_state, focused_block_state], outputs=blocks_display)
+            inputs=[blocks_state, add_after_block_id, add_after_type, doc_title, doc_description, references_state],
+            outputs=[blocks_state, recipe_outline_json, json_output],
+        ).then(fn=render_blocks, inputs=[bsession_locks_state, focused_block_state], outputs=blocks_display)
 
         # Convert block type handler
         convert_trigger.click(
             fn=convert_block_type,
-            inputs=[blocks_state, convert_block_id, convert_type, doc_title, doc_description, resources_state],
-            outputs=[blocks_state, outline_state, json_output],
-        ).then(fn=render_blocks, inputs=[blocks_state, focused_block_state], outputs=blocks_display)
+            inputs=[blocks_state, convert_block_id, convert_type, doc_title, doc_description, references_state],
+            outputs=[blocks_state, recipe_outline_json, json_output],
+        ).then(fn=render_blocks, inputs=[session_blocks_state, focused_block_state], outputs=blocks_display)
 
-        # Update block resources handler
+        # Update block references handler
         update_resources_trigger.click(
             fn=update_block_resources,
             inputs=[
-                blocks_state,
+                session_blocks_state,
                 update_resources_block_id,
                 update_resources_input,
                 doc_title,
                 doc_description,
-                resources_state,
+                references_state,
             ],
-            outputs=[blocks_state, outline_state, json_output],
-        ).then(fn=render_blocks, inputs=[blocks_state, focused_block_state], outputs=blocks_display)
+            outputs=[session_blocks_state, recipe_outline_json, json_output],
+        ).then(fn=render_blocks, inputs=[session_blocks_state, focused_block_state], outputs=blocks_display)
 
         # Remove block resource handler
         remove_resource_trigger.click(
             fn=remove_block_resource,
             inputs=[
-                blocks_state,
+                session_blocks_state,
                 remove_resource_block_id,
                 remove_resource_path,
                 doc_title,
                 doc_description,
-                resources_state,
+                references_state,
             ],
             outputs=[blocks_state, outline_state, json_output],
         ).then(fn=render_blocks, inputs=[blocks_state, focused_block_state], outputs=blocks_display)
@@ -2461,14 +2320,14 @@ def create_app():
         delete_panel_resource_trigger.click(
             fn=delete_and_render,
             inputs=[
-                resources_state,
+                references_state,
                 delete_panel_resource_path,
                 doc_title,
                 doc_description,
                 blocks_state,
                 focused_block_state,
             ],
-            outputs=[resources_state, blocks_state, outline_state, json_output, blocks_display],
+            outputs=[references_state, blocks_state, outline_state, json_output, blocks_display],
         )
 
         # Update resource description handler - don't re-render blocks to avoid interrupting typing
@@ -2481,7 +2340,7 @@ def create_app():
                 update_desc_text,
                 doc_title,
                 doc_description,
-                resources_state,
+                references_state,
             ],
             outputs=[blocks_state, outline_state, json_output],
         )
@@ -2489,25 +2348,25 @@ def create_app():
         # Title and description change handlers
         doc_title.change(
             fn=update_document_metadata,
-            inputs=[doc_title, doc_description, resources_state, blocks_state],
-            outputs=[outline_state, json_output],
+            inputs=[doc_title, doc_description, references_state, blocks_state],
+            outputs=[recipe_outline.to_dict()],
         )
 
         doc_description.change(
             fn=update_document_metadata,
-            inputs=[doc_title, doc_description, resources_state, blocks_state],
-            outputs=[outline_state, json_output],
+            inputs=[doc_title, doc_description, references_state, blocks_state],
+            outputs=[recipe_outline],
         )
 
         # Handle file uploads (defined after json_output is created)
         file_upload.change(
             fn=handle_file_upload,
-            inputs=[file_upload, resources_state, doc_title, doc_description, blocks_state, session_state],
-            outputs=[resources_state, file_upload, outline_state, json_output, session_state],
+            inputs=[file_upload, references_state, doc_title, doc_description, blocks_state, session_state],
+            outputs=[references_state, file_upload, outline_state, json_output, session_state],
         ).then(
             # Force JSON update after resources render
-            fn=lambda title, desc, res, blocks: regenerate_outline_from_state(title, desc, res, blocks)[1],
-            inputs=[doc_title, doc_description, resources_state, blocks_state],
+            fn=lambda title, desc, res, blocks: generate_recipe_outline_json(title, desc, res, blocks)[1],
+            inputs=[doc_title, doc_description, references_state, blocks_state],
             outputs=[json_output],
         )
 
@@ -2544,7 +2403,7 @@ def create_app():
             outputs=[generate_doc_btn, generated_content, generated_content_html, save_doc_btn],
         ).then(
             fn=handle_generate_and_update_download,
-            inputs=[doc_title, doc_description, resources_state, blocks_state, session_state],
+            inputs=[doc_title, doc_description, references_state, blocks_state, session_state],
             outputs=[json_output, generated_content, generated_content_html, save_doc_btn, generate_doc_btn],
         )
 
@@ -2557,7 +2416,7 @@ def create_app():
             outputs=[
                 doc_title,
                 doc_description,
-                resources_state,
+                references_state,
                 blocks_state,
                 outline_state,
                 json_output,
@@ -2576,7 +2435,7 @@ def create_app():
             outputs=[
                 doc_title,
                 doc_description,
-                resources_state,
+                references_state,
                 blocks_state,
                 outline_state,
                 json_output,
@@ -2591,28 +2450,28 @@ def create_app():
         update_title_trigger.click(
             fn=update_resource_title,
             inputs=[
-                resources_state,
+                references_state,
                 update_title_resource_path,
                 update_title_text,
                 doc_title,
                 doc_description,
                 blocks_state,
             ],
-            outputs=[resources_state, outline_state, json_output],
+            outputs=[references_state, outline_state, json_output],
         )
 
         # Update resource panel description handler - reuse the same inputs
         update_panel_desc_trigger.click(
             fn=update_resource_panel_description,
             inputs=[
-                resources_state,
+                references_state,
                 update_title_resource_path,
                 update_title_text,
                 doc_title,
                 doc_description,
                 blocks_state,
             ],
-            outputs=[resources_state, outline_state, json_output],
+            outputs=[references_state, outline_state, json_output],
         )
 
         # Replace resource file handler
@@ -2635,7 +2494,7 @@ def create_app():
         replace_resource_trigger.click(
             fn=handle_resource_replacement,
             inputs=[
-                resources_state,
+                references_state,
                 replace_resource_path,
                 replace_resource_file_input,
                 doc_title,
@@ -2644,7 +2503,7 @@ def create_app():
                 session_state,
             ],
             outputs=[
-                resources_state,
+                references_state,
                 blocks_state,
                 outline_state,
                 json_output,
