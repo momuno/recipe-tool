@@ -95,6 +95,42 @@
     max-width: 450px;
 }
 
+/* Context Menu Styles */
+#context-menu {
+    display: none;
+    position: fixed;
+    background: white;
+    border: 2px solid #0066cc;
+    padding: 20px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+    z-index: 999999;
+    border-radius: 12px;
+    min-width: 350px;
+}
+
+/* Content Editor Styles */
+#content-editor {
+    border: 1px solid #ddd;
+    padding: 20px;
+    min-height: 400px;
+    background: white;
+    font-family: Arial, sans-serif;
+    overflow-y: auto;
+    max-height: 600px;
+    user-select: text;
+    -webkit-user-select: text;
+    -moz-user-select: text;
+    -ms-user-select: text;
+}
+
+/* Ensure text in editor is selectable */
+#content-editor * {
+    user-select: text !important;
+    -webkit-user-select: text !important;
+    -moz-user-select: text !important;
+    -ms-user-select: text !important;
+}
+
 
 /* Builder buttons */
 .save-builder-btn {

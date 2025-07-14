@@ -2424,6 +2424,128 @@ function setupResourceUploadZones() {
     });
 }
 
+// Initialize content editor functionality
+function initializeContentEditor() {
+    console.log('Initializing content editor...');
+    
+    // First try to find the editor immediately
+    const editor = document.querySelector('#content-editor');
+    if (editor && !editor.hasAttribute('data-initialized')) {
+        setupEditor(editor);
+        return;
+    }
+    
+    // If not found, wait and try again
+    setTimeout(() => {
+        const editor = document.querySelector('#content-editor');
+        if (editor && !editor.hasAttribute('data-initialized')) {
+            setupEditor(editor);
+        }
+    }, 500);
+}
+
+function setupEditor(editor) {
+    console.log('Setting up editor with context menu...');
+    editor.setAttribute('data-initialized', 'true');
+    
+    let contextMenu = document.querySelector('#context-menu');
+    
+    if (!contextMenu) {
+        // Create context menu if it doesn't exist
+        contextMenu = document.createElement('div');
+        contextMenu.id = 'context-menu';
+        contextMenu.innerHTML = `
+            <div style="background: #0066cc; color: white; margin: -20px -20px 15px -20px; padding: 12px 20px; border-radius: 10px 10px 0 0; font-weight: bold; font-size: 16px;">
+                🎯 Text Selection Tool
+            </div>
+            <div style="margin-bottom: 15px;">
+                <label style="color: #555; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Selected Text:</label>
+                <div id="selected-text" style="background: #e8f4fd; padding: 10px; border-radius: 6px; margin-top: 5px; font-family: 'Courier New', monospace; font-size: 14px; max-height: 100px; overflow-y: auto; border: 1px solid #b8e0f7;"></div>
+            </div>
+            <div style="margin-bottom: 15px;">
+                <label style="color: #555; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Your Notes / Action:</label>
+                <textarea id="user-input" placeholder="Enter your notes or specify an action..." style="width: 100%; padding: 10px; margin-top: 5px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; resize: vertical; min-height: 60px; box-sizing: border-box;"></textarea>
+            </div>
+            <div style="margin-bottom: 15px;">
+                <label style="color: #555; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 8px;">Quick Actions:</label>
+                <div style="display: flex; gap: 5px; flex-wrap: wrap;">
+                    <button onclick="document.querySelector('#user-input').value='Highlight this text in yellow'" style="background: #ffc107; color: #000; border: none; padding: 5px 10px; cursor: pointer; border-radius: 4px; font-size: 12px;">🖍️ Highlight</button>
+                    <button onclick="document.querySelector('#user-input').value='Add comment: '" style="background: #28a745; color: white; border: none; padding: 5px 10px; cursor: pointer; border-radius: 4px; font-size: 12px;">💬 Comment</button>
+                    <button onclick="document.querySelector('#user-input').value='Translate to Spanish'" style="background: #17a2b8; color: white; border: none; padding: 5px 10px; cursor: pointer; border-radius: 4px; font-size: 12px;">🌐 Translate</button>
+                    <button onclick="document.querySelector('#user-input').value='Define this term'" style="background: #6c757d; color: white; border: none; padding: 5px 10px; cursor: pointer; border-radius: 4px; font-size: 12px;">📖 Define</button>
+                </div>
+            </div>
+            <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                <button onclick="document.querySelector('#context-menu').style.display='none'" style="background: #6c757d; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-weight: 500;">Cancel</button>
+                <button onclick="processTextSelection()" style="background: #0066cc; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-weight: bold;">✨ Process</button>
+            </div>
+        `;
+        document.body.appendChild(contextMenu);
+    }
+    
+    // Remove any existing contextmenu listeners
+    const oldHandler = editor.oncontextmenu;
+    editor.oncontextmenu = null;
+    
+    // Add right-click handler with aggressive prevention
+    const contextMenuHandler = (e) => {
+        console.log('Right-click detected on editor');
+        e.preventDefault();
+        e.stopPropagation();
+        
+        const selection = window.getSelection().toString();
+        console.log('Selected text:', selection);
+        
+        if (selection) {
+            document.querySelector('#selected-text').textContent = selection;
+            contextMenu.style.display = 'block';
+            contextMenu.style.left = e.clientX + 'px';
+            contextMenu.style.top = e.clientY + 'px';
+            console.log('Context menu shown at:', e.clientX, e.clientY);
+        }
+        
+        return false;
+    };
+    
+    // Add event listener
+    editor.addEventListener('contextmenu', contextMenuHandler, true);
+    
+    // Also set oncontextmenu directly to be extra sure
+    editor.oncontextmenu = contextMenuHandler;
+    
+    // Hide menu on click outside - only add this once
+    if (!document.body.hasAttribute('data-context-menu-click-handler')) {
+        document.body.setAttribute('data-context-menu-click-handler', 'true');
+        document.addEventListener('click', (e) => {
+            if (contextMenu && !contextMenu.contains(e.target)) {
+                contextMenu.style.display = 'none';
+            }
+        });
+    }
+    
+    // Also prevent default context menu on the document level for this area
+    document.addEventListener('contextmenu', (e) => {
+        if (editor.contains(e.target)) {
+            e.preventDefault();
+            return false;
+        }
+    }, true);
+    
+    console.log('Content editor event listeners attached to:', editor);
+}
+
+// Process text selection from context menu
+function processTextSelection() {
+    const selectedText = document.querySelector('#selected-text').textContent;
+    const userInput = document.querySelector('#user-input').value;
+    alert('Processing:\nSelected: ' + selectedText + '\nAction: ' + userInput);
+    document.querySelector('#context-menu').style.display = 'none';
+}
+
+// Make functions globally available
+window.processTextSelection = processTextSelection;
+window.initializeContentEditor = initializeContentEditor;
+
 // Call setup on initial load
 document.addEventListener('DOMContentLoaded', function () {
     console.log('DOMContentLoaded - Starting initialization');
@@ -2437,6 +2559,38 @@ document.addEventListener('DOMContentLoaded', function () {
     // Upload resource setup no longer needed - using Gradio's native component
     setupExampleSelection();
     console.log('Called setupExampleSelection()');
+    
+    // Initialize content editor
+    initializeContentEditor();
+    console.log('Called initializeContentEditor()');
+    
+    // Set up mutation observer to watch for content editor changes
+    const observer = new MutationObserver((mutations) => {
+        mutations.forEach((mutation) => {
+            mutation.addedNodes.forEach((node) => {
+                if (node.nodeType === 1) { // Element node
+                    // Check if the added node is a content editor
+                    if (node.id === 'content-editor' && !node.hasAttribute('data-initialized')) {
+                        console.log('Content editor detected via mutation observer');
+                        setupEditor(node);
+                    }
+                    // Also check descendants
+                    const editors = node.querySelectorAll ? node.querySelectorAll('#content-editor:not([data-initialized])') : [];
+                    editors.forEach(editor => {
+                        console.log('Content editor found in descendants');
+                        setupEditor(editor);
+                    });
+                }
+            });
+        });
+    });
+    
+    // Start observing the entire document
+    observer.observe(document.body, {
+        childList: true,
+        subtree: true
+    });
+    console.log('Mutation observer set up for content editor');
     
     // Delay initial drag and drop setup
     setTimeout(() => {

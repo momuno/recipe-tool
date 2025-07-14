@@ -223,7 +223,11 @@ def reset_document(session_id=None):
         None,  # import_file
         new_session_id,  # session_id
         gr.update(
-            value="<em>Click '▷ Generate' to see the generated content here.</em><br><br><br>", visible=True
+            value="""
+            <div id="editor" contenteditable="true" style="border: 1px solid #ddd; padding: 20px; min-height: 400px; background: white;">
+                Click '▷ Generate' to see the generated content here.
+            </div>
+            """, visible=True
         ),  # generated_content_html
         gr.update(visible=False),  # generated_content
         gr.update(interactive=False),  # save_doc_btn
@@ -1149,7 +1153,11 @@ def import_outline(file_path, session_id=None):
             None,  # import_file (clear it)
             session_id,
             gr.update(
-                value="<em>Click '▷ Generate' to see the generated content here.</em><br><br><br>", visible=True
+                value="""
+                <div id="editor" contenteditable="true" style="border: 1px solid #ddd; padding: 20px; min-height: 400px; background: white;">
+                    Click '▷ Generate' to see the generated content here.
+                </div>
+                """, visible=True
             ),  # generated_content_html
             gr.update(visible=False),  # generated_content
             gr.update(interactive=False),  # save_doc_btn
@@ -2376,7 +2384,11 @@ def create_app():
                 # Generated document display panel
                 with gr.Column(elem_classes="generate-display"):
                     generated_content_html = gr.HTML(
-                        value="<em>Click '▷ Generate' to see the generated content here.</em><br><br><br>",
+                        value="""
+                        <div id="editor" contenteditable="true" style="border: 1px solid #ddd; padding: 20px; min-height: 400px; background: white;">
+                            Click '▷ Generate' to see the generated content here.
+                        </div>
+                        """,
                         elem_classes="generated-content",
                         visible=True,
                     )
@@ -2626,9 +2638,37 @@ def create_app():
                 title, description, resources, blocks, session_id
             )
 
-            # Hide HTML component and show Markdown component
-            html_update = gr.update(visible=False)
-            markdown_update = gr.update(value=content, visible=True)
+            # Convert markdown content to basic HTML for the editor
+            # Simple conversion of markdown to HTML without external library
+            html_content = content
+            # Convert headers
+            html_content = html_content.replace('\n### ', '\n<h3>').replace('\n## ', '\n<h2>').replace('\n# ', '\n<h1>')
+            # Add closing tags after headers (simple approach)
+            lines = html_content.split('\n')
+            for i, line in enumerate(lines):
+                if line.startswith('<h1>'):
+                    lines[i] = line + '</h1>'
+                elif line.startswith('<h2>'):
+                    lines[i] = line + '</h2>'
+                elif line.startswith('<h3>'):
+                    lines[i] = line + '</h3>'
+            html_content = '\n'.join(lines)
+            
+            # Convert paragraphs
+            html_content = '<p>' + html_content.replace('\n\n', '</p><p>') + '</p>'
+            # Clean up empty paragraphs
+            html_content = html_content.replace('<p></p>', '')
+            
+            # Format exactly like gradio_editor_with_js.py
+            editor_html = f"""
+            <div id="editor" contenteditable="true" style="border: 1px solid #ddd; padding: 20px; min-height: 400px; background: white; font-family: Arial, sans-serif;">
+                {html_content}
+            </div>
+            """
+
+            # Update HTML component with editor
+            html_update = gr.update(value=editor_html, visible=True)
+            markdown_update = gr.update(visible=False)
 
             if file_path:
                 download_update = gr.update(value=file_path, interactive=True)
@@ -2640,12 +2680,119 @@ def create_app():
 
             return json_str, markdown_update, html_update, download_update, generate_btn_update
 
+        # CSS for context menu
+        css_addition = """
+        #context-menu {
+            display: none;
+            position: fixed;
+            background: white;
+            border: 2px solid #0066cc;
+            padding: 20px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+            z-index: 10000;
+            border-radius: 12px;
+            min-width: 350px;
+        }
+        """
+
+        # JavaScript code exactly as in gradio_editor_with_js.py
+        js_code = """
+        () => {
+            console.log('Initializing editor...');
+            
+            // Add CSS if not already present
+            if (!document.querySelector('#context-menu-styles')) {
+                const style = document.createElement('style');
+                style.id = 'context-menu-styles';
+                style.textContent = `
+                    #context-menu {
+                        display: none;
+                        position: fixed;
+                        background: white;
+                        border: 2px solid #0066cc;
+                        padding: 20px;
+                        box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+                        z-index: 10000;
+                        border-radius: 12px;
+                        min-width: 350px;
+                    }
+                `;
+                document.head.appendChild(style);
+            }
+            
+            // Wait for DOM to be ready
+            setTimeout(() => {
+                const editor = document.querySelector('#editor');
+                let contextMenu = document.querySelector('#context-menu');
+                
+                if (!contextMenu) {
+                    // Create context menu if it doesn't exist
+                    contextMenu = document.createElement('div');
+                    contextMenu.id = 'context-menu';
+                    contextMenu.innerHTML = `
+                        <div style="background: #0066cc; color: white; margin: -20px -20px 15px -20px; padding: 12px 20px; border-radius: 10px 10px 0 0; font-weight: bold; font-size: 16px;">
+                            🎯 Text Selection Tool
+                        </div>
+                        <div style="margin-bottom: 15px;">
+                            <label style="color: #555; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Selected Text:</label>
+                            <div id="selected-text" style="background: #e8f4fd; padding: 10px; border-radius: 6px; margin-top: 5px; font-family: 'Courier New', monospace; font-size: 14px; max-height: 100px; overflow-y: auto; border: 1px solid #b8e0f7;"></div>
+                        </div>
+                        <div style="margin-bottom: 15px;">
+                            <label style="color: #555; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;">Your Notes / Action:</label>
+                            <textarea id="user-input" placeholder="Enter your notes or specify an action..." style="width: 100%; padding: 10px; margin-top: 5px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; resize: vertical; min-height: 60px; box-sizing: border-box;"></textarea>
+                        </div>
+                        <div style="margin-bottom: 15px;">
+                            <label style="color: #555; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 8px;">Quick Actions:</label>
+                            <div style="display: flex; gap: 5px; flex-wrap: wrap;">
+                                <button onclick="document.querySelector('#user-input').value='Highlight this text in yellow'" style="background: #ffc107; color: #000; border: none; padding: 5px 10px; cursor: pointer; border-radius: 4px; font-size: 12px;">🖍️ Highlight</button>
+                                <button onclick="document.querySelector('#user-input').value='Add comment: '" style="background: #28a745; color: white; border: none; padding: 5px 10px; cursor: pointer; border-radius: 4px; font-size: 12px;">💬 Comment</button>
+                                <button onclick="document.querySelector('#user-input').value='Translate to Spanish'" style="background: #17a2b8; color: white; border: none; padding: 5px 10px; cursor: pointer; border-radius: 4px; font-size: 12px;">🌐 Translate</button>
+                                <button onclick="document.querySelector('#user-input').value='Define this term'" style="background: #6c757d; color: white; border: none; padding: 5px 10px; cursor: pointer; border-radius: 4px; font-size: 12px;">📖 Define</button>
+                            </div>
+                        </div>
+                        <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                            <button onclick="document.querySelector('#context-menu').style.display='none'" style="background: #6c757d; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-weight: 500;">Cancel</button>
+                            <button onclick="alert('Processing:\\\\nSelected: ' + document.querySelector('#selected-text').textContent + '\\\\nAction: ' + document.querySelector('#user-input').value)" style="background: #0066cc; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-weight: bold;">✨ Process</button>
+                        </div>
+                    `;
+                    document.body.appendChild(contextMenu);
+                }
+                
+                // Add right-click handler
+                if (editor) {
+                    editor.addEventListener('contextmenu', (e) => {
+                        e.preventDefault();
+                        const selection = window.getSelection().toString();
+                        
+                        if (selection) {
+                            document.querySelector('#selected-text').textContent = selection;
+                            contextMenu.style.display = 'block';
+                            contextMenu.style.left = e.clientX + 'px';
+                            contextMenu.style.top = e.clientY + 'px';
+                        }
+                        
+                        return false;
+                    });
+                    
+                    // Hide menu on click outside
+                    document.addEventListener('click', (e) => {
+                        if (!contextMenu.contains(e.target)) {
+                            contextMenu.style.display = 'none';
+                        }
+                    });
+                    
+                    console.log('Event listeners attached');
+                }
+            }, 500);
+        }
+        """
+
         generate_doc_btn.click(
             fn=lambda: [
                 gr.update(interactive=False),  # Disable generate button
                 gr.update(visible=False),  # Hide markdown content
                 gr.update(
-                    value="<em></em><br><br><br>", visible=True
+                    value='<div id="editor" contenteditable="true" style="border: 1px solid #ddd; padding: 20px; min-height: 400px; background: white;">Generating content...</div>', visible=True
                 ),  # Show HTML with empty content but structure intact
                 gr.update(interactive=False),  # Disable download button
             ],
@@ -2654,6 +2801,7 @@ def create_app():
             fn=handle_generate_and_update_download,
             inputs=[doc_title, doc_description, resources_state, blocks_state, session_state],
             outputs=[json_output, generated_content, generated_content_html, save_doc_btn, generate_doc_btn],
+            js=js_code  # Add the JavaScript here, exactly like in the working example
         )
 
         # Save button is handled directly by DownloadButton with create_docpack_from_current_state
