@@ -1,5 +1,289 @@
 /* Document Builder Custom Styles */
 
+/* Start Tab Styles */
+.start-tab-container {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 40px 20px;
+}
+
+/* Welcome message styles */
+.start-welcome-title {
+    text-align: center;
+    margin-bottom: 10px !important;
+}
+
+.start-welcome-title h1 {
+    font-size: 48px !important;
+    font-weight: 700;
+    color: #1a1a1a;
+    margin: 0;
+}
+
+.start-welcome-subtitle {
+    text-align: center;
+    margin-bottom: 40px !important;
+    font-size: 18px;
+    color: #666;
+}
+
+/* Spacer for future content */
+.start-content-spacer {
+    min-height: 200px;
+}
+
+/* Main content area */
+.start-main-content {
+    margin-top: 20px;
+}
+
+/* Document description section - match the header-section styling */
+.start-input-section {
+    margin-bottom: 15px;
+    background-color: #ffffff !important;
+    padding: 20px;
+    border-radius: 8px !important;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+    border: 1px solid #e5e5e5;
+}
+
+.start-input-section .form {
+    border: 1px solid #ffffff;
+}
+
+.start-upload-column .form {
+    border: 1px solid #ffffff;
+}
+
+.start-upload-column {
+    gap: 0 !important;
+}
+
+/* Hide only the textarea, keep the label visible */
+.start-resource-input textarea {
+    display: none !important;
+}
+
+/* Remove padding/margin from the textarea wrapper but keep label visible */
+.start-resource-input {
+    padding: 0 !important;
+    margin: 0 !important;
+}
+
+/* Ensure the label is visible and styled appropriately */
+.start-resource-input label {
+    display: block !important;
+    font-size: 14px !important;
+    font-weight: 500 !important;
+    color: #333 !important;
+    margin: 0px;
+}
+/* Style the description textarea to match doc-description-box */
+.start-description-input textarea {
+    font-size: 13px !important;
+    line-height: 1.4 !important;
+    border: 1px solid #e0e0e0 !important;
+    background-color: #ffffff !important;
+    border-radius: 4px;
+    padding: 10px;
+    transition: none;
+}
+
+.start-description-input textarea:focus,
+.start-description-input textarea:active,
+.start-description-input textarea:hover {
+    border: 1px solid #e0e0e0 !important;
+    background-color: #ffffff !important;
+    outline: none !important;
+    box-shadow: none !important;
+}
+
+/* Action row for file upload and button */
+.start-action-row {
+    gap: 20px;
+    align-items: flex-start;
+}
+
+/* File upload column - match resource panel styling */
+.start-upload-column {
+    background-color: #ffffff !important;
+    padding: 32px;
+    border-radius: 8px !important;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+    border: 1px solid #e5e5e5;
+    min-width: 400px !important;
+    max-width: 400px !important;
+}
+
+/* File upload area - match file-upload-dropzone styling exactly */
+.start-file-upload-compact {
+    width: 100% !important;
+    min-height: 90px !important;
+    max-height: 90px !important;
+    border: 1px dashed #4a9d9e !important;
+    border-radius: 8px !important;
+    background-color: #f8fafa !important;
+    transition: all 0.3s ease !important;
+}
+
+.start-file-upload-compact:hover {
+    border-color: #3a8d8e !important;
+    background-color: #f0f9f9 !important;
+}
+
+/* When dragging files over - match AI content block drag-over effect */
+.start-file-upload-compact.dragging,
+.start-file-upload-compact.drag-over {
+    border-color: #4a9d9e !important;
+    background-color: #e8f5f5 !important;
+    border-width: 1px !important;
+}
+
+/* Style the file input container */
+.start-file-upload-compact > div {
+    height: 56px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+}
+
+/* Style the label text */
+.start-file-upload-compact label {
+    font-size: 11px !important;
+    color: #666 !important;
+}
+
+/* Make the upload text smaller */
+.start-file-upload-compact .wrap {
+    font-size: 12px !important;
+    padding-top: 5px;
+}
+
+.start-file-upload-compact .wrap .or {
+    font-size: 11px !important;
+    margin: 0 3px !important;
+}
+
+.start-file-upload-compact .feather-upload {
+    width: 90%;
+    height: 90%;
+}
+
+.start-file-upload-compact .icon-wrap {
+    width: 24px;
+    height: 18px;
+    margin-bottom: 0;
+}
+
+/* Style the file input button area */
+.start-file-upload-compact .file-preview {
+    display: none !important;
+}
+
+.start-file-upload-compact input[type="file"] {
+    opacity: 0 !important;
+    position: absolute !important;
+    width: 100% !important;
+    height: 100% !important;
+    cursor: pointer !important;
+}
+
+.start-uploaded-files-compact {
+    margin-top: 10px;
+    font-size: 12px;
+    color: #666;
+    max-height: 100px;
+    overflow-y: auto;
+}
+
+/* Generate button column */
+.start-generate-column {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+}
+
+.start-button-spacer {
+    height: 32px; /* Match the Reference Files header height */
+    margin: 0 !important;
+}
+
+/* Generate button - match add-section-btn styling */
+.start-generate-btn {
+    width: 100% !important;
+    padding: 12px 24px;
+    background-color: #4a9d9e !important;
+    border: 1px solid #4a9d9e !important;
+    color: white !important;
+    font-weight: bold !important;
+    font-size: 16px;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+}
+
+.start-generate-btn:hover {
+    background-color: #3a8d8e !important;
+    border-color: #3a8d8e !important;
+}
+
+.start-generation-status {
+    margin-top: 15px;
+    text-align: center;
+    font-size: 14px;
+    line-height: 1.5;
+    color: #666;
+}
+
+/* Tab styling - citrus orange theme */
+.svelte-kqij2n .tab-nav { /* Gradio's tab navigation container */
+    background-color: #f8f9fa !important;
+    border-bottom: 2px solid #e0e0e0 !important;
+}
+
+.svelte-kqij2n .tab-nav button { /* Individual tab buttons */
+    color: #666 !important;
+    font-weight: 500 !important;
+    border: none !important;
+    border-bottom: 3px solid transparent !important;
+    background: transparent !important;
+    transition: all 0.2s ease !important;
+    padding: 12px 24px !important;
+}
+
+.svelte-kqij2n .tab-nav button:hover {
+    color: #ff9f40 !important;
+    background-color: #fff5eb !important;
+}
+
+.svelte-kqij2n .tab-nav button.selected { /* Active/selected tab */
+    color: #ff9f40 !important;
+    border-bottom-color: #ff9f40 !important;
+    background-color: white !important;
+    font-weight: 600 !important;
+}
+
+/* Alternative selector if Gradio uses different classes */
+.tabs .tab-nav button {
+    color: #666 !important;
+    font-weight: 500 !important;
+    border: none !important;
+    border-bottom: 3px solid transparent !important;
+    background: transparent !important;
+    transition: all 0.2s ease !important;
+}
+
+.tabs .tab-nav button:hover {
+    color: #ff9f40 !important;
+    background-color: #fff5eb !important;
+}
+
+.tabs .tab-nav button.selected {
+    color: #ff9f40 !important;
+    border-bottom-color: #ff9f40 !important;
+    background-color: white !important;
+    font-weight: 600 !important;
+}
+
 /* Hide components but keep them in DOM */
 .hidden-component {
     display: none !important;

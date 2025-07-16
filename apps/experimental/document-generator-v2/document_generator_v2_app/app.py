@@ -1465,6 +1465,14 @@ def render_blocks(blocks, focused_block_id=None):
     return html
 
 
+def preview_uploaded_files(files):
+    """Generate preview text for uploaded files in Start tab."""
+    if not files:
+        return None
+
+    return None
+
+
 def handle_file_upload(files, current_resources, title, description, blocks, session_id=None):
     """Handle uploaded files and return HTML display of file names."""
     if not files:
@@ -1738,9 +1746,90 @@ def create_app():
         with gr.Tabs() as tabs:
             # First tab - New tab that will show first
             with gr.Tab("Start", id="start_tab"):
-                gr.Markdown("# Welcome to Document Generator")
-                gr.Markdown("This is the start tab. Add your content here.")
-                # TODO: Add content for the start tab
+                with gr.Column(elem_classes="start-tab-container"):
+                    # Big welcome message
+                    gr.Markdown("# Welcome to Document Generator", elem_classes="start-welcome-title")
+                    gr.Markdown(
+                        "Transform your ideas into structured documents with AI assistance.",
+                        elem_classes="start-welcome-subtitle",
+                    )
+
+                    # Spacer for additional content
+                    gr.Markdown("", elem_classes="start-content-spacer")
+
+                    # Main content area
+                    with gr.Column(elem_classes="start-main-content"):
+                        # Document description input
+                        with gr.Column(elem_classes="start-input-section"):
+                            start_doc_description = gr.Textbox(
+                                label="Describe the document you want to create",
+                                placeholder="Enter a detailed description of the document you want to generate...",
+                                lines=5,
+                                max_lines=10,
+                                elem_classes="start-description-input",
+                            )
+
+                        # File upload and generate button in a row
+                        with gr.Row(elem_classes="start-action-row"):
+                            # File upload area (left side, smaller)
+                            with gr.Column(scale=1, elem_classes="start-upload-column"):
+                                gr.Textbox(
+                                    elem_classes="start-resource-input",
+                                    label="Add text files for reference and context",
+                                )
+                                start_file_upload = gr.File(
+                                    file_count="multiple",
+                                    file_types=[
+                                        ".txt",
+                                        ".md",
+                                        ".py",
+                                        ".json",
+                                        ".csv",
+                                        ".yaml",
+                                        ".yml",
+                                        ".toml",
+                                        ".ini",
+                                        ".cfg",
+                                        ".conf",
+                                        ".sh",
+                                        ".bash",
+                                        ".c",
+                                        ".cpp",
+                                        ".h",
+                                        ".java",
+                                        ".js",
+                                        ".ts",
+                                        ".jsx",
+                                        ".tsx",
+                                        ".xml",
+                                        ".html",
+                                        ".css",
+                                        ".rs",
+                                        ".go",
+                                        ".rb",
+                                        ".php",
+                                        ".lua",
+                                        ".sql",
+                                    ],
+                                    elem_classes="start-file-upload-compact",
+                                    visible=True,
+                                    height=90,
+                                    show_label=False,
+                                )
+
+                            # Generate button (right side)
+                            with gr.Column(scale=1, elem_classes="start-generate-column"):
+                                gr.Markdown(
+                                    "&nbsp;", elem_classes="start-button-spacer"
+                                )  # Align with Reference Files header
+                                generate_structure_btn = gr.Button(
+                                    "Generate Document Structure",
+                                    variant="primary",
+                                    size="lg",
+                                    elem_classes="start-generate-btn",
+                                )
+                                # Status/progress indicator below button
+                                generation_status = gr.Markdown("", elem_classes="start-generation-status")
 
             # Second tab - Existing Document Builder content
             with gr.Tab("Document Builder", id="document_builder_tab"):
@@ -1882,7 +1971,6 @@ def create_app():
                     with gr.Column(scale=1, elem_classes="resources-col"):
                         # Drag and drop file upload component
                         file_upload = gr.File(
-                            label="Drop Text File Here",
                             file_count="multiple",
                             file_types=[
                                 ".txt",
@@ -2813,6 +2901,29 @@ def create_app():
             # Clear the file input after processing
             fn=lambda: None,
             outputs=replace_resource_file_input,
+        )
+
+        # Start Tab Event Handlers
+
+        # Update file preview when files are uploaded
+        start_file_upload.change(fn=preview_uploaded_files, inputs=[start_file_upload], outputs=[start_file_upload])
+
+        # Handle generate button click
+        def handle_generate_structure(description, files):
+            """Handle the generate structure button click."""
+            if not description:
+                return gr.update(value="⚠️ Please enter a document description.", visible=True)
+
+            # For now, just show a status message
+            # TODO: Implement actual recipe execution
+            file_count = len(files) if files else 0
+            return gr.update(
+                value=f"🚀 Generating document structure with {file_count} reference file(s)...\n\nThis functionality will be implemented next.",
+                visible=True,
+            )
+
+        generate_structure_btn.click(
+            fn=handle_generate_structure, inputs=[start_doc_description, start_file_upload], outputs=[generation_status]
         )
 
     return app
