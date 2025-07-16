@@ -46,7 +46,29 @@ function toggleDebugPanel() {
     }
 }
 
-// No longer needed - using Gradio's native file upload component
+// Delete file from Start tab
+function deleteStartFile(fileId) {
+    console.log('Deleting file with ID:', fileId);
+    
+    // Set the file ID in the hidden textbox
+    const fileIdInput = document.getElementById('start-delete-file-id');
+    if (fileIdInput) {
+        // Find the textarea within the textbox component
+        const textarea = fileIdInput.querySelector('textarea');
+        if (textarea) {
+            textarea.value = fileId;
+            textarea.dispatchEvent(new Event('input', { bubbles: true }));
+            
+            // Trigger the delete button
+            setTimeout(() => {
+                const deleteButton = document.getElementById('start-delete-trigger');
+                if (deleteButton) {
+                    deleteButton.click();
+                }
+            }, 100);
+        }
+    }
+}
 
 // Delete block function
 function deleteBlock(blockId) {

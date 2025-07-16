@@ -1465,11 +1465,87 @@ def render_blocks(blocks, focused_block_id=None):
     return html
 
 
+def handle_start_file_upload(files, current_files, session_id=None):
+    """Handle file uploads on the Start tab, saving to tmp directory."""
+    if not files:
+        return current_files, render_start_uploaded_files(current_files), session_id
+    
+    # Initialize session if needed
+    if not session_id:
+        session_id = str(uuid.uuid4())
+    
+    # Get session files directory
+    files_dir = session_manager.get_files_dir(session_id)
+    
+    # Convert files to list if it's a single file
+    if not isinstance(files, list):
+        files = [files]
+    
+    # Process each file
+    new_files = list(current_files) if current_files else []
+    
+    for file in files:
+        # Get the file path and name
+        file_path = file if isinstance(file, str) else file.name
+        file_name = os.path.basename(file_path)
+        
+        # Check if file already exists
+        exists = any(f["name"] == file_name for f in new_files)
+        if not exists:
+            # Copy file to session directory
+            import shutil
+            session_file_path = files_dir / file_name
+            shutil.copy2(file_path, session_file_path)
+            
+            new_files.append({
+                "path": str(session_file_path),
+                "name": file_name,
+                "id": str(uuid.uuid4())
+            })
+    
+    # Clear the file upload component and render the display
+    return new_files, render_start_uploaded_files(new_files), session_id
+
+
+def render_start_uploaded_files(files):
+    """Render uploaded files as HTML with delete buttons."""
+    if not files:
+        return ""
+    
+    html_items = []
+    for file in files:
+        file_id = file.get("id", str(uuid.uuid4()))
+        file_name = file["name"]
+        
+        # Truncate long filenames
+        display_name = file_name
+        if len(display_name) > 30:
+            display_name = display_name[:27] + "..."
+        
+        html_items.append(
+            f'<div class="start-uploaded-file-item" data-file-id="{file_id}">'
+            f'<span class="file-name">{display_name}</span>'
+            f'<button class="file-delete-btn" onclick="deleteStartFile(\'{file_id}\')">🗑</button>'
+            f'</div>'
+        )
+    
+    return '<div class="start-uploaded-files-container">' + '\n'.join(html_items) + '</div>'
+
+
+def delete_start_file(file_id, current_files):
+    """Delete a file from the Start tab."""
+    if not current_files:
+        return [], ""
+    
+    # Filter out the file with the given ID
+    new_files = [f for f in current_files if f.get("id") != file_id]
+    
+    return new_files, render_start_uploaded_files(new_files)
+
+
 def preview_uploaded_files(files):
     """Generate preview text for uploaded files in Start tab."""
-    if not files:
-        return None
-
+    # This function is no longer used, replaced by render_start_uploaded_files
     return None
 
 
@@ -1746,6 +1822,10 @@ def create_app():
         with gr.Tabs() as tabs:
             # First tab - New tab that will show first
             with gr.Tab("Start", id="start_tab"):
+                # State to track uploaded files on Start tab
+                start_files_state = gr.State([])
+                start_session_state = gr.State(None)
+                
                 with gr.Column(elem_classes="start-tab-container"):
                     # Big welcome message
                     gr.Markdown("# Welcome to Document Generator", elem_classes="start-welcome-title")
@@ -1816,6 +1896,12 @@ def create_app():
                                     height=90,
                                     show_label=False,
                                 )
+                                # Display uploaded files with delete buttons
+                                start_uploaded_files_display = gr.HTML("", elem_classes="start-uploaded-files-display")
+                                
+                                # Hidden components for file deletion
+                                start_delete_file_id = gr.Textbox(visible=False, elem_id="start-delete-file-id")
+                                start_delete_trigger = gr.Button("Delete File", visible=False, elem_id="start-delete-trigger")
 
                             # Generate button (right side)
                             with gr.Column(scale=1, elem_classes="start-generate-column"):
@@ -2905,8 +2991,23 @@ def create_app():
 
         # Start Tab Event Handlers
 
-        # Update file preview when files are uploaded
-        start_file_upload.change(fn=preview_uploaded_files, inputs=[start_file_upload], outputs=[start_file_upload])
+        # Handle file uploads
+        start_file_upload.change(
+            fn=handle_start_file_upload,
+            inputs=[start_file_upload, start_files_state, start_session_state],
+            outputs=[start_files_state, start_uploaded_files_display, start_session_state]
+        ).then(
+            # Clear the file upload component
+            fn=lambda: None,
+            outputs=start_file_upload
+        )
+        
+        # Handle file deletion
+        start_delete_trigger.click(
+            fn=delete_start_file,
+            inputs=[start_delete_file_id, start_files_state],
+            outputs=[start_files_state, start_uploaded_files_display]
+        )
 
         # Handle generate button click
         def handle_generate_structure(description, files):
@@ -2923,7 +3024,7 @@ def create_app():
             )
 
         generate_structure_btn.click(
-            fn=handle_generate_structure, inputs=[start_doc_description, start_file_upload], outputs=[generation_status]
+            fn=handle_generate_structure, inputs=[start_doc_description, start_files_state], outputs=[generation_status]
         )
 
     return app
