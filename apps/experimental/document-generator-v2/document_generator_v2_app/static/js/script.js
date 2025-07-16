@@ -70,6 +70,32 @@ function deleteStartFile(fileId) {
     }
 }
 
+// Switch to Document Builder tab
+function switchToBuilderTab() {
+    console.log('Switching to Document Builder tab');
+    
+    // Find all tab buttons
+    const tabButtons = document.querySelectorAll('button[role="tab"]');
+    
+    // Find the Document Builder tab button and click it
+    tabButtons.forEach(button => {
+        if (button.textContent.includes('Document Builder')) {
+            button.click();
+            console.log('Clicked Document Builder tab');
+        }
+    });
+}
+
+// Check for switch signal in the generation status
+setInterval(() => {
+    const statusElement = document.querySelector('.start-generation-status');
+    if (statusElement && statusElement.innerHTML.includes('Switching to Document Builder tab')) {
+        switchToBuilderTab();
+        // Clear the message to prevent repeated switching
+        statusElement.innerHTML = statusElement.innerHTML.replace('Switching to Document Builder tab...', 'Switched to Document Builder tab.');
+    }
+}, 500);
+
 // Delete block function
 function deleteBlock(blockId) {
     console.log('deleteBlock called with blockId:', blockId);

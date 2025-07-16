@@ -4,15 +4,22 @@ import tempfile
 import uuid
 from pathlib import Path
 from typing import Any, Dict, List
+import asyncio
+import logging
 
 import gradio as gr
 from dotenv import load_dotenv
 
 from docpack import DocpackHandler
+from recipe_executor.context import Context
+from recipe_executor.executor import Executor
+from recipe_executor.logger import init_logger
+from recipe_executor.config import load_configuration
 
 from .executor.runner import generate_document
 from .models.outline import Outline, Resource, Section
 from .session import session_manager
+from .config import settings
 
 # Load environment variables from .env file
 load_dotenv()
@@ -379,6 +386,10 @@ def generate_document_json(title, description, resources, blocks, save_inline=Fa
     """
     import json
 
+    # Ensure resources is always a list
+    if resources is None:
+        resources = []
+
     # Create the base structure
     doc_json = {"title": title, "general_instruction": description, "resources": [], "sections": []}
 
@@ -527,6 +538,10 @@ def generate_document_json(title, description, resources, blocks, save_inline=Fa
 
 def regenerate_outline_from_state(title, description, resources, blocks):
     """Regenerate the outline whenever any component changes."""
+    # Ensure resources is always a list
+    if resources is None:
+        resources = []
+    
     try:
         json_str = generate_document_json(title, description, resources, blocks)
         json_data = json.loads(json_str)
@@ -975,6 +990,9 @@ def import_outline(file_path, session_id=None):
 
         # Extract the docpack to session directory
         json_data, extracted_files = DocpackHandler.extract_package(file_path, session_dir)
+        
+        print(f"DEBUG: Extracted json_data: {json_data}")
+        print(f"DEBUG: Extracted files: {extracted_files}")
 
         # Extract title and description
         title = json_data.get("title", "")
@@ -1821,7 +1839,7 @@ def create_app():
         # Create tabs at the highest level
         with gr.Tabs() as tabs:
             # First tab - New tab that will show first
-            with gr.Tab("Start", id="start_tab"):
+            with gr.Tab("Start", id="start_tab") as start_tab:
                 # State to track uploaded files on Start tab
                 start_files_state = gr.State([])
                 start_session_state = gr.State(None)
@@ -1915,10 +1933,10 @@ def create_app():
                                     elem_classes="start-generate-btn",
                                 )
                                 # Status/progress indicator below button
-                                generation_status = gr.Markdown("", elem_classes="start-generation-status")
+                                generation_status = gr.HTML("", elem_classes="start-generation-status")
 
             # Second tab - Existing Document Builder content
-            with gr.Tab("Document Builder", id="document_builder_tab"):
+            with gr.Tab("Document Builder", id="document_builder_tab") as builder_tab:
                 # State to track resources and blocks
                 resources_state = gr.State([])
                 focused_block_state = gr.State(None)
@@ -3010,21 +3028,132 @@ def create_app():
         )
 
         # Handle generate button click
-        def handle_generate_structure(description, files):
+        async def run_generate_docpack_recipe(description, files, session_id):
+            """Run the generate_docpack recipe and return the path to the generated docpack."""
+            logger = logging.getLogger(__name__)
+            
+            # Get recipe path
+            APP_ROOT = Path(__file__).resolve().parent
+            RECIPE_PATH = APP_ROOT / "recipes" / "recipes" / "generate_docpack.json"
+            
+            # Use session directory for output
+            session_dir = session_manager.get_session_dir(session_id)
+            output_dir = session_dir / "docpack_output"
+            output_dir.mkdir(exist_ok=True)
+            
+            # Create comma-separated list of file paths
+            resource_paths = ",".join([f["path"] for f in files]) if files else ""
+            
+            logger.info(f"Files for recipe: {files}")
+            logger.info(f"Resource paths: {resource_paths}")
+            
+            # Initialize recipe logger
+            recipe_logger = init_logger(log_dir=str(output_dir))
+            
+            # Load configuration
+            config = load_configuration()
+            
+            # Create context with inputs
+            context = Context(
+                artifacts={
+                    "document_description": description,
+                    "resources": resource_paths,
+                    "output_root": str(output_dir),
+                    "model": settings.model_id,
+                    "docpack_name": "generated.docpack"
+                },
+                config=config
+            )
+            
+            # Execute recipe
+            executor = Executor(recipe_logger)
+            logger.info(f"Executing recipe: {RECIPE_PATH}")
+            await executor.execute(str(RECIPE_PATH), context)
+            logger.info("Recipe execution completed")
+            
+            # Return path to generated docpack
+            docpack_path = output_dir / "generated.docpack"
+            if docpack_path.exists():
+                return str(docpack_path)
+            else:
+                raise Exception("Docpack was not generated")
+        
+        def handle_generate_structure(description, files, session_id):
             """Handle the generate structure button click."""
             if not description:
-                return gr.update(value="⚠️ Please enter a document description.", visible=True)
-
-            # For now, just show a status message
-            # TODO: Implement actual recipe execution
-            file_count = len(files) if files else 0
-            return gr.update(
-                value=f"🚀 Generating document structure with {file_count} reference file(s)...\n\nThis functionality will be implemented next.",
-                visible=True,
-            )
+                return gr.update(value="⚠️ Please enter a document description.", visible=True), None, None, None, None, None, None, None, None, None, None
+            
+            try:
+                # Show progress message
+                yield gr.update(value="🚀 Generating document structure...", visible=True), None, None, None, None, None, None, None, None, None, None
+                
+                # Run the recipe asynchronously
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                docpack_path = loop.run_until_complete(run_generate_docpack_recipe(description, files, session_id))
+                loop.close()
+                
+                # Import the generated docpack
+                yield gr.update(value="📦 Importing generated docpack...", visible=True), None, None, None, None, None, None, None, None, None, None
+                
+                # Use the existing import_outline function to load the docpack
+                result = import_outline(docpack_path, session_id)
+                
+                # Unpack the 11 values from import_outline
+                doc_title = result[0]
+                doc_description = result[1]
+                resources = result[2]
+                blocks = result[3]
+                outline = result[4]
+                json_output = result[5]
+                # result[6] is import_file which we don't need
+                session_id = result[7]
+                generated_content_html = result[8]
+                generated_content = result[9]
+                save_doc_btn = result[10]
+                
+                # Return success message and all the outputs to populate the Document Builder tab
+                success_message = "✅ Document structure generated successfully! Switching to Document Builder tab..."
+                
+                yield (
+                    gr.update(value=success_message, visible=True),
+                    doc_title,
+                    doc_description, 
+                    resources,
+                    blocks,
+                    outline,
+                    json_output,
+                    session_id,
+                    generated_content_html,
+                    generated_content,
+                    save_doc_btn
+                )
+                
+            except Exception as e:
+                import traceback
+                error_msg = f"❌ Error generating document structure: {str(e)}\n\n{traceback.format_exc()}"
+                yield gr.update(value=error_msg, visible=True), None, None, None, None, None, None, None, None, None, None
 
         generate_structure_btn.click(
-            fn=handle_generate_structure, inputs=[start_doc_description, start_files_state], outputs=[generation_status]
+            fn=handle_generate_structure, 
+            inputs=[start_doc_description, start_files_state, start_session_state], 
+            outputs=[
+                generation_status,
+                doc_title,
+                doc_description,
+                resources_state,
+                blocks_state,
+                outline_state,
+                json_output,
+                session_state,
+                generated_content_html,
+                generated_content,
+                save_doc_btn
+            ]
+        ).then(
+            fn=render_blocks, 
+            inputs=[blocks_state, focused_block_state], 
+            outputs=blocks_display
         )
 
     return app
