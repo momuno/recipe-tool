@@ -389,6 +389,10 @@ def generate_document_json(title, description, resources, blocks, save_inline=Fa
     # Ensure resources is always a list
     if resources is None:
         resources = []
+    
+    # Ensure blocks is always a list
+    if blocks is None:
+        blocks = []
 
     # Create the base structure
     doc_json = {"title": title, "general_instruction": description, "resources": [], "sections": []}
@@ -541,6 +545,10 @@ def regenerate_outline_from_state(title, description, resources, blocks):
     # Ensure resources is always a list
     if resources is None:
         resources = []
+    
+    # Ensure blocks is always a list
+    if blocks is None:
+        blocks = []
     
     try:
         json_str = generate_document_json(title, description, resources, blocks)
@@ -1933,7 +1941,9 @@ def create_app():
                                     elem_classes="start-generate-btn",
                                 )
                                 # Status/progress indicator below button
-                                generation_status = gr.HTML("", elem_classes="start-generation-status")
+                                generation_status = gr.HTML("", visible=True, elem_classes="start-generation-status")
+                                # Hidden component to trigger tab switching
+                                switch_tab_trigger = gr.HTML("", visible=False, elem_id="switch-tab-trigger")
 
             # Second tab - Existing Document Builder content
             with gr.Tab("Document Builder", id="document_builder_tab") as builder_tab:
@@ -3035,6 +3045,7 @@ def create_app():
             # Get recipe path
             APP_ROOT = Path(__file__).resolve().parent
             RECIPE_PATH = APP_ROOT / "recipes" / "recipes" / "generate_docpack.json"
+            RECIPE_ROOT = APP_ROOT / "recipes"
             
             # Use session directory for output
             session_dir = session_manager.get_session_dir(session_id)
@@ -3059,6 +3070,7 @@ def create_app():
                     "document_description": description,
                     "resources": resource_paths,
                     "output_root": str(output_dir),
+                    "recipe_root": str(RECIPE_ROOT),
                     "model": settings.model_id,
                     "docpack_name": "generated.docpack"
                 },
@@ -3135,6 +3147,9 @@ def create_app():
                 yield gr.update(value=error_msg, visible=True), None, None, None, None, None, None, None, None, None, None
 
         generate_structure_btn.click(
+            fn=lambda: gr.update(value=""), # Clear any previous message
+            outputs=generation_status
+        ).then(
             fn=handle_generate_structure, 
             inputs=[start_doc_description, start_files_state, start_session_state], 
             outputs=[
@@ -3154,6 +3169,9 @@ def create_app():
             fn=render_blocks, 
             inputs=[blocks_state, focused_block_state], 
             outputs=blocks_display
+        ).then(
+            fn=lambda: gr.update(value="SWITCH_TO_BUILDER_TAB"),
+            outputs=switch_tab_trigger
         )
 
     return app

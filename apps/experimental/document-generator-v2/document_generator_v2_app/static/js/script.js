@@ -86,13 +86,18 @@ function switchToBuilderTab() {
     });
 }
 
-// Check for switch signal in the generation status
+// Check for switch signal in the hidden trigger
 setInterval(() => {
-    const statusElement = document.querySelector('.start-generation-status');
-    if (statusElement && statusElement.innerHTML.includes('Switching to Document Builder tab')) {
-        switchToBuilderTab();
-        // Clear the message to prevent repeated switching
-        statusElement.innerHTML = statusElement.innerHTML.replace('Switching to Document Builder tab...', 'Switched to Document Builder tab.');
+    const switchTrigger = document.getElementById('switch-tab-trigger');
+    if (switchTrigger && switchTrigger.innerHTML) {
+        console.log('Switch trigger value:', switchTrigger.innerHTML);
+        
+        if (switchTrigger.innerHTML.includes('SWITCH_TO_BUILDER_TAB')) {
+            console.log('Detected tab switch signal from trigger');
+            switchToBuilderTab();
+            // Clear the trigger to prevent repeated switching
+            switchTrigger.innerHTML = '';
+        }
     }
 }, 500);
 
