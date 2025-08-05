@@ -58,6 +58,12 @@ echo "Creating deployment package..."
     -x "deploy.sh" \
     -x "uv.lock" \
     -x "pyproject.toml" \
+    -x "examples/experiments/*" \
+    -x "examples/scenario-[1-3,5]*/*" \
+    -x "examples/*/*.json" \
+    -x "examples/*/*.txt" \
+    -x "examples/*/*.csv" \
+
 
   echo "If ready to deploy, press 'Y'. Otherwise, press 'N' to cancel."
   read -n 1 -s response
