@@ -374,10 +374,14 @@
     border-color: #4a9d9e;
 }
 
-/* Ensure feature images don't show pointer cursor */
+/* Ensure feature images and text don't show pointer/text cursor */
 .start-feature-image,
 .start-feature-image img,
-.start-feature-image button {
+.start-feature-image button,
+.start-feature-item-title,
+.start-feature-item-title *,
+.start-feature-item-text,
+.start-feature-item-text * {
     cursor: default !important;
 }
 
@@ -480,7 +484,7 @@
     border-radius: 8px;
     border: 1px solid #e5e5e5;
     transition: all 0.2s ease;
-    cursor: pointer;
+    cursor: default;
     opacity: 0.7;
 }
 

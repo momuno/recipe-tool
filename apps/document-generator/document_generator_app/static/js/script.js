@@ -1,7 +1,19 @@
 // Document Builder JavaScript
 console.log('🚀 JavaScript file loaded successfully!');
 
-
+// Add warning when user tries to leave the page
+// Since there's no autosave, always warn users about losing their work
+window.addEventListener('beforeunload', function (e) {
+    // Custom message (note: most modern browsers show a generic message instead)
+    const confirmationMessage = 'Warning: There is no autosave. If you leave this page, all your work will be lost. Make sure to save your document before leaving.';
+    
+    // Prevent default and set return value for modern browsers
+    e.preventDefault();
+    e.returnValue = confirmationMessage;
+    
+    // Return message for older browsers
+    return confirmationMessage;
+});
 
 function refresh() {
     console.log('refresh() called');
