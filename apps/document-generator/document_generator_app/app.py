@@ -2308,9 +2308,9 @@ def create_app():
 
                 # Import and Save buttons
                 with gr.Column():
-                    with gr.Row():
+                    with gr.Row(elem_classes="header-buttons-row"):
                         # Add empty space to push buttons to the right
-                        gr.HTML("<div style='flex: 1;'></div>")
+                        gr.HTML("<div class='button-spacer' style='flex: 1;'></div>")
                         # Try Examples button with dropdown container
                         with gr.Column(elem_classes="try-examples-container"):
                             gr.Button(

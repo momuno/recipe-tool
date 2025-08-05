@@ -892,10 +892,111 @@
     border-color: #b0b0b0 !important;
 }
 
+/* Header buttons row - base styling */
+.header-buttons-row {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    justify-content: flex-end !important;
+    gap: 8px !important;
+    align-items: center !important;
+}
+
+/* Ensure all direct children of header-buttons-row are vertically aligned */
+.header-buttons-row > * {
+    align-self: center !important;
+    vertical-align: middle !important;
+}
+
+/* At larger screens, Template Examples button should align right in its container */
+.try-examples-container .try-examples-btn {
+    margin-left: auto !important;
+    display: block !important;
+}
+
+/* Button spacer should shrink when buttons wrap */
+.button-spacer {
+    flex: 1 1 auto !important;
+    min-width: 0 !important;
+}
+
+/* Responsive button container adjustments */
+@media (max-width: 1280px) {
+    /* Hide spacer at smaller screens to allow proper wrapping */
+    .button-spacer {
+        display: none !important;
+    }
+    
+    /* Ensure button row maintains right alignment when wrapping */
+    .header-buttons-row {
+        justify-content: flex-end !important;
+    }
+    
+    /* When buttons wrap, we need each row to align right
+       Target all children except the hidden spacer */
+    .header-buttons-row > *:not(.button-spacer) {
+        flex: 0 0 auto !important;
+    }
+}
+
+@media (max-width: 1024px) {
+    /* Continue hiding spacer */
+    .button-spacer {
+        display: none !important;
+    }
+    
+    /* Maintain right alignment for wrapped buttons */
+    .header-buttons-row {
+        justify-content: flex-end !important;
+    }
+}
+
+@media (max-width: 900px) {
+    /* Hide spacer */
+    .button-spacer {
+        display: none !important;
+    }
+    
+    /* Stack buttons vertically, all right-aligned */
+    .header-buttons-row {
+        flex-direction: column !important;
+        align-items: flex-end !important;
+        gap: 8px !important;
+    }
+    
+    /* Reset container styles to prevent centering */
+    .try-examples-container {
+        width: auto !important;
+        display: block !important;
+        margin: 0 !important;
+    }
+    
+    /* Keep Template Examples button right-aligned within its container */
+    .try-examples-container .try-examples-btn {
+        margin-left: auto !important;
+        margin-right: 0 !important;
+        display: block !important;
+    }
+    
+    /* Reset all button margins for clean vertical stack */
+    .new-builder-btn,
+    .import-builder-btn,
+    .save-builder-btn {
+        margin-left: 0 !important;
+        margin-right: 0 !important;
+        width: 120px !important;
+    }
+    
+    /* Ensure all direct children align to the end */
+    .header-buttons-row > * {
+        align-self: flex-end !important;
+        margin-left: 0 !important;
+        margin-right: 0 !important;
+    }
+}
+
 /* Try Examples button - citrus orange tertiary color */
 .try-examples-btn {
-    position: absolute !important;
-    right: 0px !important;
+    position: relative !important;
     width: 120px !important;
     min-width: 120px !important;
     max-width: 120px !important;
@@ -912,8 +1013,27 @@
 /* Try Examples dropdown container */
 .try-examples-container {
     position: relative !important;
-    display: inline-block !important;
+    display: inline-flex !important;
+    justify-content: flex-end !important;
     width: auto !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    min-height: auto !important;
+    height: auto !important;
+}
+
+/* Remove default Gradio column padding/margins from try-examples-container */
+.try-examples-container.svelte-1gfkn6j,
+.try-examples-container > .wrap,
+.try-examples-container .form {
+    padding: 0 !important;
+    margin: 0 !important;
+    gap: 0 !important;
+    min-height: auto !important;
+    background: transparent !important;
+    border: none !important;
+    display: flex !important;
+    justify-content: flex-end !important;
 }
 
 /* Examples dropdown styling */
@@ -2418,7 +2538,7 @@
 /* Generate Document */
 .generate-col {
     width: 100% !important;
-    min-width: 400px !important;
+    min-width: 500px !important;  /* Match workspace panel minimum */
     max-width: 100% !important;
     margin-left: 5px !important;
     gap: 10px !important;
