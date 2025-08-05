@@ -374,6 +374,13 @@
     border-color: #4a9d9e;
 }
 
+/* Ensure feature images don't show pointer cursor */
+.start-feature-image,
+.start-feature-image img,
+.start-feature-image button {
+    cursor: default !important;
+}
+
 .start-feature-item-title h3 {
     font-size: 18px;
     font-weight: 600;
@@ -2599,6 +2606,12 @@
     max-width: 120px !important;
     height: 30px !important;
 
+}
+
+/* Footer styling - change text color */
+footer button,
+footer a {
+    color: #27272a !important;
 }
 
 /* Gradio resource item drag and drop styles */

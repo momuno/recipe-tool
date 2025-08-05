@@ -2144,8 +2144,10 @@ def create_app():
                                 height=150,
                                 container=False,
                                 elem_classes="start-feature-image",
+                                elem_id="template-control-image",
                                 show_download_button=False,
                                 show_fullscreen_button=False,
+                                interactive=False,
                             )
                             gr.Markdown("### Template Control", elem_classes="start-feature-item-title")
                             gr.Markdown(
@@ -2163,8 +2165,10 @@ def create_app():
                                 height=150,
                                 container=False,
                                 elem_classes="start-feature-image",
+                                elem_id="evergreen-content-image",
                                 show_download_button=False,
                                 show_fullscreen_button=False,
+                                interactive=False,
                             )
                             gr.Markdown("### Evergreen Content", elem_classes="start-feature-item-title")
                             gr.Markdown(
@@ -2182,8 +2186,10 @@ def create_app():
                                 height=150,
                                 container=False,
                                 elem_classes="start-feature-image",
+                                elem_id="smart-regeneration-image",
                                 show_download_button=False,
                                 show_fullscreen_button=False,
+                                interactive=False,
                             )
                             gr.Markdown("### Smart Regeneration", elem_classes="start-feature-item-title")
                             gr.Markdown(
