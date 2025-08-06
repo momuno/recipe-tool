@@ -2697,6 +2697,22 @@ def create_app():
                 with gr.Column(scale=1, elem_classes="workspace-col"):
                     with gr.Row(elem_classes="square-btn-row"):
                         ai_btn = gr.Button("+ Add Section", elem_classes="add-section-btn", size="sm")
+                        # Add spacer to push collapse/expand buttons to the right
+                        gr.HTML("<div style='flex: 1;'></div>")
+                        # Collapse all button (same chevron as content blocks, rotated)
+                        collapse_all_btn = gr.Button(
+                            "⌵", 
+                            elem_classes="collapse-all-btn workspace-collapse-btn",
+                            elem_id="collapse-all-btn",
+                            size="sm"
+                        )
+                        # Expand all button (same chevron as content blocks) 
+                        expand_all_btn = gr.Button(
+                            "⌵",
+                            elem_classes="expand-all-btn workspace-collapse-btn", 
+                            elem_id="expand-all-btn",
+                            size="sm"
+                        )
 
                     # Workspace panel for stacking content blocks
                     with gr.Column(elem_classes="workspace-display"):
@@ -2988,6 +3004,18 @@ def create_app():
             blocks = add_text_block(blocks, None)
             outline, json_str = regenerate_outline_from_state(title, description, resources, blocks)
             return blocks, outline, json_str
+        
+        # Helper function to collapse all blocks
+        def collapse_all_blocks(blocks):
+            for block in blocks:
+                block["collapsed"] = True
+            return blocks
+        
+        # Helper function to expand all blocks  
+        def expand_all_blocks(blocks):
+            for block in blocks:
+                block["collapsed"] = False
+            return blocks
 
         # Connect button click to add AI block
         ai_btn.click(
@@ -3000,6 +3028,20 @@ def create_app():
                 resources_state,
             ],  # Always pass None for focused_block_id
             outputs=[blocks_state, outline_state, json_output],
+        ).then(fn=render_blocks, inputs=[blocks_state, focused_block_state], outputs=blocks_display)
+        
+        # Connect collapse all button
+        collapse_all_btn.click(
+            fn=collapse_all_blocks,
+            inputs=[blocks_state],
+            outputs=[blocks_state]
+        ).then(fn=render_blocks, inputs=[blocks_state, focused_block_state], outputs=blocks_display)
+        
+        # Connect expand all button
+        expand_all_btn.click(
+            fn=expand_all_blocks,
+            inputs=[blocks_state],
+            outputs=[blocks_state]
         ).then(fn=render_blocks, inputs=[blocks_state, focused_block_state], outputs=blocks_display)
 
         # Connect button click to add Text block
