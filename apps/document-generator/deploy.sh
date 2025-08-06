@@ -63,6 +63,7 @@ echo "Creating deployment package..."
     -x "examples/*/*.json" \
     -x "examples/*/*.txt" \
     -x "examples/*/*.csv" \
+    -x "logs/"
 
 
   echo "If ready to deploy, press 'Y'. Otherwise, press 'N' to cancel."
