@@ -11,6 +11,7 @@ from typing import Any, Dict, List
 
 import gradio as gr
 import pypandoc
+from docx import Document
 from docpack_file import DocpackHandler
 from dotenv import load_dotenv
 
@@ -23,6 +24,16 @@ load_dotenv()
 
 # Global variable to track if app is running in dev mode
 IS_DEV_MODE = False
+
+# Supported file types for uploads
+SUPPORTED_FILE_TYPES = [
+    ".txt", ".md", ".py", ".c", ".cpp", ".h", ".java", ".js", ".ts", ".jsx", ".tsx",
+    ".json", ".xml", ".yaml", ".yml", ".toml", ".ini", ".cfg", ".conf", ".sh", ".bash",
+    ".zsh", ".fish", ".ps1", ".bat", ".cmd", ".rs", ".go", ".rb", ".php", ".pl", ".lua",
+    ".r", ".m", ".swift", ".kt", ".scala", ".clj", ".ex", ".exs", ".elm", ".fs", ".ml",
+    ".sql", ".html", ".htm", ".css", ".scss", ".sass", ".less", ".vue", ".svelte", ".astro",
+    ".tex", ".rst", ".adoc", ".org", ".csv", ".docx"
+]
 
 
 def markdown_to_docx(markdown_content: str, output_path: str) -> str:
@@ -38,6 +49,21 @@ def markdown_to_docx(markdown_content: str, output_path: str) -> str:
         return output_path
     except Exception as e:
         raise Exception(f"Failed to convert markdown to docx: {str(e)}")
+
+
+def docx_to_text(docx_path: str) -> str:
+    """Extract text content from a docx file."""
+    try:
+        doc = Document(docx_path)
+        paragraphs = []
+        
+        for paragraph in doc.paragraphs:
+            if paragraph.text.strip():  # Only add non-empty paragraphs
+                paragraphs.append(paragraph.text.strip())
+        
+        return '\n\n'.join(paragraphs)
+    except Exception as e:
+        raise Exception(f"Failed to extract text from docx: {str(e)}")
 
 
 
@@ -600,8 +626,14 @@ def update_block_resources(blocks, block_id, resource_json, title, description, 
 
                 # Auto-load the file content into the text block
                 try:
-                    with open(resource_data["path"], "r", encoding="utf-8") as f:
-                        block["content"] = f.read()
+                    file_path = resource_data["path"]
+                    if file_path.lower().endswith('.docx'):
+                        # Extract text from docx file
+                        block["content"] = docx_to_text(file_path)
+                    else:
+                        # Read as regular text file
+                        with open(file_path, "r", encoding="utf-8") as f:
+                            block["content"] = f.read()
                 except Exception as e:
                     print(f"Error loading file content: {e}")
                     # Keep existing content if file can't be read
@@ -677,7 +709,7 @@ def generate_resource_html(resources):
     """Generate HTML for resource panel display."""
     if not resources:
         return (
-            "<p style='color: #666; font-size: 12px'>(.md, .csv, .py, .json, .txt, etc.)</p>"
+            "<p style='color: #666; font-size: 12px'>(.docx, .md, .csv, .py, .json, .txt, etc.)</p>"
             "<p style='color: #666; font-size: 12px'>These reference files will be used for AI context.</p>"
         )
 
@@ -710,7 +742,7 @@ def generate_resource_html(resources):
             f'<div class="resource-filename">{resource["name"]}</div>'
             f'<div class="resource-upload-zone" data-resource-path="{path}">'
             f'<span class="upload-text">Drop file here to replace</span>'
-            f'<input type="file" class="resource-file-input" accept=".txt,.md,.py,.c,.cpp,.h,.java,.js,.ts,.jsx,.tsx,.json,.xml,.yaml,.yml,.toml,.ini,.cfg,.conf,.sh,.bash,.zsh,.fish,.ps1,.bat,.cmd,.rs,.go,.rb,.php,.pl,.lua,.r,.m,.swift,.kt,.scala,.clj,.ex,.exs,.elm,.fs,.ml,.sql,.html,.htm,.css,.scss,.sass,.less,.vue,.svelte,.astro,.tex,.rst,.adoc,.org,.csv" '
+            f'<input type="file" class="resource-file-input" accept=".txt,.md,.py,.c,.cpp,.h,.java,.js,.ts,.jsx,.tsx,.json,.xml,.yaml,.yml,.toml,.ini,.cfg,.conf,.sh,.bash,.zsh,.fish,.ps1,.bat,.cmd,.rs,.go,.rb,.php,.pl,.lua,.r,.m,.swift,.kt,.scala,.clj,.ex,.exs,.elm,.fs,.ml,.sql,.html,.htm,.css,.scss,.sass,.less,.vue,.svelte,.astro,.tex,.rst,.adoc,.org,.csv,.docx" '
             f"onchange=\"handleResourceFileUpload('{path}', this)\" />"
             f"</div>"
             f"</div>"
@@ -1933,8 +1965,13 @@ def replace_resource_file_gradio(resources, old_resource_path, new_file, title, 
                                 # If it's a text block, reload the content
                                 if block["type"] == "text":
                                     try:
-                                        with open(dest_path, "r", encoding="utf-8") as f:
-                                            block["content"] = f.read()
+                                        if dest_path.lower().endswith('.docx'):
+                                            # Extract text from docx file
+                                            block["content"] = docx_to_text(dest_path)
+                                        else:
+                                            # Read as regular text file
+                                            with open(dest_path, "r", encoding="utf-8") as f:
+                                                block["content"] = f.read()
                                     except Exception as e:
                                         print(f"Error loading new file content: {e}")
 
@@ -2062,73 +2099,14 @@ def create_app():
 
                             # Upload area - full width
                             gr.TextArea(
-                                label="Add reference files for AI context. (Text files only: .md, .csv, .py, .json, .txt, etc.)",
+                                label="Add reference files for AI context. (.docx, .md, .csv, .py, .json, .txt, etc.)",
                                 elem_classes="resource-drop-label",
                             )
                             # File upload dropzone
                             start_file_upload = gr.File(
                                 label="Drop files here or click to upload",
                                 file_count="multiple",
-                                file_types=[
-                                    ".txt",
-                                    ".md",
-                                    ".py",
-                                    ".c",
-                                    ".cpp",
-                                    ".h",
-                                    ".java",
-                                    ".js",
-                                    ".ts",
-                                    ".jsx",
-                                    ".tsx",
-                                    ".json",
-                                    ".xml",
-                                    ".yaml",
-                                    ".yml",
-                                    ".toml",
-                                    ".ini",
-                                    ".cfg",
-                                    ".conf",
-                                    ".sh",
-                                    ".bash",
-                                    ".zsh",
-                                    ".fish",
-                                    ".ps1",
-                                    ".bat",
-                                    ".cmd",
-                                    ".rs",
-                                    ".go",
-                                    ".rb",
-                                    ".php",
-                                    ".pl",
-                                    ".lua",
-                                    ".r",
-                                    ".m",
-                                    ".swift",
-                                    ".kt",
-                                    ".scala",
-                                    ".clj",
-                                    ".ex",
-                                    ".exs",
-                                    ".elm",
-                                    ".fs",
-                                    ".ml",
-                                    ".sql",
-                                    ".html",
-                                    ".htm",
-                                    ".css",
-                                    ".scss",
-                                    ".sass",
-                                    ".less",
-                                    ".vue",
-                                    ".svelte",
-                                    ".astro",
-                                    ".tex",
-                                    ".rst",
-                                    ".adoc",
-                                    ".org",
-                                    ".csv",
-                                ],
+                                file_types=SUPPORTED_FILE_TYPES,
                                 elem_classes="start-file-upload-dropzone",
                                 show_label=False,
                                 height=90,
@@ -2434,66 +2412,7 @@ def create_app():
                     file_upload = gr.File(
                         label="Drop Text File Here",
                         file_count="multiple",
-                        file_types=[
-                            ".txt",
-                            ".md",
-                            ".py",
-                            ".c",
-                            ".cpp",
-                            ".h",
-                            ".java",
-                            ".js",
-                            ".ts",
-                            ".jsx",
-                            ".tsx",
-                            ".json",
-                            ".xml",
-                            ".yaml",
-                            ".yml",
-                            ".toml",
-                            ".ini",
-                            ".cfg",
-                            ".conf",
-                            ".sh",
-                            ".bash",
-                            ".zsh",
-                            ".fish",
-                            ".ps1",
-                            ".bat",
-                            ".cmd",
-                            ".rs",
-                            ".go",
-                            ".rb",
-                            ".php",
-                            ".pl",
-                            ".lua",
-                            ".r",
-                            ".m",
-                            ".swift",
-                            ".kt",
-                            ".scala",
-                            ".clj",
-                            ".ex",
-                            ".exs",
-                            ".elm",
-                            ".fs",
-                            ".ml",
-                            ".sql",
-                            ".html",
-                            ".htm",
-                            ".css",
-                            ".scss",
-                            ".sass",
-                            ".less",
-                            ".vue",
-                            ".svelte",
-                            ".astro",
-                            ".tex",
-                            ".rst",
-                            ".adoc",
-                            ".org",
-                            ".csv",
-                        ],
+                        file_types=SUPPORTED_FILE_TYPES,
                         elem_classes="file-upload-dropzone",
                         visible=True,
                         height=90,
@@ -2507,7 +2426,7 @@ def create_app():
                         def render_resource_components(resources):
                             if not resources:
                                 gr.HTML(
-                                    value="<p style='color: #666; font-size: 12px'>(.md, .csv, .py, .json, .txt, etc.)</p>"
+                                    value="<p style='color: #666; font-size: 12px'>(.docx, .md, .csv, .py, .json, .txt, etc.)</p>"
                                     "<p style='color: #666; font-size: 12px'>These reference files will be used for AI context.</p>"
                                 )
                             else:
@@ -2554,66 +2473,7 @@ def create_app():
                                         # File replacement upload area
                                         replace_file = gr.File(
                                             label="Drop file here to replace",
-                                            file_types=[
-                                                ".txt",
-                                                ".md",
-                                                ".py",
-                                                ".c",
-                                                ".cpp",
-                                                ".h",
-                                                ".java",
-                                                ".js",
-                                                ".ts",
-                                                ".jsx",
-                                                ".tsx",
-                                                ".json",
-                                                ".xml",
-                                                ".yaml",
-                                                ".yml",
-                                                ".toml",
-                                                ".ini",
-                                                ".cfg",
-                                                ".conf",
-                                                ".sh",
-                                                ".bash",
-                                                ".zsh",
-                                                ".fish",
-                                                ".ps1",
-                                                ".bat",
-                                                ".cmd",
-                                                ".rs",
-                                                ".go",
-                                                ".rb",
-                                                ".php",
-                                                ".pl",
-                                                ".lua",
-                                                ".r",
-                                                ".m",
-                                                ".swift",
-                                                ".kt",
-                                                ".scala",
-                                                ".clj",
-                                                ".ex",
-                                                ".exs",
-                                                ".elm",
-                                                ".fs",
-                                                ".ml",
-                                                ".sql",
-                                                ".html",
-                                                ".htm",
-                                                ".css",
-                                                ".scss",
-                                                ".sass",
-                                                ".less",
-                                                ".vue",
-                                                ".svelte",
-                                                ".astro",
-                                                ".tex",
-                                                ".rst",
-                                                ".adoc",
-                                                ".org",
-                                                ".csv",
-                                            ],
+                                            file_types=SUPPORTED_FILE_TYPES,
                                             elem_classes="resource-upload-gradio",
                                             scale=1,
                                             show_label=False,
@@ -2901,66 +2761,7 @@ def create_app():
                         replace_resource_file_input = gr.File(
                             visible=False,
                             elem_id="replace-resource-file",
-                            file_types=[
-                                ".txt",
-                                ".md",
-                                ".py",
-                                ".c",
-                                ".cpp",
-                                ".h",
-                                ".java",
-                                ".js",
-                                ".ts",
-                                ".jsx",
-                                ".tsx",
-                                ".json",
-                                ".xml",
-                                ".yaml",
-                                ".yml",
-                                ".toml",
-                                ".ini",
-                                ".cfg",
-                                ".conf",
-                                ".sh",
-                                ".bash",
-                                ".zsh",
-                                ".fish",
-                                ".ps1",
-                                ".bat",
-                                ".cmd",
-                                ".rs",
-                                ".go",
-                                ".rb",
-                                ".php",
-                                ".pl",
-                                ".lua",
-                                ".r",
-                                ".m",
-                                ".swift",
-                                ".kt",
-                                ".scala",
-                                ".clj",
-                                ".ex",
-                                ".exs",
-                                ".elm",
-                                ".fs",
-                                ".ml",
-                                ".sql",
-                                ".html",
-                                ".htm",
-                                ".css",
-                                ".scss",
-                                ".sass",
-                                ".less",
-                                ".vue",
-                                ".svelte",
-                                ".astro",
-                                ".tex",
-                                ".rst",
-                                ".adoc",
-                                ".org",
-                                ".csv",
-                            ],
+                            file_types=SUPPORTED_FILE_TYPES,
                         )
                         replace_resource_trigger = gr.Button(
                             "Replace Resource", visible=False, elem_id="replace-resource-trigger"

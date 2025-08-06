@@ -14,7 +14,7 @@ from recipe_executor.executor import Executor
 from recipe_executor.logger import init_logger
 
 from ..config import settings
-from ..models.outline import Outline
+from ..models.outline import Outline, Resource
 from ..resource_resolver import resolve_all_resources
 from ..session import session_manager
 
@@ -73,19 +73,57 @@ async def generate_document(
         resolved_resources = resolve_all_resources(outline_data, session_id)
         logger.info(f"Resolved resources: {resolved_resources}")
 
-        # Update resource paths in outline with resolved paths
+        # Update resource paths in outline with resolved paths, converting docx to text if needed
         for resource in outline.resources:
             if resource.key in resolved_resources:
                 old_path = resource.path
-                resource.path = str(resolved_resources[resource.key])
-                logger.info(f"Updated resource {resource.key}: {old_path} -> {resource.path}")
+                resolved_path = str(resolved_resources[resource.key])
+                
+                # Always update the path to the resolved path (keeps original file reference)
+                resource.path = resolved_path
+                
+                # If it's a docx file, convert it to text and save as .txt file
+                if resolved_path.lower().endswith('.docx'):
+                    try:
+                        from ..app import docx_to_text
+                        text_content = docx_to_text(resolved_path)
+                        
+                        # Create a text file version
+                        txt_path = resolved_path.replace('.docx', '.txt')
+                        with open(txt_path, 'w', encoding='utf-8') as f:
+                            f.write(text_content)
+                        
+                        # Set txt_path for recipe executor to use
+                        resource.txt_path = txt_path
+                        logger.info(f"Converted docx to text: {resource.key}: {old_path} -> {resolved_path}, txt_path: {txt_path}")
+                    except Exception as e:
+                        logger.error(f"Error converting docx file {resolved_path}: {e}")
+                        # Keep txt_path as None on error
+                else:
+                    logger.info(f"Updated resource {resource.key}: {old_path} -> {resource.path}")
 
-        # Create updated outline with resolved paths
-        data = outline.to_dict()
+        # Create updated outline for recipe execution (use txt_path when available)
+        execution_outline = Outline(
+            title=outline.title,
+            general_instruction=outline.general_instruction,
+            resources=[
+                Resource(
+                    key=res.key,
+                    path=res.txt_path if res.txt_path else res.path,  # Use txt_path for recipe execution
+                    title=res.title,
+                    description=res.description,
+                    merge_mode=res.merge_mode,
+                    txt_path=res.txt_path
+                ) for res in outline.resources
+            ],
+            sections=outline.sections
+        )
+        
+        data = execution_outline.to_dict()
         outline_json = json.dumps(data, indent=2)
         outline_path = Path(tmpdir) / "outline.json"
         outline_path.write_text(outline_json)
-        logger.info(f"Created outline file: {outline_path}")
+        logger.info(f"Created outline file for recipe execution: {outline_path}")
 
         recipe_logger = init_logger(log_dir=tmpdir)
 
@@ -196,11 +234,35 @@ async def generate_docpack_from_prompt(
     logger.info(f"Using temp directory: {tmpdir}")
 
     try:
-        # Prepare resource paths as comma-separated string
+        # Prepare resource paths as comma-separated string, converting docx to text if needed
+        # Keep track of original paths and their converted versions
         resource_paths = []
+        docx_conversion_map = {}  # Maps txt_path -> original_docx_path
+        
         for resource in resources:
             if "path" in resource and resource["path"]:
-                resource_paths.append(resource["path"])
+                resource_path = resource["path"]
+                
+                # If it's a docx file, convert it to text and save as .txt file
+                if resource_path.lower().endswith('.docx'):
+                    try:
+                        from ..app import docx_to_text
+                        text_content = docx_to_text(resource_path)
+                        
+                        # Create a text file version
+                        txt_path = resource_path.replace('.docx', '.txt')
+                        with open(txt_path, 'w', encoding='utf-8') as f:
+                            f.write(text_content)
+                        
+                        resource_paths.append(txt_path)
+                        docx_conversion_map[txt_path] = resource_path  # Remember the original path
+                        logger.info(f"Converted docx to text: {resource_path} -> {txt_path}")
+                    except Exception as e:
+                        logger.error(f"Error converting docx file {resource_path}: {e}")
+                        resource_paths.append(resource_path)  # Fall back to original path
+                else:
+                    resource_paths.append(resource_path)
+                    
         resources_str = ",".join(resource_paths)
         logger.info(f"Resource paths: {resources_str}")
 
@@ -242,11 +304,35 @@ async def generate_docpack_from_prompt(
         docpack_path = output_root / docpack_name
         outline_path = output_root / "outline.json"
 
-        # Read the generated outline
+        # Read the generated outline and fix docx paths
         outline_json = ""
         if outline_path.exists():
             outline_json = outline_path.read_text()
             logger.info(f"Generated outline loaded from: {outline_path}")
+            
+            # If we have docx conversions, fix the paths in the outline
+            if docx_conversion_map:
+                try:
+                    import json
+                    outline_data = json.loads(outline_json)
+                    
+                    # Fix resource paths to point back to original docx files
+                    for resource in outline_data.get("resources", []):
+                        resource_path = resource.get("path", "")
+                        if resource_path in docx_conversion_map:
+                            original_path = docx_conversion_map[resource_path]
+                            logger.info(f"Restoring original path: {resource_path} -> {original_path}")
+                            resource["path"] = original_path  # Restore original docx path
+                            resource["txt_path"] = resource_path  # Keep txt path for future use
+                    
+                    # Save the fixed outline
+                    outline_json = json.dumps(outline_data, indent=2)
+                    logger.info("Fixed outline paths to preserve original docx references")
+                    
+                except Exception as e:
+                    logger.error(f"Error fixing outline paths: {e}")
+                    # Continue with original outline_json if fixing fails
+            
         else:
             logger.error(f"Outline file not found at: {outline_path}")
 
