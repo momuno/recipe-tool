@@ -330,6 +330,24 @@ function setupExpandableInput() {
             // Add class to card for styling
             const card = document.querySelector('.start-input-card');
             if (card) card.classList.add('has-expanded');
+            
+            // Replace file upload text after expansion
+            setTimeout(() => {
+                const draftFileUpload = document.querySelector('.start-file-upload-dropzone');
+                if (draftFileUpload) {
+                    const wrapDivs = draftFileUpload.querySelectorAll('.wrap');
+                    wrapDivs.forEach(wrapDiv => {
+                        if (wrapDiv.textContent.includes('Drop File Here')) {
+                            wrapDiv.childNodes.forEach(node => {
+                                if (node.nodeType === Node.TEXT_NODE && node.textContent.includes('Drop File Here')) {
+                                    console.log('✅ Replacing "Drop File Here" on focus expansion');
+                                    node.textContent = node.textContent.replace('Drop File Here', 'Drop Word or Text File Here');
+                                }
+                            });
+                        }
+                    });
+                }
+            }, 100);
         });
 
         // Also expand on click
@@ -344,6 +362,24 @@ function setupExpandableInput() {
                 // Add class to card for styling
                 const card = document.querySelector('.start-input-card');
                 if (card) card.classList.add('has-expanded');
+                
+                // Replace file upload text after expansion
+                setTimeout(() => {
+                    const draftFileUpload = document.querySelector('.start-file-upload-dropzone');
+                    if (draftFileUpload) {
+                        const wrapDivs = draftFileUpload.querySelectorAll('.wrap');
+                        wrapDivs.forEach(wrapDiv => {
+                            if (wrapDiv.textContent.includes('Drop File Here')) {
+                                wrapDiv.childNodes.forEach(node => {
+                                    if (node.nodeType === Node.TEXT_NODE && node.textContent.includes('Drop File Here')) {
+                                        console.log('✅ Replacing "Drop File Here" on click expansion');
+                                        node.textContent = node.textContent.replace('Drop File Here', 'Drop Word or Text File Here');
+                                    }
+                                });
+                            }
+                        });
+                    }
+                }, 100);
             } else {
                 console.log('✓ Input clicked - already expanded');
             }
@@ -359,6 +395,24 @@ function setupExpandableInput() {
             // Add class to card for styling
             const card = document.querySelector('.start-input-card');
             if (card) card.classList.add('has-expanded');
+            
+            // Replace file upload text after expansion
+            setTimeout(() => {
+                const draftFileUpload = document.querySelector('.start-file-upload-dropzone');
+                if (draftFileUpload) {
+                    const wrapDivs = draftFileUpload.querySelectorAll('.wrap');
+                    wrapDivs.forEach(wrapDiv => {
+                        if (wrapDiv.textContent.includes('Drop File Here')) {
+                            wrapDiv.childNodes.forEach(node => {
+                                if (node.nodeType === Node.TEXT_NODE && node.textContent.includes('Drop File Here')) {
+                                    console.log('✅ Replacing "Drop File Here" on expandCard()');
+                                    node.textContent = node.textContent.replace('Drop File Here', 'Drop Word or Text File Here');
+                                }
+                            });
+                        }
+                    });
+                }
+            }, 100);
         }
 
         // Expand when example buttons are clicked
@@ -1956,6 +2010,42 @@ function setupFileUploadDragAndDrop() {
     
     // Setup draft tab file upload text monitoring
     setupDraftTabFileUpload();
+    
+    // Function to run text replacement after card expansion
+    function runTextReplacementAfterExpansion() {
+        setTimeout(() => {
+            console.log('Card expanded - running replaceDraftTabText()');
+            const draftFileUpload = document.querySelector('.start-file-upload-dropzone');
+            if (draftFileUpload) {
+                const wrapDivs = draftFileUpload.querySelectorAll('.wrap');
+                wrapDivs.forEach(wrapDiv => {
+                    if (wrapDiv.textContent.includes('Drop File Here')) {
+                        wrapDiv.childNodes.forEach(node => {
+                            if (node.nodeType === Node.TEXT_NODE && node.textContent.includes('Drop File Here')) {
+                                node.textContent = node.textContent.replace('Drop File Here', 'Drop Word or Text File Here');
+                            }
+                        });
+                    }
+                });
+            }
+        }, 200); // Delay to let expansion animation complete
+    }
+    
+    // Add event listeners for card expansion triggers
+    document.addEventListener('click', function(e) {
+        // Check if click is on input/textarea or example button that might expand the card
+        if (e.target.matches('input, textarea, button') || 
+            e.target.closest('.doc-title-box, .doc-description-box, .start-feature-item')) {
+            runTextReplacementAfterExpansion();
+        }
+    });
+    
+    document.addEventListener('focus', function(e) {
+        // Check if focus is on input that might expand the card
+        if (e.target.matches('input, textarea')) {
+            runTextReplacementAfterExpansion();
+        }
+    }, true); // Use capture phase to catch focus events early
 
     // Add drag-over class when dragging files over the upload zone
     let dragCounter = 0;
@@ -3135,7 +3225,7 @@ function setupDraftTabFileUpload() {
                 }
             });
         } else {
-            console.log('❌ No file-upload-dropzone found');
+            console.log('❌ No start-file-upload-dropzone found');
         }
     }
 
