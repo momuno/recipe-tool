@@ -1,6 +1,47 @@
 // Document Builder JavaScript
 console.log('🚀 JavaScript file loaded successfully!');
 
+// Auto-resize textarea function
+function autoResizeTextarea(textarea) {
+    console.log('Auto-resizing textarea:', textarea);
+    textarea.style.height = 'auto';
+    const newHeight = Math.max(120, textarea.scrollHeight);
+    textarea.style.height = newHeight + 'px';
+    console.log('Set textarea height to:', newHeight + 'px', 'scrollHeight:', textarea.scrollHeight);
+}
+
+// Setup auto-resize for all text block textareas
+function setupTextareaAutoResize() {
+    const textareas = document.querySelectorAll('.text-block textarea');
+    textareas.forEach(textarea => {
+        // Auto-resize on input
+        textarea.addEventListener('input', function() {
+            autoResizeTextarea(this);
+        });
+        
+        // Initial resize in case there's already content
+        autoResizeTextarea(textarea);
+    });
+}
+
+// Run setup when DOM changes (new blocks added)
+const textareaObserver = new MutationObserver(function(mutations) {
+    mutations.forEach(function(mutation) {
+        if (mutation.type === 'childList') {
+            setupTextareaAutoResize();
+        }
+    });
+});
+
+// Start observing
+textareaObserver.observe(document.body, {
+    childList: true,
+    subtree: true
+});
+
+// Initial setup
+document.addEventListener('DOMContentLoaded', setupTextareaAutoResize);
+
 // Add warning when user tries to leave the page
 // Since there's no autosave, always warn users about losing their work
 window.addEventListener('beforeunload', function (e) {

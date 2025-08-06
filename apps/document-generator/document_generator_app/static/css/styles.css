@@ -2313,14 +2313,15 @@
 .text-block textarea {
     width: 100%;
     min-height: 120px;
+    max-height: none; /* Remove height limit */
     border: 1px solid #e0e0e0;
     border-radius: 4px;
     padding: 10px;
     font-size: 14px;
-    resize: none; /* Disable manual resize since we auto-expand */
+    resize: none; /* Keep manual resize disabled */
     background: white;
     outline: none;
-    overflow-y: hidden; /* Hide vertical scrollbars */
+    overflow-y: auto; /* Show scrollbars when needed */
     overflow-x: hidden; /* Hide horizontal scrollbars */
     transition: height 0.1s ease;
     box-sizing: border-box;
@@ -2586,8 +2587,7 @@
 }
 
 .block-content.show {
-    max-height: 2000px; /* Large enough for most content */
-
+    max-height: none; /* Remove height limit to allow full content */
     opacity: 1;
     padding-top: 10px;
 }
