@@ -12,6 +12,7 @@ dependencies = [
     "docpack-file>=0.1.0",
     "jsonschema>=4.24.0",
     "python-dotenv>=1.1.1",
+    "pypandoc-binary>=1.13",
 ]
 
 [dependency-groups]

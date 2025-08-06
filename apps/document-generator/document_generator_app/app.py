@@ -2,6 +2,7 @@ import argparse
 import asyncio
 import json
 import os
+import subprocess
 import tempfile
 import time
 import uuid
@@ -9,6 +10,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 import gradio as gr
+import pypandoc
 from docpack_file import DocpackHandler
 from dotenv import load_dotenv
 
@@ -21,6 +23,22 @@ load_dotenv()
 
 # Global variable to track if app is running in dev mode
 IS_DEV_MODE = False
+
+
+def markdown_to_docx(markdown_content: str, output_path: str) -> str:
+    """Convert markdown content to docx file and return the output path."""
+    try:
+        pypandoc.convert_text(
+            markdown_content, 
+            'docx', 
+            format='md',
+            outputfile=output_path,
+            extra_args=['--extract-media=.']  # Extract images to current directory
+        )
+        return output_path
+    except Exception as e:
+        raise Exception(f"Failed to convert markdown to docx: {str(e)}")
+
 
 
 def json_to_outline(json_data: Dict[str, Any]) -> Outline:
@@ -362,13 +380,14 @@ async def handle_document_generation(title, description, resources, blocks, sess
         # Generate the document
         generated_content = await generate_document(outline, session_id, IS_DEV_MODE)
 
-        # Save to temporary file for download
-        filename = f"{title}.md" if title else "document.md"
-        file_path = os.path.join(temp_dir, filename)
-        with open(file_path, "w") as f:
-            f.write(generated_content)
+        # Save markdown to temporary file for download as docx
+        docx_filename = f"{title}.docx" if title else "document.docx"
+        docx_file_path = os.path.join(temp_dir, docx_filename)
+        
+        # Convert markdown to docx
+        markdown_to_docx(generated_content, docx_file_path)
 
-        return json_str, generated_content, file_path, filename
+        return json_str, generated_content, docx_file_path, docx_filename
 
     except Exception as e:
         error_msg = f"Error generating document: {str(e)}"
