@@ -51,6 +51,31 @@ def markdown_to_docx(markdown_content: str, output_path: str) -> str:
         raise Exception(f"Failed to convert markdown to docx: {str(e)}")
 
 
+def check_docx_protected(docx_path: str) -> tuple[bool, str]:
+    """Check if a docx file is protected/encrypted without fully extracting text.
+    Returns (is_protected, error_message)
+    """
+    try:
+        from docx import Document
+        filename = os.path.basename(docx_path)
+        # Try to open the document
+        doc = Document(docx_path)
+        # Try to access at least one paragraph to ensure it's readable
+        _ = len(doc.paragraphs)
+        return False, ""
+    except Exception as e:
+        error_msg = str(e).lower()
+        filename = os.path.basename(docx_path)
+        # Check for common security/encryption error messages
+        if any(term in error_msg for term in ['package not found']):
+            return True, (
+                f"Document '{filename}' appears to be protected or encrypted and cannot be processed."
+            )
+        else:
+            # Some other error, but not protection-related
+            return False, f"Document '{filename}' may have issues: {str(e)}"
+
+
 def docx_to_text(docx_path: str) -> str:
     """Extract text content from a docx file."""
     try:
@@ -63,7 +88,15 @@ def docx_to_text(docx_path: str) -> str:
         
         return '\n\n'.join(paragraphs)
     except Exception as e:
-        raise Exception(f"Failed to extract text from docx: {str(e)}")
+        error_msg = str(e).lower()
+        filename = os.path.basename(docx_path)
+        # Check for common security/encryption error messages
+        if any(term in error_msg for term in ['package not found']):
+            raise Exception(
+                f"Document '{filename}' may be protected or encrypted and cannot be processed."
+            )
+        else:
+            raise Exception(f"Failed to extract text from '{filename}': {str(e)}")
 
 
 
@@ -1528,15 +1561,23 @@ def render_blocks(blocks, focused_block_id=None):
 def handle_start_file_upload(files, current_resources):
     """Handle file uploads on the Start tab."""
     if not files:
-        return current_resources, None
+        return current_resources, None, gr.update(visible=False)
 
     # Add new files to resources
     new_resources = current_resources.copy() if current_resources else []
+    warnings = []
 
     for file_path in files:
         if file_path:
             file_name = os.path.basename(file_path)
             file_size = os.path.getsize(file_path)
+
+            # Check if it's a docx file and if it's protected
+            if file_path.lower().endswith('.docx'):
+                is_protected, error_msg = check_docx_protected(file_path)
+                if is_protected:
+                    warnings.append(error_msg)
+                    continue  # Skip adding this file to resources
 
             # Format file size
             if file_size < 1024:
@@ -1554,7 +1595,23 @@ def handle_start_file_upload(files, current_resources):
                     "size": size_str,
                 })
 
-    return new_resources, None  # Return None to clear the file upload component
+    # Create warning message if there were any protected files
+    if warnings:
+        import random
+        warning_id = f"warning_{random.randint(1000, 9999)}"
+        warning_html = f"""
+        <div id="{warning_id}" style='position: relative; color: #dc2626; background: #fee2e2; padding: 8px 30px 8px 12px; border-radius: 4px; margin-top: 8px; font-size: 14px;'>
+            <button onclick="document.getElementById('{warning_id}').style.display='none'" 
+                    style='position: absolute; top: 4px; right: 5px; background: none; border: none; color: #dc2626; font-size: 18px; cursor: pointer; padding: 0 5px; opacity: 0.6;' 
+                    onmouseover="this.style.opacity='1'" 
+                    onmouseout="this.style.opacity='0.6'"
+                    title='Close'>×</button>
+            {"<br>".join(warnings)}
+        </div>
+        """
+        return new_resources, None, gr.update(value=warning_html, visible=True)
+    
+    return new_resources, None, gr.update(visible=False)
 
 
 def handle_start_draft_click_wrapper(prompt, resources, session_id=None):
@@ -1591,7 +1648,14 @@ async def handle_start_draft_click(prompt, resources, session_id=None):
             gr.update(),  # save_doc_btn
             gr.update(),  # switch_tab_trigger
             gr.update(
-                value=f'<div style="color: #dc2626; padding: 8px 12px; background: #fee2e2; border-radius: 4px; margin-top: 8px;">{error_msg}</div>',
+                value=f'''<div id="prompt_error" style="position: relative; color: #dc2626; padding: 8px 30px 8px 12px; background: #fee2e2; border-radius: 4px; margin-top: 8px; font-size: 14px;">
+                    <button onclick="document.getElementById('prompt_error').style.display='none'" 
+                            style="position: absolute; top: 4px; right: 5px; background: none; border: none; color: #dc2626; font-size: 18px; cursor: pointer; padding: 0 5px; opacity: 0.6;" 
+                            onmouseover="this.style.opacity='1'" 
+                            onmouseout="this.style.opacity='0.6'"
+                            title="Close">×</button>
+                    {error_msg}
+                </div>''',
                 visible=True,
             ),  # start_error_message
             gr.update(),  # start_prompt_input - no change
@@ -1735,7 +1799,14 @@ async def handle_start_draft_click(prompt, resources, session_id=None):
                 gr.update(),  # save_doc_btn
                 gr.update(),  # switch_tab_trigger
                 gr.update(
-                    value=f'<div style="color: #dc2626; padding: 8px 12px; background: #fee2e2; border-radius: 4px; margin-top: 8px;">{error_msg}</div>',
+                    value=f'''<div id="outline_error" style="position: relative; color: #dc2626; padding: 8px 30px 8px 12px; background: #fee2e2; border-radius: 4px; margin-top: 8px; font-size: 14px;">
+                        <button onclick="document.getElementById('outline_error').style.display='none'" 
+                                style="position: absolute; top: 4px; right: 5px; background: none; border: none; color: #dc2626; font-size: 18px; cursor: pointer; padding: 0 5px; opacity: 0.6;" 
+                                onmouseover="this.style.opacity='1'" 
+                                onmouseout="this.style.opacity='0.6'"
+                                title="Close">×</button>
+                        {error_msg}
+                    </div>''',
                     visible=True,
                 ),  # start_error_message
                 gr.update(lines=4, max_lines=10),  # start_prompt_input - preserve lines
@@ -1762,7 +1833,14 @@ async def handle_start_draft_click(prompt, resources, session_id=None):
             gr.update(),  # save_doc_btn
             gr.update(),  # switch_tab_trigger
             gr.update(
-                value=f'<div style="color: #dc2626; padding: 8px 12px; background: #fee2e2; border-radius: 4px; margin-top: 8px;">{error_msg}</div>',
+                value=f'''<div id="exception_error" style="position: relative; color: #dc2626; padding: 8px 30px 8px 12px; background: #fee2e2; border-radius: 4px; margin-top: 8px; font-size: 14px;">
+                    <button onclick="document.getElementById('exception_error').style.display='none'" 
+                            style="position: absolute; top: 4px; right: 5px; background: none; border: none; color: #dc2626; font-size: 18px; cursor: pointer; padding: 0 5px; opacity: 0.6;" 
+                            onmouseover="this.style.opacity='1'" 
+                            onmouseout="this.style.opacity='0.6'"
+                            title="Close">×</button>
+                    {error_msg}
+                </div>''',
                 visible=True,
             ),  # start_error_message
             gr.update(),  # start_prompt_input
@@ -1774,7 +1852,8 @@ def handle_file_upload(files, current_resources, title, description, blocks, ses
     """Handle uploaded files and return HTML display of file names."""
     if not files:
         # Don't return None for outline and json_output to avoid clearing them
-        return current_resources, None, gr.update(), gr.update(), session_id
+        # Don't hide warning on empty upload - keep existing warning visible
+        return current_resources, None, gr.update(), gr.update(), session_id, gr.update()
 
     # Debug: Check what we're receiving
     print(f"DEBUG handle_file_upload - title: {title}, description: {description}, blocks: {blocks}")
@@ -1785,6 +1864,7 @@ def handle_file_upload(files, current_resources, title, description, blocks, ses
 
     # Add new files to resources
     new_resources = current_resources.copy() if current_resources else []
+    warnings = []
 
     # Get session files directory
     files_dir = session_manager.get_files_dir(session_id)
@@ -1794,6 +1874,13 @@ def handle_file_upload(files, current_resources, title, description, blocks, ses
             import shutil
 
             file_name = os.path.basename(file_path)
+            
+            # Check if it's a docx file and if it's protected
+            if file_path.lower().endswith('.docx'):
+                is_protected, error_msg = check_docx_protected(file_path)
+                if is_protected:
+                    warnings.append(error_msg)
+                    continue  # Skip adding this file to resources
 
             # Copy file to session directory
             session_file_path = files_dir / file_name
@@ -1822,12 +1909,32 @@ def handle_file_upload(files, current_resources, title, description, blocks, ses
     print(f"  - json_str type: {type(json_str)}, length: {len(json_str)}")
     print(f"  - session_id: {session_id}")
 
+    # Create warning message if there were any protected files
+    if warnings:
+        import random
+        warning_id = f"warning_{random.randint(1000, 9999)}"
+        warning_html = f"""
+        <div id="{warning_id}" style='position: relative; color: #dc2626; background: #fee2e2; padding: 10px 30px 10px 12px; border-radius: 4px; margin: 10px 0;'>
+            <button onclick="document.getElementById('{warning_id}').style.display='none'" 
+                    style='position: absolute; top: 5px; right: 5px; background: none; border: none; color: #dc2626; font-size: 18px; cursor: pointer; padding: 0 5px; opacity: 0.6;' 
+                    onmouseover="this.style.opacity='1'" 
+                    onmouseout="this.style.opacity='0.6'"
+                    title='Close'>×</button>
+            {"<br>".join(warnings)}
+            <br><small style='color: #991b1b; margin-top: 5px; display: block;'>Protected files were not added to resources.</small>
+        </div>
+        """
+        warning_update = gr.update(value=warning_html, visible=True)
+    else:
+        warning_update = gr.update(visible=False)
+    
     return (
         new_resources,
         None,  # Clear file upload
         outline,
         json_str,
         session_id,
+        warning_update,
     )
 
 
@@ -1908,9 +2015,27 @@ def delete_resource_gradio(resources, resource_path, title, description, blocks)
 def replace_resource_file_gradio(resources, old_resource_path, new_file, title, description, blocks, session_id=None):
     """Replace a resource file from Gradio component."""
     if not new_file:
-        return resources, None, "{}", None
+        return resources, None, "{}", None, gr.update(visible=False)
 
     try:
+        # Check if the new file is a protected docx
+        if new_file.name.lower().endswith('.docx'):
+            is_protected, error_msg = check_docx_protected(new_file.name)
+            if is_protected:
+                import random
+                warning_id = f"warning_{random.randint(1000, 9999)}"
+                warning_html = f"""
+                <div id="{warning_id}" style='position: relative; color: #dc2626; background: #fee2e2; padding: 8px 25px 8px 8px; border-radius: 4px; margin: 5px 0; font-size: 13px;'>
+                    <button onclick="document.getElementById('{warning_id}').style.display='none'" 
+                            style='position: absolute; top: 2px; right: 2px; background: none; border: none; color: #dc2626; font-size: 16px; cursor: pointer; padding: 0 3px; line-height: 1; opacity: 0.6;' 
+                            onmouseover="this.style.opacity='1'" 
+                            onmouseout="this.style.opacity='0.6'"
+                            title='Close'>×</button>
+                    <strong>⚠️ Cannot Replace:</strong><br>{error_msg}
+                </div>
+                """
+                return resources, None, "{}", None, gr.update(value=warning_html, visible=True)
+        
         # Get or create session
         if not session_id:
             session_id = str(uuid.uuid4())
@@ -1980,12 +2105,38 @@ def replace_resource_file_gradio(resources, old_resource_path, new_file, title, 
         # Regenerate outline
         outline, json_str = regenerate_outline_from_state(title, description, resources, blocks)
 
-        # Return with cleared file input
-        return resources, outline, json_str, None
+        # Return with cleared file input and no warning
+        return resources, outline, json_str, None, gr.update(visible=False)
 
     except Exception as e:
         print(f"Error replacing resource file: {e}")
-        return resources, None, "{}", None
+        import random
+        warning_id = f"warning_{random.randint(1000, 9999)}"
+        # Check if it's a protection error
+        if "protected or encrypted" in str(e):
+            warning_html = f"""
+            <div id="{warning_id}" style='position: relative; color: #dc2626; background: #fee2e2; padding: 8px 25px 8px 8px; border-radius: 4px; margin: 5px 0; font-size: 13px;'>
+                <button onclick="document.getElementById('{warning_id}').style.display='none'" 
+                        style='position: absolute; top: 2px; right: 2px; background: none; border: none; color: #dc2626; font-size: 16px; cursor: pointer; padding: 0 3px; line-height: 1; opacity: 0.6;' 
+                        onmouseover="this.style.opacity='1'" 
+                        onmouseout="this.style.opacity='0.6'"
+                        title='Close'>×</button>
+                <strong>⚠️ Replace Failed:</strong><br>{str(e)}
+            </div>
+            """
+            return resources, None, "{}", None, gr.update(value=warning_html, visible=True)
+        # For other errors, show a generic error message
+        warning_html = f"""
+        <div id="{warning_id}" style='position: relative; color: #92400e; background: #fef3c7; padding: 8px 25px 8px 8px; border-radius: 4px; margin: 5px 0; font-size: 13px;'>
+            <button onclick="document.getElementById('{warning_id}').style.display='none'" 
+                    style='position: absolute; top: 2px; right: 2px; background: none; border: none; color: #92400e; font-size: 16px; cursor: pointer; padding: 0 3px; line-height: 1; opacity: 0.6;' 
+                    onmouseover="this.style.opacity='1'" 
+                    onmouseout="this.style.opacity='0.6'"
+                    title='Close'>×</button>
+            <strong>⚠️ Error:</strong><br>Failed to replace file: {str(e)}
+        </div>
+        """
+        return resources, None, "{}", None, gr.update(value=warning_html, visible=True)
 
 
 def create_app():
@@ -2111,6 +2262,9 @@ def create_app():
                                 show_label=False,
                                 height=90,
                             )
+                            
+                            # Warning message for protected files
+                            start_upload_warning = gr.HTML(visible=False)
 
                             # Draft button - full width below dropzone
                             get_started_btn = gr.Button(
@@ -2418,6 +2572,9 @@ def create_app():
                         height=90,
                         show_label=False,
                     )
+                    
+                    # Warning message for protected files - placed before the render area
+                    file_upload_warning = gr.HTML(visible=False, elem_classes="file-upload-warning")
 
                     # Container for dynamic resource components
                     with gr.Column(elem_classes="resources-display-area"):
@@ -2478,6 +2635,9 @@ def create_app():
                                             scale=1,
                                             show_label=False,
                                         )
+                                        
+                                        # Warning message for protected files
+                                        replace_warning = gr.HTML(visible=False)
 
                                         # Connect events for this resource
                                         resource_path = resource["path"]
@@ -2551,7 +2711,7 @@ def create_app():
                                         )
 
                                         # File replacement
-                                        replace_file.change(
+                                        replace_file.upload(
                                             fn=replace_resource_file_gradio,
                                             inputs=[
                                                 resources_state,
@@ -2562,7 +2722,7 @@ def create_app():
                                                 blocks_state,
                                                 session_state,
                                             ],
-                                            outputs=[resources_state, outline_state, json_output, replace_file],
+                                            outputs=[resources_state, outline_state, json_output, replace_file, replace_warning],
                                         ).then(
                                             # Force JSON update after resources render
                                             fn=lambda title, desc, res, blocks: regenerate_outline_from_state(
@@ -3037,10 +3197,10 @@ def create_app():
         )
 
         # Handle file uploads (defined after json_output is created)
-        file_upload.change(
+        file_upload.upload(
             fn=handle_file_upload,
             inputs=[file_upload, resources_state, doc_title, doc_description, blocks_state, session_state],
-            outputs=[resources_state, file_upload, outline_state, json_output, session_state],
+            outputs=[resources_state, file_upload, outline_state, json_output, session_state, file_upload_warning],
         ).then(
             # Force JSON update after resources render
             fn=lambda title, desc, res, blocks: regenerate_outline_from_state(title, desc, res, blocks)[1],
@@ -3273,7 +3433,14 @@ def create_app():
                 # Show error message, hide loading, enable button
                 return (
                     gr.update(
-                        value='<div style="color: #dc2626; padding: 8px 12px; background: #fee2e2; border-radius: 4px; margin-top: 8px; font-size: 14px;">Please enter a description of what you\'d like to create.</div>',
+                        value='''<div id="prompt_error" style="position: relative; color: #dc2626; padding: 8px 30px 8px 12px; background: #fee2e2; border-radius: 4px; margin-top: 8px; font-size: 14px;">
+                            <button onclick="document.getElementById('prompt_error').style.display='none'" 
+                                    style="position: absolute; top: 4px; right: 5px; background: none; border: none; color: #dc2626; font-size: 18px; cursor: pointer; padding: 0 5px; opacity: 0.6;" 
+                                    onmouseover="this.style.opacity='1'" 
+                                    onmouseout="this.style.opacity='0.6'"
+                                    title="Close">×</button>
+                            Please enter a description of what you'd like to create.
+                        </div>''',
                         visible=True,
                     ),
                     gr.update(interactive=True),  # Enable button
@@ -3318,15 +3485,15 @@ def create_app():
         # Wrapper for file upload that includes rendering
         def handle_start_file_upload_with_render(files, current_resources):
             """Handle file uploads and render the resources."""
-            new_resources, clear_upload = handle_start_file_upload(files, current_resources)
+            new_resources, clear_upload, warning_update = handle_start_file_upload(files, current_resources)
             resources_html = render_start_resources(new_resources)
-            return new_resources, clear_upload, resources_html
+            return new_resources, clear_upload, resources_html, warning_update
 
         # Start tab file upload handler
         start_file_upload.upload(
             fn=handle_start_file_upload_with_render,
             inputs=[start_file_upload, start_resources_state],
-            outputs=[start_resources_state, start_file_upload, start_resources_display],
+            outputs=[start_resources_state, start_file_upload, start_resources_display, start_upload_warning],
         )
 
         # Clear error message when user starts typing

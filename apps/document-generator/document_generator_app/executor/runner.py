@@ -97,8 +97,12 @@ async def generate_document(
                         resource.txt_path = txt_path
                         logger.info(f"Converted docx to text: {resource.key}: {old_path} -> {resolved_path}, txt_path: {txt_path}")
                     except Exception as e:
-                        logger.error(f"Error converting docx file {resolved_path}: {e}")
-                        # Keep txt_path as None on error
+                        filename = os.path.basename(resolved_path)
+                        logger.error(f"Error converting docx file {filename}: {e}")
+                        # Re-raise with user-friendly message if it's a protection issue
+                        if "protected or encrypted" in str(e):
+                            raise e  # Error already includes filename from docx_to_text
+                        # Keep txt_path as None on other errors
                 else:
                     logger.info(f"Updated resource {resource.key}: {old_path} -> {resource.path}")
 
@@ -259,7 +263,10 @@ async def generate_docpack_from_prompt(
                         logger.info(f"Converted docx to text: {resource_path} -> {txt_path}")
                     except Exception as e:
                         logger.error(f"Error converting docx file {resource_path}: {e}")
-                        resource_paths.append(resource_path)  # Fall back to original path
+                        # Re-raise with user-friendly message if it's a protection issue
+                        if "protected or encrypted" in str(e):
+                            raise e
+                        resource_paths.append(resource_path)  # Fall back to original path for other errors
                 else:
                     resource_paths.append(resource_path)
                     

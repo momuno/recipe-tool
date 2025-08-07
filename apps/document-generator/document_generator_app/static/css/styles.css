@@ -2741,6 +2741,10 @@ input.no-drop,
     animation: slideDown 0.3s ease-out;
 }
 
+.file-upload-warning .html-container {
+    padding: 0px;
+}
+
 @keyframes slideDown {
     from {
         opacity: 0;
