@@ -3,6 +3,10 @@
     "context7": {
       "type": "sse",
       "url": "https://mcp.context7.com/sse"
+    },
+    "document-generator-app": {
+      "type": "http",
+      "url": "http://localhost:8000/gradio_api/mcp/"
     }
   }
 }
