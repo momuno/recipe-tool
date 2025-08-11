@@ -182,7 +182,7 @@ def add_text_block(blocks, focused_block_id=None):
     return blocks + [new_block]
 
 
-def delete_block(blocks, block_id, title, description, resources):
+def delete_section(blocks, block_id, title, description, resources):
     """Delete a block by its ID and regenerate outline."""
     blocks = [block for block in blocks if block["id"] != block_id]
 
@@ -191,7 +191,7 @@ def delete_block(blocks, block_id, title, description, resources):
     return blocks, outline, json_str
 
 
-def update_block_content(blocks, block_id, content, title, description, resources):
+def update_section_content(blocks, block_id, content, title, description, resources):
     """Update the content of a specific block and regenerate outline."""
     for block in blocks:
         if block["id"] == block_id:
@@ -227,12 +227,12 @@ def update_block_heading(blocks, block_id, heading, title, description, resource
     return blocks, outline, json_str
 
 
-def set_focused_block(block_id):
+def set_focused_section(block_id):
     """Set the currently focused block."""
     return block_id
 
 
-def reset_document(session_id=None):
+def reset_workspace(session_id=None):
     """Reset the document to initial empty state."""
     # Create new session ID
     new_session_id = str(uuid.uuid4())
@@ -270,7 +270,7 @@ def reset_document(session_id=None):
         initial_blocks,  # blocks
         outline,  # outline
         json_str,  # json_output
-        None,  # import_file
+        None,  # import_file_trigger
         new_session_id,  # session_id
         gr.update(
             value="<em>Click '▷ Generate' to see the generated content here.</em><br><br><br>", visible=True
@@ -319,7 +319,7 @@ def convert_block_type(blocks, block_id, to_type, title, description, resources)
     return blocks, outline, json_str
 
 
-def toggle_block_collapse(blocks, block_id):
+def toggle_section_collapse(blocks, block_id):
     """Toggle the collapsed state of a specific block."""
     for block in blocks:
         if block["id"] == block_id:
@@ -905,10 +905,10 @@ def load_example(example_id, session_id=None):
 
     # Use the import_outline function to load the example
     result = import_outline(str(file_path), session_id)
-    # import_outline now returns 11 values matching import_file.change outputs
-    # import_outline returns: title, desc, resources, blocks, outline, json, import_file, session_id, gen_html, gen_content, save_btn
+    # import_outline now returns 11 values matching import_file_trigger.change outputs
+    # import_outline returns: title, desc, resources, blocks, outline, json, import_file_trigger, session_id, gen_html, gen_content, save_btn
     # load_example needs: title, desc, resources, blocks, outline, json, session_id, gen_html, gen_content, save_btn
-    # We need to skip import_file (at index 6) from the result
+    # We need to skip import_file_trigger (at index 6) from the result
     return (
         result[0],  # title
         result[1],  # description
@@ -916,7 +916,7 @@ def load_example(example_id, session_id=None):
         result[3],  # blocks
         result[4],  # outline
         result[5],  # json_str
-        result[7],  # session_id (skip import_file at 6)
+        result[7],  # session_id (skip import_file_trigger at 6)
         result[8],  # generated_content_html
         result[9],  # generated_content
         result[10],  # save_doc_btn
@@ -926,7 +926,7 @@ def load_example(example_id, session_id=None):
 def import_outline(file_path, session_id=None):
     """Import an outline from a .docpack file and convert to blocks format."""
     if not file_path:
-        # Return 11 values matching import_file.change outputs
+        # Return 11 values matching import_file_trigger.change outputs
         return (
             gr.update(),  # title
             gr.update(),  # description
@@ -934,7 +934,7 @@ def import_outline(file_path, session_id=None):
             gr.update(),  # blocks
             gr.update(),  # outline
             gr.update(),  # json_output
-            None,  # import_file
+            None,  # import_file_trigger
             session_id,  # session_state
             gr.update(),  # generated_content_html
             gr.update(),  # generated_content
@@ -1020,7 +1020,7 @@ def import_outline(file_path, session_id=None):
                 gr.update(),  # blocks
                 gr.update(),  # outline
                 json.dumps({"error": error_msg}, indent=2),  # json_output
-                None,  # import_file
+                None,  # import_file_trigger
                 session_id,  # session_id
                 gr.update(),  # generated_content_html
                 gr.update(),  # generated_content
@@ -1081,7 +1081,7 @@ def import_outline(file_path, session_id=None):
                 gr.update(),  # blocks
                 gr.update(),  # outline
                 json.dumps({"error": error_msg}, indent=2),  # json_output
-                None,  # import_file
+                None,  # import_file_trigger
                 session_id,  # session_id
                 gr.update(),  # generated_content_html
                 gr.update(),  # generated_content
@@ -1197,7 +1197,7 @@ def import_outline(file_path, session_id=None):
         # Generate resources HTML using the proper function
         generate_resource_html(resources)
 
-        # Return values matching what import_file.change expects
+        # Return values matching what import_file_trigger.change expects
         return (
             title,
             description,
@@ -1205,7 +1205,7 @@ def import_outline(file_path, session_id=None):
             blocks,
             outline,
             json_str,
-            None,  # import_file (clear it)
+            None,  # import_file_trigger (clear it)
             session_id,
             gr.update(
                 value="<em>Click '▷ Generate' to see the generated content here.</em><br><br><br>", visible=True
@@ -1225,7 +1225,7 @@ def import_outline(file_path, session_id=None):
             gr.update(),  # blocks
             gr.update(),  # outline
             gr.update(),  # json_output
-            None,  # import_file
+            None,  # import_file_trigger
             session_id,  # session_state
             gr.update(),  # generated_content_html
             gr.update(),  # generated_content
@@ -1377,6 +1377,23 @@ def render_block_resources(block_resources, block_type, block_id):
 
     return html
 
+
+def add_section(blocks, title, description, resources):
+    blocks = add_ai_block(blocks, None)
+    outline, json_str = regenerate_outline_from_state(title, description, resources, blocks)
+    return blocks, outline, json_str
+
+# Helper function to collapse all blocks
+def collapse_all_sections(blocks):
+    for block in blocks:
+        block["collapsed"] = True
+    return blocks
+
+# Helper function to expand all blocks  
+def expand_all_sections(blocks):
+    for block in blocks:
+        block["collapsed"] = False
+    return blocks
 
 def render_blocks(blocks, focused_block_id=None):
     """Render blocks as HTML."""
@@ -1817,7 +1834,7 @@ def handle_file_upload(files, current_resources, title, description, blocks, ses
     print(f"DEBUG handle_file_upload - returning json_str: {json_str[:100]}...")
     print("DEBUG handle_file_upload - full return values:")
     print(f"  - new_resources length: {len(new_resources)}")
-    print("  - file_upload clear: None")
+    print("  - reference_file_upload clear: None")
     print(f"  - outline type: {type(outline)}")
     print(f"  - json_str type: {type(json_str)}, length: {len(json_str)}")
     print(f"  - session_id: {session_id}")
@@ -1873,7 +1890,7 @@ def update_resource_description_gradio(resources, resource_path, new_description
     return resources, outline, json_str
 
 
-def delete_resource_gradio(resources, resource_path, title, description, blocks):
+def remove_section_resource(resources, resource_path, title, description, blocks):
     """Delete a resource from Gradio component."""
     print(f"Deleting resource: {resource_path}")
 
@@ -1987,6 +2004,280 @@ def replace_resource_file_gradio(resources, old_resource_path, new_file, title, 
         print(f"Error replacing resource file: {e}")
         return resources, None, "{}", None
 
+# Function to render resources
+def render_start_resources(resources):
+    print(
+        f"DEBUG render_start_resources called with {len(resources) if resources else 0} resources"
+    )
+    if resources and len(resources) > 0:
+        # Create a flex container for resources
+        html_content = '<div class="start-resources-list">'
+        for idx, resource in enumerate(resources):
+            print(f"  Rendering resource: {resource['name']}")
+            html_content += f"""
+                <div class="dropped-resource">
+                    <span>{resource["name"]}</span>
+                    <button class="remove-resource" onclick="event.stopPropagation(); removeStartResourceByIndex({idx}, '{resource["name"]}'); return false;">🗑</button>
+                </div>
+            """
+        html_content += "</div>"
+        return html_content
+    else:
+        # Return empty div when no resources
+        return '<div class="start-resources-list"></div>'
+
+# Function to remove resource from Start tab
+def remove_start_resource(resources, index_str, name):
+    """Remove a resource from the Start tab by index."""
+    print(
+        f"DEBUG: remove_start_resource called with resources={len(resources) if resources else 0}, index_str='{index_str}', name='{name}'"
+    )
+
+    if not resources or not index_str:
+        print("DEBUG: Early return - no resources or no index_str")
+        resources_html = render_start_resources(resources)
+        return resources, resources_html
+
+    try:
+        index = int(index_str)
+        print(f"DEBUG: Parsed index={index}, resources length={len(resources)}")
+
+        if 0 <= index < len(resources):
+            print(f"DEBUG: Index is valid. Resource at index: {resources[index].get('name', 'unknown')}")
+
+            # Verify the name matches as a safety check
+            if resources[index]["name"] == name:
+                print(f"DEBUG: Name matches, removing resource at index {index}")
+                new_resources = resources.copy()
+                removed_resource = new_resources.pop(index)
+                print(f"DEBUG: Removed resource: {removed_resource}")
+                resources_html = render_start_resources(new_resources)
+                print(f"DEBUG: Successfully removed resource, new count: {len(new_resources)}")
+                return new_resources, resources_html
+            else:
+                print(f"DEBUG: Name mismatch - expected '{name}', got '{resources[index]['name']}'")
+        else:
+            print(f"DEBUG: Index {index} out of range for {len(resources)} resources")
+    except (ValueError, IndexError) as e:
+        print(f"DEBUG: Exception in remove_start_resource: {e}")
+
+    print("DEBUG: No changes made, returning original resources")
+    resources_html = render_start_resources(resources)
+    return resources, resources_html
+
+
+# Example button handlers
+def extract_resources_from_docpack(docpack_path, session_id=None):
+    """Extract resources from a docpack file."""
+    # Define allowed extensions for start tab (same as file upload)
+    ALLOWED_EXTENSIONS = {
+        ".txt",
+        ".md",
+        ".py",
+        ".c",
+        ".cpp",
+        ".h",
+        ".java",
+        ".js",
+        ".ts",
+        ".jsx",
+        ".tsx",
+        ".json",
+        ".xml",
+        ".yaml",
+        ".yml",
+        ".toml",
+        ".ini",
+        ".cfg",
+        ".conf",
+        ".sh",
+        ".bash",
+        ".zsh",
+        ".fish",
+        ".ps1",
+        ".bat",
+        ".cmd",
+        ".rs",
+        ".go",
+        ".rb",
+        ".php",
+        ".pl",
+        ".lua",
+        ".r",
+        ".m",
+        ".swift",
+        ".kt",
+        ".scala",
+        ".clj",
+        ".ex",
+        ".erl",
+        ".hs",
+        ".ml",
+        ".fs",
+        ".nim",
+        ".d",
+        ".dart",
+        ".jl",
+        ".v",
+        ".zig",
+        ".html",
+        ".htm",
+        ".css",
+        ".scss",
+        ".sass",
+        ".less",
+        ".vue",
+        ".svelte",
+        ".astro",
+        ".tex",
+        ".rst",
+        ".adoc",
+        ".org",
+        ".csv",
+    }
+
+    resources = []
+    if docpack_path.exists():
+        print(f"DEBUG: Docpack exists at {docpack_path}")
+        try:
+            # Use provided session ID or create a new one
+            if not session_id:
+                session_id = str(uuid.uuid4())
+                print(f"DEBUG: Created new session ID: {session_id}")
+            else:
+                print(f"DEBUG: Using existing session ID: {session_id}")
+
+            # Create a temporary directory for extraction
+            with tempfile.TemporaryDirectory() as temp_dir:
+                print(f"DEBUG: Created temp directory: {temp_dir}")
+                # Extract the docpack - convert temp_dir to Path object
+                print(f"DEBUG: Extracting docpack from {docpack_path} to {temp_dir}")
+                json_data, extracted_files = DocpackHandler.extract_package(str(docpack_path), Path(temp_dir))
+                print(f"DEBUG: Extraction successful. Found {len(extracted_files)} files")
+                print(f"DEBUG: JSON data has {len(json_data.get('resources', []))} resources")
+
+                # Process resources from the docpack
+                for res_data in json_data.get("resources", []):
+                    # Skip inline resources
+                    if res_data.get("is_inline", False) or res_data.get("key", "").startswith(
+                        "inline_resource_"
+                    ):
+                        continue
+
+                    # Get the actual file from extracted files
+                    resource_filename = Path(res_data.get("path", "")).name
+                    file_ext = Path(resource_filename).suffix.lower()
+
+                    # Check if file extension is allowed
+                    if file_ext not in ALLOWED_EXTENSIONS:
+                        continue
+
+                    for extracted_file in extracted_files:
+                        if Path(extracted_file).name == resource_filename:
+                            # Read the file content
+                            with open(extracted_file, "r", encoding="utf-8") as f:
+                                content = f.read()
+
+                            # Use the session ID created at the beginning
+                            session_dir = session_manager.get_session_dir(session_id)
+
+                            # Convert Path to string for os.path operations
+                            session_dir_str = str(session_dir)
+
+                            # Save the file to session directory
+                            files_dir = os.path.join(session_dir_str, "files")
+                            os.makedirs(files_dir, exist_ok=True)
+                            target_path = os.path.join(files_dir, resource_filename)
+                            with open(target_path, "w", encoding="utf-8") as f:
+                                f.write(content)
+
+                            # Calculate file size
+                            file_size = len(content.encode("utf-8"))
+                            if file_size < 1024:
+                                size_str = f"{file_size} B"
+                            elif file_size < 1024 * 1024:
+                                size_str = f"{file_size / 1024:.1f} KB"
+                            else:
+                                size_str = f"{file_size / (1024 * 1024):.1f} MB"
+
+                            # Use the same format as handle_start_file_upload
+                            resources.append({
+                                "path": target_path,
+                                "name": resource_filename,
+                                "size": size_str,
+                            })
+                            break
+        except Exception as e:
+            print(f"Error extracting resources from docpack: {e}")
+
+    print(f"DEBUG extract_resources_from_docpack: Returning {len(resources)} resources")
+    for r in resources:
+        print(f"  Resource: {r}")
+    return resources
+
+
+def load_code_readme_example(session_id):
+    """Load the code README example prompt and resources."""
+    # Get or create session
+    if not session_id:
+        session_id = str(uuid.uuid4())
+
+    prompt = "Generate a comprehensive production-ready README for the target codebase. Include key features, installation instructions, usage examples, API documentation, an architecture overview, and contribution guidelines. IMPORTANT to use ONLY the facts available in the referenced documents (code, configs, docs, tests, etc.). Keep prose short, use bullet lists when helpful, and prefer plan language over marketing fluff.  Assumer the audience is a developer seeing the project for the first time."
+
+    # Extract resources from the README docpack
+    examples_dir = Path(__file__).parent.parent / "examples"
+    docpack_path = examples_dir / "readme-generation" / "readme.docpack"
+    resources = extract_resources_from_docpack(docpack_path, session_id)
+
+    print(f"DEBUG: Loaded {len(resources)} resources for README example")
+    for r in resources:
+        print(f"  - {r['name']} ({r['size']})")
+
+    # Render the resources HTML
+    resources_html = render_start_resources(resources)
+
+    return prompt, resources, session_id, resources_html
+
+def load_product_launch_example(session_id):
+    """Load the product launch example prompt and resources."""
+    # Get or create session
+    if not session_id:
+        session_id = str(uuid.uuid4())
+
+    prompt = "Create a comprehensive product launch documentation package for a new B2B SaaS analytics product.  Include the value proposition, implementation details and customer benefits.  There should be a product over section, one on technical architecture, an implementation guide, pricing and packaging, and go-to market strategy.  Other areas to consider include an announcement blog post, press release, internal team briefing, and customer FAQ.  Be sure to use clear, professional language appropriate for both technical and business stakeholders."
+
+    # Extract resources from the product launch docpack
+    examples_dir = Path(__file__).parent.parent / "examples"
+    docpack_path = examples_dir / "launch-documentation" / "launch-documentation.docpack"
+    resources = extract_resources_from_docpack(docpack_path, session_id)
+
+    # Render the resources HTML
+    resources_html = render_start_resources(resources)
+
+    return prompt, resources, session_id, resources_html
+
+def load_performance_review_example(session_id):
+    """Load the performance review example prompt and resources."""
+    # Get or create session
+    if not session_id:
+        session_id = str(uuid.uuid4())
+
+    prompt = "Generate an annual performance review for an employee. It will be used by both the manager and the employee to discuss the employee's progress.  Include key achievements, areas for growth, training and development and next years goals.  Make sure there is an employee overview as well.  Make it constructive and motivating, but also concise.  Folks are busy."
+
+    # Extract resources from the performance review docpack
+    examples_dir = Path(__file__).parent.parent / "examples"
+    docpack_path = (
+        examples_dir
+        / "scenario-4-annual-performance-review"
+        / "Annual Employee Performance Review_20250709_153352.docpack"
+    )
+    resources = extract_resources_from_docpack(docpack_path, session_id)
+
+    # Render the resources HTML
+    resources_html = render_start_resources(resources)
+
+    return prompt, resources, session_id, resources_html
+
 
 def create_app():
     """Create and return the Document Builder Gradio app."""
@@ -2050,7 +2341,21 @@ def create_app():
                                     size="sm",
                                     elem_classes="start-example-btn",
                                 )
+                                
 
+                                # Hidden inputs for Start tab resource removal
+                                start_remove_resource_index = gr.Textbox(
+                                    elem_id="start-remove-resource-index", visible=True, elem_classes="hidden-component"
+                                )
+                                start_remove_resource_name = gr.Textbox(
+                                    elem_id="start-remove-resource-name", visible=True, elem_classes="hidden-component"
+                                )
+                                start_remove_resource_btn = gr.Button(
+                                    "Remove", elem_id="start-remove-resource-btn", visible=True, elem_classes="hidden-component"
+                                )
+
+
+                                
                         # User prompt input
                         start_prompt_input = gr.TextArea(
                             placeholder="Describe your structured document here...\n",
@@ -2075,27 +2380,32 @@ def create_app():
                                     elem_classes="start-resources-display",
                                 )
 
-                                # Function to render resources
-                                def render_start_resources(resources):
-                                    print(
-                                        f"DEBUG render_start_resources called with {len(resources) if resources else 0} resources"
-                                    )
-                                    if resources and len(resources) > 0:
-                                        # Create a flex container for resources
-                                        html_content = '<div class="start-resources-list">'
-                                        for idx, resource in enumerate(resources):
-                                            print(f"  Rendering resource: {resource['name']}")
-                                            html_content += f"""
-                                                <div class="dropped-resource">
-                                                    <span>{resource["name"]}</span>
-                                                    <button class="remove-resource" onclick="event.stopPropagation(); removeStartResourceByIndex({idx}, '{resource["name"]}'); return false;">🗑</button>
-                                                </div>
-                                            """
-                                        html_content += "</div>"
-                                        return html_content
-                                    else:
-                                        # Return empty div when no resources
-                                        return '<div class="start-resources-list"></div>'
+                                start_remove_resource_btn.click(
+                                    fn=remove_start_resource,
+                                    inputs=[start_resources_state, start_remove_resource_index, start_remove_resource_name],
+                                    outputs=[start_resources_state, start_resources_display],
+                                )
+                                
+                                example_code_readme_btn.click(
+                                    fn=load_code_readme_example,
+                                    inputs=[session_state],
+                                    outputs=[start_prompt_input, start_resources_state, session_state, start_resources_display],
+                                    queue=False,
+                                )
+
+                                example_product_launch_btn.click(
+                                    fn=load_product_launch_example,
+                                    inputs=[session_state],
+                                    outputs=[start_prompt_input, start_resources_state, session_state, start_resources_display],
+                                    queue=False,
+                                )
+
+                                example_performance_review_btn.click(
+                                    fn=load_performance_review_example,
+                                    inputs=[session_state],
+                                    outputs=[start_prompt_input, start_resources_state, session_state, start_resources_display],
+                                    queue=False,
+                                )
 
                             # Upload area - full width
                             gr.TextArea(
@@ -2304,17 +2614,17 @@ def create_app():
             outline_state = gr.State(initial_outline)
 
             with gr.Row():
-                # App name and explanation
                 with gr.Column(elem_classes="app-header-col"):
+                    # Application Heading
                     gr.Markdown("# Document Generator")
                     gr.Markdown(" An AI tool for creating structured documents with customizable sections.")
 
-                # Import and Save buttons
                 with gr.Column():
+                    # Top Level Workspace Buttons
                     with gr.Row(elem_classes="header-buttons-row"):
-                        # Add empty space to push buttons to the right
                         gr.HTML("<div class='button-spacer' style='flex: 1;'></div>")
-                        # Try Examples button with dropdown container
+
+                        # Template Examples Button
                         with gr.Column(elem_classes="try-examples-container"):
                             gr.Button(
                                 "Template Examples",
@@ -2323,7 +2633,6 @@ def create_app():
                                 size="sm",
                                 elem_classes="try-examples-btn",
                             )
-                            # Dropdown menu (hidden by default via CSS)
                             with gr.Column(elem_classes="examples-dropdown", elem_id="examples-dropdown-id"):
                                 gr.HTML("""
                                     <div class="examples-dropdown-item" data-example="1">
@@ -2339,14 +2648,17 @@ def create_app():
                                         <div class="example-desc">Employee evaluation and feedback</div>
                                     </div>
                                 """)
-                        # New button (for resetting document)
-                        new_doc_btn = gr.Button(
+
+                        # New Button
+                        new_workspace_btn = gr.Button(
                             "New",
                             elem_id="new-builder-btn-id",
                             variant="secondary",
                             size="sm",
                             elem_classes="new-builder-btn",
                         )
+
+                        # Import Button
                         gr.Button(
                             "Import",
                             elem_id="import-builder-btn-id",
@@ -2354,7 +2666,16 @@ def create_app():
                             size="sm",
                             elem_classes="import-builder-btn",
                         )
-                        save_outline_btn = gr.DownloadButton(
+                        import_file_trigger = gr.File(
+                            label="Import Docpack",
+                            file_types=[".docpack"],
+                            visible=True,
+                            elem_id="import-file-input",
+                            elem_classes="hidden-component",
+                        )
+
+                        # Save Button
+                        save_workspace_btn = gr.DownloadButton(
                             "Save",
                             elem_id="save-builder-btn-id",
                             variant="secondary",
@@ -2364,17 +2685,8 @@ def create_app():
                             value=create_docpack_from_current_state,
                         )
 
-                    import_file = gr.File(
-                        label="Import Docpack",
-                        file_types=[".docpack"],
-                        visible=True,
-                        elem_id="import-file-input",
-                        elem_classes="hidden-component",
-                    )
-
-            # Document title and description
+            # Document Title and Description
             with gr.Row(elem_classes="header-section"):
-                # Document title (narrower width)
                 doc_title = gr.Textbox(
                     value="",
                     placeholder="Document Title",
@@ -2404,13 +2716,12 @@ def create_app():
                     visible=True,
                 )
 
-            # Main content area with three columns
+            # Main Workspace
             with gr.Row():
-                # Resources column: Upload Resources button
+                # Resources column
                 with gr.Column(scale=1, elem_classes="resources-col"):
                     # Drag and drop file upload component
-                    file_upload = gr.File(
-                        label="Drop Text File Here",
+                    reference_file_upload = gr.File(
                         file_count="multiple",
                         file_types=SUPPORTED_FILE_TYPES,
                         elem_classes="file-upload-dropzone",
@@ -2524,7 +2835,7 @@ def create_app():
                                         def delete_gradio_and_render(resources, path, title, desc, blocks, focused):
                                             """Delete resource via Gradio button and render blocks."""
                                             print("\n=== delete_gradio_and_render called ===")
-                                            new_res, new_blocks, outline, json_str = delete_resource_gradio(
+                                            new_res, new_blocks, outline, json_str = remove_section_resource(
                                                 resources, path, title, desc, blocks
                                             )
                                             blocks_html = render_blocks(new_blocks, focused)
@@ -2575,18 +2886,18 @@ def create_app():
                 # Workspace column: AI, H, T buttons (aligned left)
                 with gr.Column(scale=1, elem_classes="workspace-col"):
                     with gr.Row(elem_classes="square-btn-row"):
-                        ai_btn = gr.Button("+ Add Section", elem_classes="add-section-btn", size="sm")
+                        add_section_btn = gr.Button("+ Add Section", elem_classes="add-section-btn", size="sm")
                         # Add spacer to push collapse/expand buttons to the right
                         gr.HTML("<div style='flex: 1;'></div>")
                         # Collapse all button (same chevron as content blocks, rotated)
-                        collapse_all_btn = gr.Button(
+                        collapse_all_sections_btn = gr.Button(
                             "⌵", 
                             elem_classes="collapse-all-btn workspace-collapse-btn",
                             elem_id="collapse-all-btn",
                             size="sm"
                         )
                         # Expand all button (same chevron as content blocks) 
-                        expand_all_btn = gr.Button(
+                        expand_all_section_btn = gr.Button(
                             "⌵",
                             elem_classes="expand-all-btn workspace-collapse-btn", 
                             elem_id="expand-all-btn",
@@ -2600,10 +2911,10 @@ def create_app():
                         )
 
                         # Hidden components for JS communication
-                        delete_block_id = gr.Textbox(
+                        delete_section_id = gr.Textbox(
                             visible=True, elem_id="delete-block-id", elem_classes="hidden-component"
                         )
-                        delete_trigger = gr.Button(
+                        delete_section_btn = gr.Button(
                             "Delete", visible=True, elem_id="delete-trigger", elem_classes="hidden-component"
                         )
 
@@ -2617,15 +2928,15 @@ def create_app():
                         update_content_input = gr.Textbox(
                             visible=True, elem_id="update-content-input", elem_classes="hidden-component"
                         )
-                        update_trigger = gr.Button(
+                        update_section_content_btn = gr.Button(
                             "Update", visible=True, elem_id="update-trigger", elem_classes="hidden-component"
                         )
 
                         # Hidden components for resource deletion
-                        delete_resource_path = gr.Textbox(
+                        remove_resource_path = gr.Textbox(
                             visible=True, elem_id="delete-resource-path", elem_classes="hidden-component"
                         )
-                        delete_resource_trigger = gr.Button(
+                        remove_section_resource_btn = gr.Button(
                             "Delete Resource",
                             visible=True,
                             elem_id="delete-resource-trigger",
@@ -2636,7 +2947,7 @@ def create_app():
                         toggle_block_id = gr.Textbox(
                             visible=True, elem_id="toggle-block-id", elem_classes="hidden-component"
                         )
-                        toggle_trigger = gr.Button(
+                        toggle_section_btn = gr.Button(
                             "Toggle", visible=True, elem_id="toggle-trigger", elem_classes="hidden-component"
                         )
 
@@ -2813,84 +3124,54 @@ def create_app():
                                 lines=20,
                             )
 
-        # Helper function to add AI block and regenerate outline
-        def handle_add_ai_block_top(blocks, _, title, description, resources):
-            blocks = add_ai_block(blocks, None)
-            outline, json_str = regenerate_outline_from_state(title, description, resources, blocks)
-            return blocks, outline, json_str
-
-        # Helper function to add Text block and regenerate outline
-        def handle_add_text_block_top(blocks, _, title, description, resources):
-            blocks = add_text_block(blocks, None)
-            outline, json_str = regenerate_outline_from_state(title, description, resources, blocks)
-            return blocks, outline, json_str
-        
-        # Helper function to collapse all blocks
-        def collapse_all_blocks(blocks):
-            for block in blocks:
-                block["collapsed"] = True
-            return blocks
-        
-        # Helper function to expand all blocks  
-        def expand_all_blocks(blocks):
-            for block in blocks:
-                block["collapsed"] = False
-            return blocks
-
-        # Connect button click to add AI block
-        ai_btn.click(
-            fn=handle_add_ai_block_top,
+        #
+        # Button Click Handlers
+        #
+        add_section_btn.click(
+            fn=add_section,
             inputs=[
                 blocks_state,
-                gr.State(None),
                 doc_title,
                 doc_description,
                 resources_state,
-            ],  # Always pass None for focused_block_id
+            ], 
             outputs=[blocks_state, outline_state, json_output],
         ).then(fn=render_blocks, inputs=[blocks_state, focused_block_state], outputs=blocks_display)
         
-        # Connect collapse all button
-        collapse_all_btn.click(
-            fn=collapse_all_blocks,
+        collapse_all_sections_btn.click(
+            fn=collapse_all_sections,
             inputs=[blocks_state],
             outputs=[blocks_state]
         ).then(fn=render_blocks, inputs=[blocks_state, focused_block_state], outputs=blocks_display)
         
-        # Connect expand all button
-        expand_all_btn.click(
-            fn=expand_all_blocks,
+        expand_all_section_btn.click(
+            fn=expand_all_sections,
             inputs=[blocks_state],
             outputs=[blocks_state]
         ).then(fn=render_blocks, inputs=[blocks_state, focused_block_state], outputs=blocks_display)
 
-        # Connect button click to add Text block
-
-        # Delete block handler
-        delete_trigger.click(
-            fn=delete_block,
-            inputs=[blocks_state, delete_block_id, doc_title, doc_description, resources_state],
+        delete_section_btn.click(
+            fn=delete_section,
+            inputs=[blocks_state, delete_section_id, doc_title, doc_description, resources_state],
             outputs=[blocks_state, outline_state, json_output],
         ).then(fn=render_blocks, inputs=[blocks_state, focused_block_state], outputs=blocks_display)
 
-        # Delete resource handler
-        delete_resource_trigger.click(
-            fn=delete_resource_gradio,
-            inputs=[resources_state, delete_resource_path, doc_title, doc_description, blocks_state],
+        remove_section_resource_btn.click(
+            fn=remove_section_resource,
+            inputs=[resources_state, remove_resource_path, doc_title, doc_description, blocks_state],
             outputs=[resources_state, blocks_state, outline_state, json_output],
         ).then(fn=render_blocks, inputs=[blocks_state, focused_block_state], outputs=blocks_display)
 
-        # Update block content handler
-        update_trigger.click(
-            fn=update_block_content,
+        update_section_content_btn.click(
+            fn=update_section_content,
             inputs=[blocks_state, update_block_id, update_content_input, doc_title, doc_description, resources_state],
             outputs=[blocks_state, outline_state, json_output],
-        ).then(fn=set_focused_block, inputs=update_block_id, outputs=focused_block_state)
+        ).then(fn=set_focused_section, inputs=update_block_id, outputs=focused_block_state)
 
         # Toggle collapse handler
-        toggle_trigger.click(
-            fn=toggle_block_collapse, inputs=[blocks_state, toggle_block_id], outputs=blocks_state
-        ).then(fn=set_focused_block, inputs=toggle_block_id, outputs=focused_block_state).then(
+        toggle_section_btn.click(
+            fn=toggle_section_collapse, inputs=[blocks_state, toggle_block_id], outputs=blocks_state
+        ).then(fn=set_focused_section, inputs=toggle_block_id, outputs=focused_block_state).then(
             fn=render_blocks, inputs=[blocks_state, toggle_block_id], outputs=blocks_display
         )
 
@@ -2906,7 +3187,7 @@ def create_app():
                 resources_state,
             ],
             outputs=[blocks_state, outline_state, json_output],
-        ).then(fn=set_focused_block, inputs=update_heading_block_id, outputs=focused_block_state)
+        ).then(fn=set_focused_section, inputs=update_heading_block_id, outputs=focused_block_state)
 
         # Update indent handler
         indent_trigger.click(
@@ -2914,11 +3195,11 @@ def create_app():
             inputs=[blocks_state, indent_block_id, indent_direction, doc_title, doc_description, resources_state],
             outputs=[blocks_state, outline_state, json_output],
         ).then(fn=render_blocks, inputs=[blocks_state, focused_block_state], outputs=blocks_display).then(
-            fn=set_focused_block, inputs=indent_block_id, outputs=focused_block_state
+            fn=set_focused_section, inputs=indent_block_id, outputs=focused_block_state
         )
 
         # Focus handler
-        focus_trigger.click(fn=set_focused_block, inputs=focus_block_id, outputs=focused_block_state).then(
+        focus_trigger.click(fn=set_focused_section, inputs=focus_block_id, outputs=focused_block_state).then(
             fn=render_blocks, inputs=[blocks_state, focus_block_id], outputs=blocks_display
         )
 
@@ -3037,10 +3318,10 @@ def create_app():
         )
 
         # Handle file uploads (defined after json_output is created)
-        file_upload.change(
+        reference_file_upload.change(
             fn=handle_file_upload,
-            inputs=[file_upload, resources_state, doc_title, doc_description, blocks_state, session_state],
-            outputs=[resources_state, file_upload, outline_state, json_output, session_state],
+            inputs=[reference_file_upload, resources_state, doc_title, doc_description, blocks_state, session_state],
+            outputs=[resources_state, reference_file_upload, outline_state, json_output, session_state],
         ).then(
             # Force JSON update after resources render
             fn=lambda title, desc, res, blocks: regenerate_outline_from_state(title, desc, res, blocks)[1],
@@ -3088,9 +3369,9 @@ def create_app():
         # Save button is handled directly by DownloadButton with create_docpack_from_current_state
 
         # Import file handler
-        import_file.change(
+        import_file_trigger.change(
             fn=import_outline,
-            inputs=[import_file, session_state],
+            inputs=[import_file_trigger, session_state],
             outputs=[
                 doc_title,
                 doc_description,
@@ -3098,7 +3379,7 @@ def create_app():
                 blocks_state,
                 outline_state,
                 json_output,
-                import_file,  # Add import_file to outputs to clear it
+                import_file_trigger,  # Add import_file_trigger to outputs to clear it
                 session_state,
                 generated_content_html,
                 generated_content,
@@ -3107,7 +3388,7 @@ def create_app():
         ).then(fn=render_blocks, inputs=[blocks_state, focused_block_state], outputs=blocks_display)
 
         # Update save button value whenever outline changes
-        outline_state.change(fn=lambda: gr.update(value=create_docpack_from_current_state()), outputs=save_outline_btn)
+        outline_state.change(fn=lambda: gr.update(value=create_docpack_from_current_state()), outputs=save_workspace_btn)
 
         # Load example handler
         load_example_trigger.click(
@@ -3199,7 +3480,7 @@ def create_app():
         )
 
         # New button - reset document to initial state
-        def reset_document():
+        def reset_workspace():
             """Reset document to initial state with new session."""
             # Create fresh initial blocks with new IDs
             new_blocks = [
@@ -3244,8 +3525,8 @@ def create_app():
                 None,  # focused_block_state
             )
 
-        new_doc_btn.click(
-            fn=reset_document,
+        new_workspace_btn.click(
+            fn=reset_workspace,
             outputs=[
                 doc_title,
                 doc_description,
@@ -3331,295 +3612,6 @@ def create_app():
 
         # Clear error message when user starts typing
         start_prompt_input.input(fn=lambda: gr.update(visible=False), outputs=[start_error_message], queue=False)
-
-        # Example button handlers
-        def extract_resources_from_docpack(docpack_path, session_id=None):
-            """Extract resources from a docpack file."""
-            # Define allowed extensions for start tab (same as file upload)
-            ALLOWED_EXTENSIONS = {
-                ".txt",
-                ".md",
-                ".py",
-                ".c",
-                ".cpp",
-                ".h",
-                ".java",
-                ".js",
-                ".ts",
-                ".jsx",
-                ".tsx",
-                ".json",
-                ".xml",
-                ".yaml",
-                ".yml",
-                ".toml",
-                ".ini",
-                ".cfg",
-                ".conf",
-                ".sh",
-                ".bash",
-                ".zsh",
-                ".fish",
-                ".ps1",
-                ".bat",
-                ".cmd",
-                ".rs",
-                ".go",
-                ".rb",
-                ".php",
-                ".pl",
-                ".lua",
-                ".r",
-                ".m",
-                ".swift",
-                ".kt",
-                ".scala",
-                ".clj",
-                ".ex",
-                ".erl",
-                ".hs",
-                ".ml",
-                ".fs",
-                ".nim",
-                ".d",
-                ".dart",
-                ".jl",
-                ".v",
-                ".zig",
-                ".html",
-                ".htm",
-                ".css",
-                ".scss",
-                ".sass",
-                ".less",
-                ".vue",
-                ".svelte",
-                ".astro",
-                ".tex",
-                ".rst",
-                ".adoc",
-                ".org",
-                ".csv",
-            }
-
-            resources = []
-            if docpack_path.exists():
-                print(f"DEBUG: Docpack exists at {docpack_path}")
-                try:
-                    # Use provided session ID or create a new one
-                    if not session_id:
-                        session_id = str(uuid.uuid4())
-                        print(f"DEBUG: Created new session ID: {session_id}")
-                    else:
-                        print(f"DEBUG: Using existing session ID: {session_id}")
-
-                    # Create a temporary directory for extraction
-                    with tempfile.TemporaryDirectory() as temp_dir:
-                        print(f"DEBUG: Created temp directory: {temp_dir}")
-                        # Extract the docpack - convert temp_dir to Path object
-                        print(f"DEBUG: Extracting docpack from {docpack_path} to {temp_dir}")
-                        json_data, extracted_files = DocpackHandler.extract_package(str(docpack_path), Path(temp_dir))
-                        print(f"DEBUG: Extraction successful. Found {len(extracted_files)} files")
-                        print(f"DEBUG: JSON data has {len(json_data.get('resources', []))} resources")
-
-                        # Process resources from the docpack
-                        for res_data in json_data.get("resources", []):
-                            # Skip inline resources
-                            if res_data.get("is_inline", False) or res_data.get("key", "").startswith(
-                                "inline_resource_"
-                            ):
-                                continue
-
-                            # Get the actual file from extracted files
-                            resource_filename = Path(res_data.get("path", "")).name
-                            file_ext = Path(resource_filename).suffix.lower()
-
-                            # Check if file extension is allowed
-                            if file_ext not in ALLOWED_EXTENSIONS:
-                                continue
-
-                            for extracted_file in extracted_files:
-                                if Path(extracted_file).name == resource_filename:
-                                    # Read the file content
-                                    with open(extracted_file, "r", encoding="utf-8") as f:
-                                        content = f.read()
-
-                                    # Use the session ID created at the beginning
-                                    session_dir = session_manager.get_session_dir(session_id)
-
-                                    # Convert Path to string for os.path operations
-                                    session_dir_str = str(session_dir)
-
-                                    # Save the file to session directory
-                                    files_dir = os.path.join(session_dir_str, "files")
-                                    os.makedirs(files_dir, exist_ok=True)
-                                    target_path = os.path.join(files_dir, resource_filename)
-                                    with open(target_path, "w", encoding="utf-8") as f:
-                                        f.write(content)
-
-                                    # Calculate file size
-                                    file_size = len(content.encode("utf-8"))
-                                    if file_size < 1024:
-                                        size_str = f"{file_size} B"
-                                    elif file_size < 1024 * 1024:
-                                        size_str = f"{file_size / 1024:.1f} KB"
-                                    else:
-                                        size_str = f"{file_size / (1024 * 1024):.1f} MB"
-
-                                    # Use the same format as handle_start_file_upload
-                                    resources.append({
-                                        "path": target_path,
-                                        "name": resource_filename,
-                                        "size": size_str,
-                                    })
-                                    break
-                except Exception as e:
-                    print(f"Error extracting resources from docpack: {e}")
-
-            print(f"DEBUG extract_resources_from_docpack: Returning {len(resources)} resources")
-            for r in resources:
-                print(f"  Resource: {r}")
-            return resources
-
-        def load_code_readme_example(session_id):
-            """Load the code README example prompt and resources."""
-            # Get or create session
-            if not session_id:
-                session_id = str(uuid.uuid4())
-
-            prompt = "Generate a comprehensive production-ready README for the target codebase. Include key features, installation instructions, usage examples, API documentation, an architecture overview, and contribution guidelines. IMPORTANT to use ONLY the facts available in the referenced documents (code, configs, docs, tests, etc.). Keep prose short, use bullet lists when helpful, and prefer plan language over marketing fluff.  Assumer the audience is a developer seeing the project for the first time."
-
-            # Extract resources from the README docpack
-            examples_dir = Path(__file__).parent.parent / "examples"
-            docpack_path = examples_dir / "readme-generation" / "readme.docpack"
-            resources = extract_resources_from_docpack(docpack_path, session_id)
-
-            print(f"DEBUG: Loaded {len(resources)} resources for README example")
-            for r in resources:
-                print(f"  - {r['name']} ({r['size']})")
-
-            # Render the resources HTML
-            resources_html = render_start_resources(resources)
-
-            return prompt, resources, session_id, resources_html
-
-        def load_product_launch_example(session_id):
-            """Load the product launch example prompt and resources."""
-            # Get or create session
-            if not session_id:
-                session_id = str(uuid.uuid4())
-
-            prompt = "Create a comprehensive product launch documentation package for a new B2B SaaS analytics product.  Include the value proposition, implementation details and customer benefits.  There should be a product over section, one on technical architecture, an implementation guide, pricing and packaging, and go-to market strategy.  Other areas to consider include an announcement blog post, press release, internal team briefing, and customer FAQ.  Be sure to use clear, professional language appropriate for both technical and business stakeholders."
-
-            # Extract resources from the product launch docpack
-            examples_dir = Path(__file__).parent.parent / "examples"
-            docpack_path = examples_dir / "launch-documentation" / "launch-documentation.docpack"
-            resources = extract_resources_from_docpack(docpack_path, session_id)
-
-            # Render the resources HTML
-            resources_html = render_start_resources(resources)
-
-            return prompt, resources, session_id, resources_html
-
-        def load_performance_review_example(session_id):
-            """Load the performance review example prompt and resources."""
-            # Get or create session
-            if not session_id:
-                session_id = str(uuid.uuid4())
-
-            prompt = "Generate an annual performance review for an employee. It will be used by both the manager and the employee to discuss the employee's progress.  Include key achievements, areas for growth, training and development and next years goals.  Make sure there is an employee overview as well.  Make it constructive and motivating, but also concise.  Folks are busy."
-
-            # Extract resources from the performance review docpack
-            examples_dir = Path(__file__).parent.parent / "examples"
-            docpack_path = (
-                examples_dir
-                / "scenario-4-annual-performance-review"
-                / "Annual Employee Performance Review_20250709_153352.docpack"
-            )
-            resources = extract_resources_from_docpack(docpack_path, session_id)
-
-            # Render the resources HTML
-            resources_html = render_start_resources(resources)
-
-            return prompt, resources, session_id, resources_html
-
-        example_code_readme_btn.click(
-            fn=load_code_readme_example,
-            inputs=[session_state],
-            outputs=[start_prompt_input, start_resources_state, session_state, start_resources_display],
-            queue=False,
-        )
-
-        example_product_launch_btn.click(
-            fn=load_product_launch_example,
-            inputs=[session_state],
-            outputs=[start_prompt_input, start_resources_state, session_state, start_resources_display],
-            queue=False,
-        )
-
-        example_performance_review_btn.click(
-            fn=load_performance_review_example,
-            inputs=[session_state],
-            outputs=[start_prompt_input, start_resources_state, session_state, start_resources_display],
-            queue=False,
-        )
-
-        # Hidden inputs for Start tab resource removal
-        start_remove_resource_index = gr.Textbox(
-            elem_id="start-remove-resource-index", visible=True, elem_classes="hidden-component"
-        )
-        start_remove_resource_name = gr.Textbox(
-            elem_id="start-remove-resource-name", visible=True, elem_classes="hidden-component"
-        )
-        start_remove_resource_btn = gr.Button(
-            "Remove", elem_id="start-remove-resource-btn", visible=True, elem_classes="hidden-component"
-        )
-
-        # Function to remove resource from Start tab
-        def remove_start_resource(resources, index_str, name):
-            """Remove a resource from the Start tab by index."""
-            print(
-                f"DEBUG: remove_start_resource called with resources={len(resources) if resources else 0}, index_str='{index_str}', name='{name}'"
-            )
-
-            if not resources or not index_str:
-                print("DEBUG: Early return - no resources or no index_str")
-                resources_html = render_start_resources(resources)
-                return resources, resources_html
-
-            try:
-                index = int(index_str)
-                print(f"DEBUG: Parsed index={index}, resources length={len(resources)}")
-
-                if 0 <= index < len(resources):
-                    print(f"DEBUG: Index is valid. Resource at index: {resources[index].get('name', 'unknown')}")
-
-                    # Verify the name matches as a safety check
-                    if resources[index]["name"] == name:
-                        print(f"DEBUG: Name matches, removing resource at index {index}")
-                        new_resources = resources.copy()
-                        removed_resource = new_resources.pop(index)
-                        print(f"DEBUG: Removed resource: {removed_resource}")
-                        resources_html = render_start_resources(new_resources)
-                        print(f"DEBUG: Successfully removed resource, new count: {len(new_resources)}")
-                        return new_resources, resources_html
-                    else:
-                        print(f"DEBUG: Name mismatch - expected '{name}', got '{resources[index]['name']}'")
-                else:
-                    print(f"DEBUG: Index {index} out of range for {len(resources)} resources")
-            except (ValueError, IndexError) as e:
-                print(f"DEBUG: Exception in remove_start_resource: {e}")
-
-            print("DEBUG: No changes made, returning original resources")
-            resources_html = render_start_resources(resources)
-            return resources, resources_html
-
-        # Start tab resource removal handler
-        start_remove_resource_btn.click(
-            fn=remove_start_resource,
-            inputs=[start_resources_state, start_remove_resource_index, start_remove_resource_name],
-            outputs=[start_resources_state, start_resources_display],
-        )
 
     return app
 
