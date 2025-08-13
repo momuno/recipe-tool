@@ -78,24 +78,27 @@ async def generate_document(
             if resource.key in resolved_resources:
                 old_path = resource.path
                 resolved_path = str(resolved_resources[resource.key])
-                
+
                 # Always update the path to the resolved path (keeps original file reference)
                 resource.path = resolved_path
-                
+
                 # If it's a docx file, convert it to text and save as .txt file
-                if resolved_path.lower().endswith('.docx'):
+                if resolved_path.lower().endswith(".docx"):
                     try:
                         from ..app import docx_to_text
+
                         text_content = docx_to_text(resolved_path)
-                        
+
                         # Create a text file version
-                        txt_path = resolved_path.replace('.docx', '.txt')
-                        with open(txt_path, 'w', encoding='utf-8') as f:
+                        txt_path = resolved_path.replace(".docx", ".txt")
+                        with open(txt_path, "w", encoding="utf-8") as f:
                             f.write(text_content)
-                        
+
                         # Set txt_path for recipe executor to use
                         resource.txt_path = txt_path
-                        logger.info(f"Converted docx to text: {resource.key}: {old_path} -> {resolved_path}, txt_path: {txt_path}")
+                        logger.info(
+                            f"Converted docx to text: {resource.key}: {old_path} -> {resolved_path}, txt_path: {txt_path}"
+                        )
                     except Exception as e:
                         logger.error(f"Error converting docx file {resolved_path}: {e}")
                         # Keep txt_path as None on error
@@ -113,12 +116,13 @@ async def generate_document(
                     title=res.title,
                     description=res.description,
                     merge_mode=res.merge_mode,
-                    txt_path=res.txt_path
-                ) for res in outline.resources
+                    txt_path=res.txt_path,
+                )
+                for res in outline.resources
             ],
-            sections=outline.sections
+            sections=outline.sections,
         )
-        
+
         data = execution_outline.to_dict()
         outline_json = json.dumps(data, indent=2)
         outline_path = Path(tmpdir) / "outline.json"
@@ -238,22 +242,23 @@ async def generate_docpack_from_prompt(
         # Keep track of original paths and their converted versions
         resource_paths = []
         docx_conversion_map = {}  # Maps txt_path -> original_docx_path
-        
+
         for resource in resources:
             if "path" in resource and resource["path"]:
                 resource_path = resource["path"]
-                
+
                 # If it's a docx file, convert it to text and save as .txt file
-                if resource_path.lower().endswith('.docx'):
+                if resource_path.lower().endswith(".docx"):
                     try:
                         from ..app import docx_to_text
+
                         text_content = docx_to_text(resource_path)
-                        
+
                         # Create a text file version
-                        txt_path = resource_path.replace('.docx', '.txt')
-                        with open(txt_path, 'w', encoding='utf-8') as f:
+                        txt_path = resource_path.replace(".docx", ".txt")
+                        with open(txt_path, "w", encoding="utf-8") as f:
                             f.write(text_content)
-                        
+
                         resource_paths.append(txt_path)
                         docx_conversion_map[txt_path] = resource_path  # Remember the original path
                         logger.info(f"Converted docx to text: {resource_path} -> {txt_path}")
@@ -262,7 +267,7 @@ async def generate_docpack_from_prompt(
                         resource_paths.append(resource_path)  # Fall back to original path
                 else:
                     resource_paths.append(resource_path)
-                    
+
         resources_str = ",".join(resource_paths)
         logger.info(f"Resource paths: {resources_str}")
 
@@ -309,13 +314,14 @@ async def generate_docpack_from_prompt(
         if outline_path.exists():
             outline_json = outline_path.read_text()
             logger.info(f"Generated outline loaded from: {outline_path}")
-            
+
             # If we have docx conversions, fix the paths in the outline
             if docx_conversion_map:
                 try:
                     import json
+
                     outline_data = json.loads(outline_json)
-                    
+
                     # Fix resource paths to point back to original docx files
                     for resource in outline_data.get("resources", []):
                         resource_path = resource.get("path", "")
@@ -324,15 +330,15 @@ async def generate_docpack_from_prompt(
                             logger.info(f"Restoring original path: {resource_path} -> {original_path}")
                             resource["path"] = original_path  # Restore original docx path
                             resource["txt_path"] = resource_path  # Keep txt path for future use
-                    
+
                     # Save the fixed outline
                     outline_json = json.dumps(outline_data, indent=2)
                     logger.info("Fixed outline paths to preserve original docx references")
-                    
+
                 except Exception as e:
                     logger.error(f"Error fixing outline paths: {e}")
                     # Continue with original outline_json if fixing fails
-            
+
         else:
             logger.error(f"Outline file not found at: {outline_path}")
 
@@ -352,3 +358,4 @@ async def generate_docpack_from_prompt(
         logger.error(f"Error generating docpack: {str(e)}")
         logger.error(f"Full traceback: {traceback.format_exc()}")
         raise
+

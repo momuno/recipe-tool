@@ -1,14 +1,17 @@
 import argparse
 import asyncio
+from importlib import resources
 import json
 import os
 import subprocess
 import tempfile
 import time
+from turtle import title
 import uuid
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 
+from fastapi import logger
 import gradio as gr
 import pypandoc
 from docx import Document
@@ -27,12 +30,65 @@ IS_DEV_MODE = False
 
 # Supported file types for uploads
 SUPPORTED_FILE_TYPES = [
-    ".txt", ".md", ".py", ".c", ".cpp", ".h", ".java", ".js", ".ts", ".jsx", ".tsx",
-    ".json", ".xml", ".yaml", ".yml", ".toml", ".ini", ".cfg", ".conf", ".sh", ".bash",
-    ".zsh", ".fish", ".ps1", ".bat", ".cmd", ".rs", ".go", ".rb", ".php", ".pl", ".lua",
-    ".r", ".m", ".swift", ".kt", ".scala", ".clj", ".ex", ".exs", ".elm", ".fs", ".ml",
-    ".sql", ".html", ".htm", ".css", ".scss", ".sass", ".less", ".vue", ".svelte", ".astro",
-    ".tex", ".rst", ".adoc", ".org", ".csv", ".docx"
+    ".txt",
+    ".md",
+    ".py",
+    ".c",
+    ".cpp",
+    ".h",
+    ".java",
+    ".js",
+    ".ts",
+    ".jsx",
+    ".tsx",
+    ".json",
+    ".xml",
+    ".yaml",
+    ".yml",
+    ".toml",
+    ".ini",
+    ".cfg",
+    ".conf",
+    ".sh",
+    ".bash",
+    ".zsh",
+    ".fish",
+    ".ps1",
+    ".bat",
+    ".cmd",
+    ".rs",
+    ".go",
+    ".rb",
+    ".php",
+    ".pl",
+    ".lua",
+    ".r",
+    ".m",
+    ".swift",
+    ".kt",
+    ".scala",
+    ".clj",
+    ".ex",
+    ".exs",
+    ".elm",
+    ".fs",
+    ".ml",
+    ".sql",
+    ".html",
+    ".htm",
+    ".css",
+    ".scss",
+    ".sass",
+    ".less",
+    ".vue",
+    ".svelte",
+    ".astro",
+    ".tex",
+    ".rst",
+    ".adoc",
+    ".org",
+    ".csv",
+    ".docx",
 ]
 
 
@@ -40,11 +96,11 @@ def markdown_to_docx(markdown_content: str, output_path: str) -> str:
     """Convert markdown content to docx file and return the output path."""
     try:
         pypandoc.convert_text(
-            markdown_content, 
-            'docx', 
-            format='md',
+            markdown_content,
+            "docx",
+            format="md",
             outputfile=output_path,
-            extra_args=['--extract-media=.']  # Extract images to current directory
+            extra_args=["--extract-media=."],  # Extract images to current directory
         )
         return output_path
     except Exception as e:
@@ -56,15 +112,14 @@ def docx_to_text(docx_path: str) -> str:
     try:
         doc = Document(docx_path)
         paragraphs = []
-        
+
         for paragraph in doc.paragraphs:
             if paragraph.text.strip():  # Only add non-empty paragraphs
                 paragraphs.append(paragraph.text.strip())
-        
-        return '\n\n'.join(paragraphs)
+
+        return "\n\n".join(paragraphs)
     except Exception as e:
         raise Exception(f"Failed to extract text from docx: {str(e)}")
-
 
 
 def json_to_outline(json_data: Dict[str, Any]) -> Outline:
@@ -409,7 +464,7 @@ async def handle_document_generation(title, description, resources, blocks, sess
         # Save markdown to temporary file for download as docx
         docx_filename = f"{title}.docx" if title else "document.docx"
         docx_file_path = os.path.join(temp_dir, docx_filename)
-        
+
         # Convert markdown to docx
         markdown_to_docx(generated_content, docx_file_path)
 
@@ -627,7 +682,7 @@ def update_block_resources(blocks, block_id, resource_json, title, description, 
                 # Auto-load the file content into the text block
                 try:
                     file_path = resource_data["path"]
-                    if file_path.lower().endswith('.docx'):
+                    if file_path.lower().endswith(".docx"):
                         # Extract text from docx file
                         block["content"] = docx_to_text(file_path)
                     else:
@@ -1383,17 +1438,20 @@ def add_section(blocks, title, description, resources):
     outline, json_str = regenerate_outline_from_state(title, description, resources, blocks)
     return blocks, outline, json_str
 
+
 # Helper function to collapse all blocks
 def collapse_all_sections(blocks):
     for block in blocks:
         block["collapsed"] = True
     return blocks
 
-# Helper function to expand all blocks  
+
+# Helper function to expand all blocks
 def expand_all_sections(blocks):
     for block in blocks:
         block["collapsed"] = False
     return blocks
+
 
 def render_blocks(blocks, focused_block_id=None, show_api=False):
     """Render blocks as HTML."""
@@ -1982,7 +2040,7 @@ def replace_resource_file_gradio(resources, old_resource_path, new_file, title, 
                                 # If it's a text block, reload the content
                                 if block["type"] == "text":
                                     try:
-                                        if dest_path.lower().endswith('.docx'):
+                                        if dest_path.lower().endswith(".docx"):
                                             # Extract text from docx file
                                             block["content"] = docx_to_text(dest_path)
                                         else:
@@ -2004,11 +2062,10 @@ def replace_resource_file_gradio(resources, old_resource_path, new_file, title, 
         print(f"Error replacing resource file: {e}")
         return resources, None, "{}", None
 
+
 # Function to render resources
 def render_start_resources(resources):
-    print(
-        f"DEBUG render_start_resources called with {len(resources) if resources else 0} resources"
-    )
+    print(f"DEBUG render_start_resources called with {len(resources) if resources else 0} resources")
     if resources and len(resources) > 0:
         # Create a flex container for resources
         html_content = '<div class="start-resources-list">'
@@ -2025,6 +2082,7 @@ def render_start_resources(resources):
     else:
         # Return empty div when no resources
         return '<div class="start-resources-list"></div>'
+
 
 # Function to remove resource from Start tab
 def remove_start_resource(resources, index_str, name):
@@ -2159,9 +2217,7 @@ def extract_resources_from_docpack(docpack_path, session_id=None):
                 # Process resources from the docpack
                 for res_data in json_data.get("resources", []):
                     # Skip inline resources
-                    if res_data.get("is_inline", False) or res_data.get("key", "").startswith(
-                        "inline_resource_"
-                    ):
+                    if res_data.get("is_inline", False) or res_data.get("key", "").startswith("inline_resource_"):
                         continue
 
                     # Get the actual file from extracted files
@@ -2238,6 +2294,7 @@ def load_code_readme_example(session_id):
 
     return prompt, resources, session_id, resources_html
 
+
 def load_product_launch_example(session_id):
     """Load the product launch example prompt and resources."""
     # Get or create session
@@ -2255,6 +2312,7 @@ def load_product_launch_example(session_id):
     resources_html = render_start_resources(resources)
 
     return prompt, resources, session_id, resources_html
+
 
 def load_performance_review_example(session_id):
     """Load the performance review example prompt and resources."""
@@ -2277,6 +2335,7 @@ def load_performance_review_example(session_id):
     resources_html = render_start_resources(resources)
 
     return prompt, resources, session_id, resources_html
+
 
 # Wrapper for file upload that includes rendering
 def handle_start_file_upload_with_render(files, current_resources):
@@ -2348,7 +2407,6 @@ def create_app():
                                     size="sm",
                                     elem_classes="start-example-btn",
                                 )
-                                
 
                                 # Hidden inputs for Start tab resource removal
                                 start_remove_resource_index = gr.Textbox(
@@ -2358,11 +2416,12 @@ def create_app():
                                     elem_id="start-remove-resource-name", visible=True, elem_classes="hidden-component"
                                 )
                                 start_remove_resource_btn = gr.Button(
-                                    "Remove", elem_id="start-remove-resource-btn", visible=True, elem_classes="hidden-component"
+                                    "Remove",
+                                    elem_id="start-remove-resource-btn",
+                                    visible=True,
+                                    elem_classes="hidden-component",
                                 )
 
-
-                                
                         # User prompt input
                         start_prompt_input = gr.TextArea(
                             placeholder="Describe your structured document here...\n",
@@ -2389,29 +2448,52 @@ def create_app():
 
                                 start_remove_resource_btn.click(
                                     fn=remove_start_resource,
-                                    inputs=[start_resources_state, start_remove_resource_index, start_remove_resource_name],
+                                    inputs=[
+                                        start_resources_state,
+                                        start_remove_resource_index,
+                                        start_remove_resource_name,
+                                    ],
                                     outputs=[start_resources_state, start_resources_display],
+                                    show_api=False,
                                 )
-                                
+
                                 example_code_readme_btn.click(
                                     fn=load_code_readme_example,
                                     inputs=[session_state],
-                                    outputs=[start_prompt_input, start_resources_state, session_state, start_resources_display],
+                                    outputs=[
+                                        start_prompt_input,
+                                        start_resources_state,
+                                        session_state,
+                                        start_resources_display,
+                                    ],
                                     queue=False,
+                                    show_api=False,
                                 )
 
                                 example_product_launch_btn.click(
                                     fn=load_product_launch_example,
                                     inputs=[session_state],
-                                    outputs=[start_prompt_input, start_resources_state, session_state, start_resources_display],
+                                    outputs=[
+                                        start_prompt_input,
+                                        start_resources_state,
+                                        session_state,
+                                        start_resources_display,
+                                    ],
                                     queue=False,
+                                    show_api=False,
                                 )
 
                                 example_performance_review_btn.click(
                                     fn=load_performance_review_example,
                                     inputs=[session_state],
-                                    outputs=[start_prompt_input, start_resources_state, session_state, start_resources_display],
+                                    outputs=[
+                                        start_prompt_input,
+                                        start_resources_state,
+                                        session_state,
+                                        start_resources_display,
+                                    ],
                                     queue=False,
+                                    show_api=False,
                                 )
 
                             # Upload area - full width
@@ -2434,6 +2516,7 @@ def create_app():
                                 fn=handle_start_file_upload_with_render,
                                 inputs=[start_file_upload, start_resources_state],
                                 outputs=[start_resources_state, start_file_upload, start_resources_display],
+                                show_api=False,
                             )
 
                             # Draft button - full width below dropzone
@@ -2824,6 +2907,7 @@ def create_app():
                                                 json_output,
                                             ],  # Use dummy State to avoid re-render
                                             trigger_mode="always_last",  # Only trigger after user stops typing
+                                            show_api=False,
                                         )
 
                                         # Description update - don't update resources_state to avoid re-render
@@ -2843,6 +2927,7 @@ def create_app():
                                                 json_output,
                                             ],  # Use dummy State to avoid re-render
                                             trigger_mode="always_last",  # Only trigger after user stops typing
+                                            show_api=False,
                                         )
 
                                         # Delete button
@@ -2873,6 +2958,7 @@ def create_app():
                                                 json_output,
                                                 blocks_display,
                                             ],
+                                            show_api=False,
                                         )
 
                                         # File replacement
@@ -2888,6 +2974,7 @@ def create_app():
                                                 session_state,
                                             ],
                                             outputs=[resources_state, outline_state, json_output, replace_file],
+                                            show_api=False,
                                         ).then(
                                             # Force JSON update after resources render
                                             fn=lambda title, desc, res, blocks: regenerate_outline_from_state(
@@ -2895,6 +2982,7 @@ def create_app():
                                             )[1],
                                             inputs=[doc_title, doc_description, resources_state, blocks_state],
                                             outputs=[json_output],
+                                            show_api=False,
                                         )
 
                 # Workspace column: AI, H, T buttons (aligned left)
@@ -2905,17 +2993,17 @@ def create_app():
                         gr.HTML("<div style='flex: 1;'></div>")
                         # Collapse all button (same chevron as content blocks, rotated)
                         collapse_all_sections_btn = gr.Button(
-                            "⌵", 
+                            "⌵",
                             elem_classes="collapse-all-btn workspace-collapse-btn",
                             elem_id="collapse-all-btn",
-                            size="sm"
+                            size="sm",
                         )
-                        # Expand all button (same chevron as content blocks) 
+                        # Expand all button (same chevron as content blocks)
                         expand_all_section_btn = gr.Button(
                             "⌵",
-                            elem_classes="expand-all-btn workspace-collapse-btn", 
+                            elem_classes="expand-all-btn workspace-collapse-btn",
                             elem_id="expand-all-btn",
-                            size="sm"
+                            size="sm",
                         )
 
                     # Workspace panel for stacking content blocks
@@ -3148,43 +3236,43 @@ def create_app():
                 doc_title,
                 doc_description,
                 resources_state,
-            ], 
+            ],
             outputs=[blocks_state, outline_state, json_output],
+            show_api=False,
         ).then(fn=render_blocks, inputs=[blocks_state, focused_block_state], outputs=blocks_display, show_api=False)
-        
+
         collapse_all_sections_btn.click(
-            fn=collapse_all_sections,
-            inputs=[blocks_state],
-            outputs=[blocks_state]
+            fn=collapse_all_sections, inputs=[blocks_state], outputs=[blocks_state], show_api=False
         ).then(fn=render_blocks, inputs=[blocks_state, focused_block_state], outputs=blocks_display, show_api=False)
 
         expand_all_section_btn.click(
-            fn=expand_all_sections,
-            inputs=[blocks_state],
-            outputs=[blocks_state]
+            fn=expand_all_sections, inputs=[blocks_state], outputs=[blocks_state], show_api=False
         ).then(fn=render_blocks, inputs=[blocks_state, focused_block_state], outputs=blocks_display, show_api=False)
 
         delete_section_btn.click(
             fn=delete_section,
             inputs=[blocks_state, delete_section_id, doc_title, doc_description, resources_state],
             outputs=[blocks_state, outline_state, json_output],
+            show_api=False,
         ).then(fn=render_blocks, inputs=[blocks_state, focused_block_state], outputs=blocks_display, show_api=False)
 
         remove_section_resource_btn.click(
             fn=remove_section_resource,
             inputs=[resources_state, remove_resource_path, doc_title, doc_description, blocks_state],
             outputs=[resources_state, blocks_state, outline_state, json_output],
+            show_api=False,
         ).then(fn=render_blocks, inputs=[blocks_state, focused_block_state], outputs=blocks_display, show_api=False)
 
         update_section_content_btn.click(
             fn=update_section_content,
             inputs=[blocks_state, update_block_id, update_content_input, doc_title, doc_description, resources_state],
             outputs=[blocks_state, outline_state, json_output],
+            show_api=False,
         ).then(fn=set_focused_section, inputs=update_block_id, outputs=focused_block_state, show_api=False)
 
         # Toggle collapse handler
         toggle_section_btn.click(
-            fn=toggle_section_collapse, inputs=[blocks_state, toggle_block_id], outputs=blocks_state
+            fn=toggle_section_collapse, inputs=[blocks_state, toggle_block_id], outputs=blocks_state, show_api=False
         ).then(fn=set_focused_section, inputs=toggle_block_id, outputs=focused_block_state, show_api=False).then(
             fn=render_blocks, inputs=[blocks_state, toggle_block_id], outputs=blocks_display, show_api=False
         )
@@ -3201,6 +3289,7 @@ def create_app():
                 resources_state,
             ],
             outputs=[blocks_state, outline_state, json_output],
+            show_api=False,
         ).then(fn=set_focused_section, inputs=update_heading_block_id, outputs=focused_block_state, show_api=False)
 
         # Update indent handler
@@ -3208,14 +3297,15 @@ def create_app():
             fn=update_block_indent,
             inputs=[blocks_state, indent_block_id, indent_direction, doc_title, doc_description, resources_state],
             outputs=[blocks_state, outline_state, json_output],
-        ).then(fn=render_blocks, inputs=[blocks_state, focused_block_state], outputs=blocks_display, show_api=False).then(
-            fn=set_focused_section, inputs=indent_block_id, outputs=focused_block_state, show_api=False
-        )
+            show_api=False,
+        ).then(
+            fn=render_blocks, inputs=[blocks_state, focused_block_state], outputs=blocks_display, show_api=False
+        ).then(fn=set_focused_section, inputs=indent_block_id, outputs=focused_block_state, show_api=False)
 
         # Focus handler
-        focus_trigger.click(fn=set_focused_section, inputs=focus_block_id, outputs=focused_block_state, show_api=False).then(
-            fn=render_blocks, inputs=[blocks_state, focus_block_id], outputs=blocks_display, show_api=False
-        )
+        focus_trigger.click(
+            fn=set_focused_section, inputs=focus_block_id, outputs=focused_block_state, show_api=False
+        ).then(fn=render_blocks, inputs=[blocks_state, focus_block_id], outputs=blocks_display, show_api=False)
 
         # Add after handler - for + button on content blocks
         def handle_add_after(blocks, block_id, block_type, title, description, resources):
@@ -3232,6 +3322,7 @@ def create_app():
             fn=handle_add_after,
             inputs=[blocks_state, add_after_block_id, add_after_type, doc_title, doc_description, resources_state],
             outputs=[blocks_state, outline_state, json_output],
+            show_api=False,
         ).then(fn=render_blocks, inputs=[blocks_state, focused_block_state], outputs=blocks_display, show_api=False)
 
         # Convert block type handler
@@ -3239,6 +3330,7 @@ def create_app():
             fn=convert_block_type,
             inputs=[blocks_state, convert_block_id, convert_type, doc_title, doc_description, resources_state],
             outputs=[blocks_state, outline_state, json_output],
+            show_api=False,
         ).then(fn=render_blocks, inputs=[blocks_state, focused_block_state], outputs=blocks_display, show_api=False)
 
         # Update block resources handler
@@ -3253,6 +3345,7 @@ def create_app():
                 resources_state,
             ],
             outputs=[blocks_state, outline_state, json_output],
+            show_api=False,
         ).then(fn=render_blocks, inputs=[blocks_state, focused_block_state], outputs=blocks_display, show_api=False)
 
         # Remove block resource handler
@@ -3267,6 +3360,7 @@ def create_app():
                 resources_state,
             ],
             outputs=[blocks_state, outline_state, json_output],
+            show_api=False,
         ).then(fn=render_blocks, inputs=[blocks_state, focused_block_state], outputs=blocks_display, show_api=False)
 
         # Delete resource from panel handler
@@ -3301,6 +3395,7 @@ def create_app():
                 focused_block_state,
             ],
             outputs=[resources_state, blocks_state, outline_state, json_output, blocks_display],
+            show_api=False,
         )
 
         # Update resource description handler - don't re-render blocks to avoid interrupting typing
@@ -3316,6 +3411,7 @@ def create_app():
                 resources_state,
             ],
             outputs=[blocks_state, outline_state, json_output],
+            show_api=False,
         )
 
         # Title and description change handlers
@@ -3323,14 +3419,14 @@ def create_app():
             fn=update_document_metadata,
             inputs=[doc_title, doc_description, resources_state, blocks_state],
             outputs=[outline_state, json_output],
-            show_api=False
+            show_api=False,
         )
 
         doc_description.change(
             fn=update_document_metadata,
             inputs=[doc_title, doc_description, resources_state, blocks_state],
             outputs=[outline_state, json_output],
-            show_api=False
+            show_api=False,
         )
 
         # Handle file uploads (defined after json_output is created)
@@ -3338,12 +3434,13 @@ def create_app():
             fn=handle_file_upload,
             inputs=[reference_file_upload, resources_state, doc_title, doc_description, blocks_state, session_state],
             outputs=[resources_state, reference_file_upload, outline_state, json_output, session_state],
+            show_api=False,
         ).then(
             # Force JSON update after resources render
             fn=lambda title, desc, res, blocks: regenerate_outline_from_state(title, desc, res, blocks)[1],
             inputs=[doc_title, doc_description, resources_state, blocks_state],
             outputs=[json_output],
-            show_api=False
+            show_api=False,
         )
 
         # Generate document handler - update to return the download button state
@@ -3377,11 +3474,12 @@ def create_app():
                 gr.update(interactive=False),  # Disable download button
             ],
             outputs=[generate_doc_btn, generated_content, generated_content_html, save_doc_btn],
-            show_api=False
+            show_api=False,
         ).then(
             fn=handle_generate_and_update_download,
             inputs=[doc_title, doc_description, resources_state, blocks_state, session_state],
             outputs=[json_output, generated_content, generated_content_html, save_doc_btn, generate_doc_btn],
+            show_api=False,
         )
 
         # Save button is handled directly by DownloadButton with create_docpack_from_current_state
@@ -3403,10 +3501,11 @@ def create_app():
                 generated_content,
                 save_doc_btn,
             ],
+            show_api=False,
         ).then(fn=render_blocks, inputs=[blocks_state, focused_block_state], outputs=blocks_display, show_api=False)
 
         # Update save button value whenever outline changes
-        outline_state.change(fn=lambda: gr.update(value=create_docpack_from_current_state()), outputs=save_workspace_btn, show_api=False)
+        # outline_state.change(fn=lambda: gr.update(value=create_docpack_from_current_state(), show_api=False), outputs=save_workspace_btn, show_api=False)
 
         # Load example handler
         load_example_trigger.click(
@@ -3424,6 +3523,7 @@ def create_app():
                 generated_content,
                 save_doc_btn,
             ],
+            show_api=False,
         ).then(fn=render_blocks, inputs=[blocks_state, focused_block_state], outputs=blocks_display, show_api=False)
 
         # Update resource title handler - don't re-render resources to avoid interrupting typing
@@ -3438,6 +3538,7 @@ def create_app():
                 blocks_state,
             ],
             outputs=[resources_state, outline_state, json_output],
+            show_api=False,
         )
 
         # Update resource panel description handler - reuse the same inputs
@@ -3452,6 +3553,7 @@ def create_app():
                 blocks_state,
             ],
             outputs=[resources_state, outline_state, json_output],
+            show_api=False,
         )
 
         # Replace resource file handler
@@ -3491,11 +3593,14 @@ def create_app():
                 json_output,
                 replace_success_msg,
             ],
-        ).then(fn=render_blocks, inputs=[blocks_state, focused_block_state], outputs=blocks_display, show_api=False).then(
+            show_api=False,
+        ).then(
+            fn=render_blocks, inputs=[blocks_state, focused_block_state], outputs=blocks_display, show_api=False
+        ).then(
             # Clear the file input after processing
             fn=lambda: None,
             outputs=replace_resource_file_input,
-            show_api=False
+            show_api=False,
         )
 
         # New button - reset document to initial state
@@ -3559,6 +3664,7 @@ def create_app():
                 save_doc_btn,
                 focused_block_state,
             ],
+            show_api=False,
         ).then(fn=render_blocks, inputs=[blocks_state, focused_block_state], outputs=blocks_display, show_api=False)
 
         # Create a hidden HTML component for tab switching trigger
@@ -3590,7 +3696,7 @@ def create_app():
             inputs=[start_prompt_input],
             outputs=[start_error_message, get_started_btn],
             queue=False,  # Run immediately
-            show_api=False
+            show_api=False,
         ).success(
             fn=handle_start_draft_click,
             inputs=[start_prompt_input, start_resources_state, session_state],
@@ -3610,35 +3716,97 @@ def create_app():
                 start_prompt_input,
                 get_started_btn,
             ],
-        ).then(fn=render_blocks, inputs=[blocks_state, focused_block_state], outputs=blocks_display, show_api=False).then(
+            show_api=False,
+        ).then(
+            fn=render_blocks, inputs=[blocks_state, focused_block_state], outputs=blocks_display, show_api=False
+        ).then(
             fn=regenerate_outline_from_state,
             inputs=[doc_title, doc_description, resources_state, blocks_state],
             outputs=[outline_state, json_output],
-            show_api=False
+            show_api=False,
         )
 
         # Clear error message when user starts typing
-        start_prompt_input.input(fn=lambda: gr.update(visible=False), outputs=[start_error_message], queue=False, show_api=False)
+        start_prompt_input.input(
+            fn=lambda: gr.update(visible=False), outputs=[start_error_message], queue=False, show_api=False
+        )
+
+        ################### REMOTE MCP ###################
+        async def draft_document(prompt: str, resources: List[Dict[str, str]]) -> str:  # Tuple[str, str]:
+            """
+            Drafts a document.
+
+            Args:
+                prompt (str): User's description of the document they want to create
+                resources (List[Dict[str, str]]): List of resources with 'filename' and 'content' keys containing extracted text
+            Returns:
+                str: The drafted document
+            """
+            session_id = str(uuid.uuid4())
+            print(f"DEBUG: Created new session_id: {session_id}")
+            print(f"DEBUG: Calling generate_docpack_from_prompt with {len(resources) if resources else 0} resources")
+            session_dir = session_manager.get_session_dir(session_id)
+            tmpdir = str(session_dir / "attached_files")
+            Path(tmpdir).mkdir(exist_ok=True)
+            print(f"Using temp directory: {tmpdir}")
+            print(f"Resource count: {len(resources)}")
+            print(resources)
+
+            try:
+                processed_resources = []
+                for resource in resources:
+                    # Each resource should have 'filename' and 'content' keys
+                    filename = resource.get("filename", "")
+                    content = resource.get("content", "")
+                    if not filename:
+                        print(f"Resource missing filename: {resource}")
+                        return
+                    if not content:
+                        print(f"Resource missing content: {resource}")
+                        return
+                    
+                    # Write content to files for use in doc gen recipe step.
+                    temp_file_path = Path(tmpdir) / filename
+                    temp_file_path.write_text(content)
+                    print(f"Wrote resource to temp file: {temp_file_path}")
+
+                    #get path from Posix path
+                    temp_file_path = str(temp_file_path)
+
+                    new_resource = {"path": temp_file_path}
+                    print(new_resource)
+                    processed_resources.append(new_resource)
 
 
-        ################### TESTING MCP ###################
-        def get_prompt_examples():
-            """Return a list of available examples for use in drafting a document."""
-            return [
-                "1: Code README",
-                "2: Product Launch",
-                "3: Performance Review",
-            ]
+                print(f"Processed {len(processed_resources)} resources")
+                print(processed_resources)
+                resources_str = json.dumps(processed_resources)
+                print(f"Resources JSON: {resources_str}")
 
-        def get_prompt_example(example_no):
-            """Return a specific prompt example."""
-            examples = get_prompt_examples()
-            if 0 <= example_no < len(examples):
-                return examples[example_no]
-            else:
-                return "Invalid example number."
+            except Exception as e:
+                print(f"Error generating outline: {str(e)}")
+                raise
 
+            docpack, outline_json = await generate_docpack_from_prompt(prompt.strip(), processed_resources or [], session_id, IS_DEV_MODE)
 
+            outline = Outline.from_dict(json.loads(outline_json))
+            # Generate the document
+            generated_content = await generate_document(outline, session_id, IS_DEV_MODE)
+            #
+            # outline_dictionary = json.loads(outline_json)
+            # title = outline_dictionary.get("title", "Generated Document")
+            #
+            ## Save markdown to temporary file for download as docx
+            # docx_filename = f"{title}.docx" if title else "document.docx"
+            # temp_dir = Path(tempfile.gettempdir())
+            # docx_file_path = os.path.join(temp_dir, docx_filename)
+            #
+            ## Convert markdown to docx
+            # markdown_to_docx(generated_content, docx_file_path)
+
+            return generated_content
+
+        gr.api(draft_document)
 
     return app
 
@@ -3695,7 +3863,15 @@ def main():
         app.launch(server_name=server_name, server_port=server_port, mcp_server=True, pwa=True, share=False)
     else:
         logging.basicConfig(level=logging.INFO)
-        app.launch(server_name=server_name, server_port=server_port, mcp_server=True, pwa=True)
+        app.launch(
+            server_name=server_name,
+            server_port=server_port,
+            mcp_server=True,
+            pwa=True,
+            ssl_verify=False,
+            ssl_certificate="cert.pem",
+            ssl_keyfile="key.pem",
+        )
 
 
 if __name__ == "__main__":
