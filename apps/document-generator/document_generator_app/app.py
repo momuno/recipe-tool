@@ -3732,10 +3732,9 @@ def create_app():
         )
 
         ################### REMOTE MCP ###################
-        async def draft_document(prompt: str, resources: List[Dict[str, str]]) -> str:  # Tuple[str, str]:
+        async def draft_document(prompt: str, resources: List[Dict[str, str]]) -> str:
             """
             Drafts a document.
-
             Args:
                 prompt (str): User's description of the document they want to create
                 resources (List[Dict[str, str]]): List of resources with 'filename' and 'content' keys containing extracted text
@@ -3743,14 +3742,10 @@ def create_app():
                 str: The drafted document
             """
             session_id = str(uuid.uuid4())
-            print(f"DEBUG: Created new session_id: {session_id}")
-            print(f"DEBUG: Calling generate_docpack_from_prompt with {len(resources) if resources else 0} resources")
             session_dir = session_manager.get_session_dir(session_id)
-            tmpdir = str(session_dir / "attached_files")
-            Path(tmpdir).mkdir(exist_ok=True)
-            print(f"Using temp directory: {tmpdir}")
-            print(f"Resource count: {len(resources)}")
-            print(resources)
+            content_dir = str(session_dir / "attached_files")
+            Path(content_dir).mkdir(exist_ok=True)
+            print(f"DEBUG: Using session_dir: {session_dir}")
 
             try:
                 processed_resources = []
@@ -3765,44 +3760,23 @@ def create_app():
                         print(f"Resource missing content: {resource}")
                         return
                     
-                    # Write content to files for use in doc gen recipe step.
-                    temp_file_path = Path(tmpdir) / filename
-                    temp_file_path.write_text(content)
-                    print(f"Wrote resource to temp file: {temp_file_path}")
+                    # Write content to files.
+                    content_file_path = Path(content_dir) / filename
+                    content_file_path.write_text(content)
+                    print(f"DEBUG: Wrote resource to temp file: {content_file_path}")
 
-                    #get path from Posix path
-                    temp_file_path = str(temp_file_path)
-
-                    new_resource = {"path": temp_file_path}
-                    print(new_resource)
+                    new_resource = {"path": str(content_file_path)}
                     processed_resources.append(new_resource)
 
-
-                print(f"Processed {len(processed_resources)} resources")
-                print(processed_resources)
-                resources_str = json.dumps(processed_resources)
-                print(f"Resources JSON: {resources_str}")
+                print(f"DEBUG: Processed {len(processed_resources)} resources")
 
             except Exception as e:
                 print(f"Error generating outline: {str(e)}")
                 raise
 
             docpack, outline_json = await generate_docpack_from_prompt(prompt.strip(), processed_resources or [], session_id, IS_DEV_MODE)
-
             outline = Outline.from_dict(json.loads(outline_json))
-            # Generate the document
             generated_content = await generate_document(outline, session_id, IS_DEV_MODE)
-            #
-            # outline_dictionary = json.loads(outline_json)
-            # title = outline_dictionary.get("title", "Generated Document")
-            #
-            ## Save markdown to temporary file for download as docx
-            # docx_filename = f"{title}.docx" if title else "document.docx"
-            # temp_dir = Path(tempfile.gettempdir())
-            # docx_file_path = os.path.join(temp_dir, docx_filename)
-            #
-            ## Convert markdown to docx
-            # markdown_to_docx(generated_content, docx_file_path)
 
             return generated_content
 
