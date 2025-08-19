@@ -1119,6 +1119,152 @@
 }
 
 
+/* Download dropdown styles - moved to generate section for absolute positioning */
+
+/* Remove default Gradio column padding/margins from download-container */
+.download-container.svelte-1gfkn6j,
+.download-container > .wrap,
+.download-container .form {
+    padding: 0 !important;
+    margin: 0 !important;
+    min-height: auto !important;
+    height: auto !important;
+    gap: 0 !important;
+    justify-content: flex-end !important;
+    display: flex !important;
+}
+
+/* Ensure the download button itself is right-aligned */
+.download-container .download-btn {
+    margin-left: auto !important;
+}
+
+/* Hide dropdown by default */
+.download-dropdown {
+    position: absolute !important;
+    top: 30px !important;
+    right: 0 !important;
+    margin-top: 4px !important;
+    min-width: 200px !important;
+    background-color: #ffffff !important;
+    border: 1px solid #e0e0e0 !important;
+    border-radius: 8px !important;
+    box-shadow: 0 3px 6px rgba(0, 0, 0, 0.15) !important;
+    z-index: 1000 !important;
+    display: none !important;
+    padding: 8px !important;
+    opacity: 0;
+    transition: opacity 0.2s ease !important;
+}
+
+/* Show dropdown on hover only when button is interactive */
+.download-container:hover .download-dropdown {
+    display: block !important;
+    opacity: 1;
+}
+
+/* Hide dropdown when button is disabled */
+.download-container:has(.download-btn:disabled) .download-dropdown {
+    display: none !important;
+    pointer-events: none;
+}
+
+/* Create invisible bridge to maintain hover state */
+.download-dropdown::before {
+    content: "";
+    position: absolute;
+    top: -6px;
+    left: 0;
+    right: 0;
+    height: 6px;
+    background: transparent;
+}
+
+/* Individual download items */
+.download-dropdown-item {
+    padding: 10px 14px;
+    cursor: pointer;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+    margin-bottom: 4px;
+}
+
+.download-dropdown-item:last-child {
+    margin-bottom: 0;
+}
+
+.download-dropdown-item:hover {
+    background-color: #f3f4f6;
+    transform: translateX(2px);
+}
+
+/* Download title */
+.download-title {
+    font-weight: 600;
+    font-size: 14px;
+    color: #333;
+    margin-bottom: 2px;
+}
+
+/* Download description */
+.download-desc {
+    font-size: 12px;
+    color: #666;
+    line-height: 1.3;
+}
+
+/* Active state */
+.download-dropdown-item:active {
+    background-color: #e5e7eb;
+}
+
+/* Generate column - make it relative for absolute positioning */
+.generate-col {
+    width: 100% !important;
+    position: relative !important;
+    min-height: 40px !important; /* Ensure minimum height for buttons */
+}
+
+/* Generate button row - container for positioned elements */
+.generate-btn-row {
+    position: relative !important;
+
+    width: 100% !important;
+    height: 30px !important;
+    pointer-events: none !important; /* Allow clicks to pass through container */
+}
+
+/* Ensure child elements can receive clicks */
+.generate-btn-row > * {
+    pointer-events: auto !important;
+}
+
+/* Position Generate button absolutely */
+.generate-btn {
+    position: absolute !important;
+    right: 128px !important; /* Move further left to avoid overlap */
+    top: 0 !important;
+    z-index: 200 !important; /* Higher than download container */
+    pointer-events: auto !important; /* Ensure button is clickable */
+}
+
+/* Download container - also absolute positioned */
+.download-container {
+    position: absolute !important;
+    right: 0 !important;
+    top: 0 !important;
+    z-index: 150 !important; /* Lower than generate button */
+    pointer-events: auto !important; /* Ensure container is interactive */
+    display: inline-flex !important;
+    justify-content: flex-end !important;
+    width: auto !important;
+    max-width: 140px !important; /* Limit width to prevent overlap */
+    padding: 0 !important;
+    margin: 0 !important;
+    min-height: auto !important;
+    height: auto !important;
+}
+
 /* Header section */
 .header-section {
     background-color: #ffffff !important;

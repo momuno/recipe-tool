@@ -1366,6 +1366,7 @@ const observer = new MutationObserver(function(mutations) {
             setupAutoExpand();
             // Removed setupDescriptionToggle() - causes phantom Gradio events
             setupExampleSelection();
+            setupDownloadDropdown();
             // Removed setupResourceDescriptions() - causes phantom Gradio events
             setupResourceUploadZones();
             setupResourceUploadText();
@@ -2485,6 +2486,60 @@ function setupExampleSelection() {
     });
 }
 
+// Setup download dropdown functionality
+function setupDownloadDropdown() {
+    const downloadItems = document.querySelectorAll('.download-dropdown-item');
+    
+    downloadItems.forEach(item => {
+        item.addEventListener('click', function(e) {
+            e.stopPropagation();
+            const format = this.getAttribute('data-format');
+            console.log('Selected download format:', format);
+            
+            // Set the format in hidden input
+            const formatInput = document.getElementById('download-format-input');
+            if (formatInput) {
+                const textarea = formatInput.querySelector('textarea') || formatInput.querySelector('input[type="text"]');
+                if (textarea) {
+                    textarea.value = format;
+                    textarea.dispatchEvent(new Event('input', { bubbles: true }));
+                    
+                    // Trigger the format selection handler
+                    setTimeout(() => {
+                        const downloadTrigger = document.getElementById('download-format-trigger');
+                        if (downloadTrigger) {
+                            downloadTrigger.click();
+                            
+                            // After format is set, trigger the actual download button
+                            setTimeout(() => {
+                                const downloadBtn = document.getElementById('download-btn-id');
+                                if (downloadBtn) {
+                                    // Find the actual button element (might be nested)
+                                    const actualBtn = downloadBtn.querySelector('button') || downloadBtn;
+                                    if (actualBtn) {
+                                        actualBtn.click();
+                                        console.log('Triggered download button click');
+                                    }
+                                }
+                            }, 100);
+                        }
+                    }, 100);
+                }
+            }
+            
+            // Hide dropdown after selection
+            const dropdown = document.getElementById('download-dropdown-id');
+            if (dropdown) {
+                dropdown.style.display = 'none';
+                // Re-show on next hover
+                setTimeout(() => {
+                    dropdown.style.removeProperty('display');
+                }, 300);
+            }
+        });
+    });
+}
+
 // Debounce timer for resource titles
 let titleDebounceTimers = {};
 
@@ -3408,6 +3463,8 @@ document.addEventListener('DOMContentLoaded', function () {
     // Upload resource setup no longer needed - using Gradio's native component
     setupExampleSelection();
     console.log('Called setupExampleSelection()');
+    setupDownloadDropdown();
+    console.log('Called setupDownloadDropdown()');
 
     // Delay initial drag and drop setup
     setTimeout(() => {
