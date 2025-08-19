@@ -2269,25 +2269,31 @@
     gap: 8px !important;
 }
 
-/* Specific styling for collapse all (rotated to point up like expanded blocks) */
-.collapse-all-btn {
-    font-weight: 500 !important;
-    transform: rotate(180deg) !important;
+/* Single workspace collapse/expand toggle button styling */
+.workspace-collapse-btn {
+    font-weight: 100 !important;
+    font-size: 28px !important;  /* Make icon larger */
     position: relative !important;
-    padding-bottom: 7px !important;  /* This becomes padding-top after rotation */
+    line-height: 0px !important;
+    transform: rotate(90deg) !important;  /* Default: pointing down */
+    transition: none !important;  /* Disable animation */
+    padding-left: 1px !important;  /* Shift icon right within button */
     padding-top: 0px !important;
-    line-height: 1 !important;
+    padding-right: 0px !important;
+    padding-bottom: 7px !important;
 }
 
-/* Specific styling for expand all (points down like collapsed blocks) */
-.expand-all-btn {
-    font-weight: 500 !important;
-    transform: rotate(0deg) !important;
-    position: relative !important;
-    padding-bottom: 6px !important;  /* Push the chevron up */
+/* When in collapse mode (sections expanded), pointing up */
+.workspace-collapse-btn.collapse-mode {
+    transform: rotate(-90deg) !important;  /* Pointing up */
+    transition: none !important;  /* Disable animation */
+    padding-left: 0px !important;  /* Shift icon right within button */
     padding-top: 0px !important;
-    line-height: 1 !important;
-}
+    line-height: 0px !important;
+    padding-right: 2px !important;
+    padding-bottom: 7px !important;
+    font-size: 28px !important;  /* Keep same size */
+}   
 
 /* Secondary workspace button - white with grey border */
 .secondary-workspace-btn {

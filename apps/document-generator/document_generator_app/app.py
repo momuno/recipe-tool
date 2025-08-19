@@ -2809,20 +2809,14 @@ def create_app():
                 with gr.Column(scale=1, elem_classes="workspace-col"):
                     with gr.Row(elem_classes="square-btn-row"):
                         ai_btn = gr.Button("+ Add Section", elem_classes="add-section-btn", size="sm")
-                        # Add spacer to push collapse/expand buttons to the right
+                        # Add spacer to push collapse/expand button to the right
                         gr.HTML("<div style='flex: 1;'></div>")
-                        # Collapse all button (same chevron as content blocks, rotated)
-                        collapse_all_btn = gr.Button(
-                            "⌵",
-                            elem_classes="collapse-all-btn workspace-collapse-btn",
-                            elem_id="collapse-all-btn",
-                            size="sm",
-                        )
-                        # Expand all button (same chevron as content blocks)
-                        expand_all_btn = gr.Button(
-                            "⌵",
-                            elem_classes="expand-all-btn workspace-collapse-btn",
-                            elem_id="expand-all-btn",
+                        # Single toggle button that reflects current state
+                        # Shows double angle quote rotated to point down or up
+                        workspace_collapse_btn = gr.Button(
+                            "»",  # Double angle quote, rotation handled by CSS
+                            elem_classes="workspace-collapse-btn collapse-mode",  # Start in collapse mode (pointing up)
+                            elem_id="workspace-collapse-btn",
                             size="sm",
                         )
 
@@ -3077,17 +3071,44 @@ def create_app():
             outline, json_str = regenerate_outline_from_state(title, description, resources, blocks)
             return blocks, outline, json_str
 
-        # Helper function to collapse all blocks
-        def collapse_all_blocks(blocks):
+        # Helper function to update button state based on blocks
+        def update_collapse_button_state(blocks):
+            """Update the collapse/expand button to reflect current block states."""
+            # Check if any block is expanded (collapsed = False)
+            any_expanded = any(not block.get("collapsed", False) for block in blocks if block)
+            
+            if any_expanded:
+                # Some sections open - show up pointing (rotated -90deg)
+                return gr.update(value="»", elem_classes="workspace-collapse-btn collapse-mode")
+            else:
+                # All sections closed - show down pointing (rotated 90deg)
+                return gr.update(value="»", elem_classes="workspace-collapse-btn")
+        
+        # Helper function to toggle all blocks
+        def toggle_all_blocks(blocks):
+            """Toggle between expand all and collapse all based on current state.
+            If ANY block is expanded, collapse all. If ALL are collapsed, expand all."""
+            # Check if any block is expanded (collapsed = False)
+            any_expanded = any(not block.get("collapsed", False) for block in blocks if block)
+            
+            # If any block is expanded, collapse all; otherwise expand all
             for block in blocks:
-                block["collapsed"] = True
-            return blocks
-
-        # Helper function to expand all blocks
-        def expand_all_blocks(blocks):
-            for block in blocks:
-                block["collapsed"] = False
-            return blocks
+                block["collapsed"] = any_expanded
+            
+            # Update button to reflect NEW state after toggle
+            # After toggling: if we collapsed all (any_expanded was True), now all are collapsed
+            # After toggling: if we expanded all (any_expanded was False), now some are expanded
+            new_state_all_collapsed = any_expanded  # If any were expanded, we collapsed them all
+            
+            if new_state_all_collapsed:
+                # All sections now closed - show down chevron (normal)
+                elem_classes = "workspace-collapse-btn"
+            else:
+                # Some sections now open - show up chevron (rotated)
+                elem_classes = "workspace-collapse-btn collapse-mode"
+            
+            # Always use double angle quote, rotation is handled by CSS
+            return blocks, gr.update(value="»", elem_classes=elem_classes)
 
         # Connect button click to add AI block
         ai_btn.click(
@@ -3102,14 +3123,15 @@ def create_app():
             outputs=[blocks_state, outline_state, json_output],
         ).then(fn=render_blocks, inputs=[blocks_state, focused_block_state], outputs=blocks_display)
 
-        # Connect collapse all button
-        collapse_all_btn.click(fn=collapse_all_blocks, inputs=[blocks_state], outputs=[blocks_state]).then(
-            fn=render_blocks, inputs=[blocks_state, focused_block_state], outputs=blocks_display
-        )
-
-        # Connect expand all button
-        expand_all_btn.click(fn=expand_all_blocks, inputs=[blocks_state], outputs=[blocks_state]).then(
-            fn=render_blocks, inputs=[blocks_state, focused_block_state], outputs=blocks_display
+        # Connect workspace collapse/expand toggle button
+        workspace_collapse_btn.click(
+            fn=toggle_all_blocks, 
+            inputs=[blocks_state], 
+            outputs=[blocks_state, workspace_collapse_btn]
+        ).then(
+            fn=render_blocks, 
+            inputs=[blocks_state, focused_block_state], 
+            outputs=blocks_display
         )
 
         # Connect button click to add Text block
@@ -3135,11 +3157,13 @@ def create_app():
             outputs=[blocks_state, outline_state, json_output],
         ).then(fn=set_focused_block, inputs=update_block_id, outputs=focused_block_state)
 
-        # Toggle collapse handler
+        # Toggle collapse handler - also update the collapse/expand all button
         toggle_trigger.click(
             fn=toggle_block_collapse, inputs=[blocks_state, toggle_block_id], outputs=blocks_state
         ).then(fn=set_focused_block, inputs=toggle_block_id, outputs=focused_block_state).then(
             fn=render_blocks, inputs=[blocks_state, toggle_block_id], outputs=blocks_display
+        ).then(
+            fn=update_collapse_button_state, inputs=[blocks_state], outputs=workspace_collapse_btn
         )
 
         # Update heading handler

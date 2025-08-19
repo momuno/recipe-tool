@@ -2540,6 +2540,12 @@ function setupDownloadDropdown() {
     });
 }
 
+// Set up observer for workspace collapse button changes
+// No longer needed since we handle the class in Python
+function setupWorkspaceCollapseObserver() {
+    // Empty function kept for compatibility
+}
+
 // Debounce timer for resource titles
 let titleDebounceTimers = {};
 
@@ -3465,6 +3471,10 @@ document.addEventListener('DOMContentLoaded', function () {
     console.log('Called setupExampleSelection()');
     setupDownloadDropdown();
     console.log('Called setupDownloadDropdown()');
+    
+    // Set up observer for workspace collapse button changes
+    setupWorkspaceCollapseObserver();
+    console.log('Called setupWorkspaceCollapseObserver()');
 
     // Delay initial drag and drop setup
     setTimeout(() => {
