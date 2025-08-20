@@ -2510,15 +2510,15 @@ function setupDownloadDropdown() {
                         if (downloadTrigger) {
                             downloadTrigger.click();
                             
-                            // After format is set, trigger the actual download button
+                            // After format is set, trigger the hidden download button
                             setTimeout(() => {
-                                const downloadBtn = document.getElementById('download-btn-id');
-                                if (downloadBtn) {
+                                const hiddenDownloadBtn = document.getElementById('hidden-download-btn');
+                                if (hiddenDownloadBtn) {
                                     // Find the actual button element (might be nested)
-                                    const actualBtn = downloadBtn.querySelector('button') || downloadBtn;
+                                    const actualBtn = hiddenDownloadBtn.querySelector('button') || hiddenDownloadBtn;
                                     if (actualBtn) {
                                         actualBtn.click();
-                                        console.log('Triggered download button click');
+                                        console.log('Triggered hidden download button click');
                                     }
                                 }
                             }, 100);
