@@ -3037,10 +3037,10 @@ def create_app():
                         # Hidden components for download functionality
                         docx_file_path = gr.State(None)
                         markdown_file_path = gr.State(None)
-                        download_format_trigger = gr.Button(visible=False, elem_id="download-format-trigger")
-                        download_format_input = gr.Textbox(visible=False, elem_id="download-format-input")
+                        download_format_trigger = gr.Button(visible=True, elem_id="download-format-trigger", elem_classes="hidden-component")
+                        download_format_input = gr.Textbox(visible=True, elem_id="download-format-input", elem_classes="hidden-component")
                         # Hidden download button for actual downloads
-                        save_doc_btn = gr.DownloadButton(visible=False, elem_id="hidden-download-btn")
+                        save_doc_btn = gr.DownloadButton(visible=True, elem_id="hidden-download-btn", elem_classes="hidden-component")
 
                     # Debug panel for JSON display (collapsible)
                     with gr.Column(elem_classes="debug-panel", elem_id="debug-panel-container"):

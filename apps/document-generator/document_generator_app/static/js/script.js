@@ -2488,56 +2488,173 @@ function setupExampleSelection() {
 
 // Setup download dropdown functionality
 function setupDownloadDropdown() {
+    console.log('=== DOWNLOAD DROPDOWN SETUP START ===');
     const downloadItems = document.querySelectorAll('.download-dropdown-item');
+    console.log('Found download dropdown items:', downloadItems.length);
     
-    downloadItems.forEach(item => {
+    // Log each item found
+    downloadItems.forEach((item, index) => {
+        console.log(`Item ${index}: data-format="${item.getAttribute('data-format')}", text="${item.textContent}"`);
+    });
+    
+    downloadItems.forEach((item, index) => {
+        // Check if already has listener
+        if (item.dataset.listenerAttached === 'true') {
+            console.log(`Item ${index} already has listener, skipping`);
+            return; // Skip if already has listener
+        }
+        
+        item.dataset.listenerAttached = 'true'; // Mark as having listener
+        console.log(`Attaching click listener to item ${index}`);
+        
         item.addEventListener('click', function(e) {
-            e.stopPropagation();
-            const format = this.getAttribute('data-format');
-            console.log('Selected download format:', format);
+            console.log('=== DOWNLOAD ITEM CLICKED ===');
+            console.log('Event type:', e.type);
+            console.log('Target element:', e.target);
+            console.log('Current target:', e.currentTarget);
             
-            // Set the format in hidden input
-            const formatInput = document.getElementById('download-format-input');
+            e.preventDefault();
+            e.stopPropagation();
+            
+            const format = this.getAttribute('data-format');
+            console.log('Format attribute value:', format);
+            
+            // Log all IDs we're looking for (local environment)
+            console.log('Looking for element IDs:');
+            console.log('- download-format-input:', document.getElementById('download-format-input'));
+            console.log('- download-format-trigger:', document.getElementById('download-format-trigger'));
+            console.log('- hidden-download-btn:', document.getElementById('hidden-download-btn'));
+            
+            // Set the format in hidden input - Gradio may change IDs in production
+            let formatInput = document.getElementById('download-format-input');
+            
+            // If not found by ID, search for the Gradio textbox component
+            if (!formatInput) {
+                console.log('Format input not found by ID.');
+            }
+            
             if (formatInput) {
-                const textarea = formatInput.querySelector('textarea') || formatInput.querySelector('input[type="text"]');
+                console.log('Found format input element');
+                console.log('Format input tagName:', formatInput.tagName);
+                console.log('Format input className:', formatInput.className);
+                
+                // Gradio textbox can have textarea or input nested inside
+                let textarea = formatInput.querySelector('textarea') || 
+                              formatInput.querySelector('input[type="text"]') ||
+                              formatInput.querySelector('input');
+                              
+                // Sometimes the gradio-textbox itself contains the value property
+                if (!textarea && formatInput.classList && formatInput.classList.contains('gradio-textbox')) {
+                    // Look deeper in the Gradio structure
+                    const wrapper = formatInput.querySelector('.wrap');
+                    if (wrapper) {
+                        textarea = wrapper.querySelector('textarea') || wrapper.querySelector('input');
+                    }
+                }
+                
+                console.log('Found textarea/input:', textarea);
+                
                 if (textarea) {
+                    console.log('Found textarea/input, current value:', textarea.value);
                     textarea.value = format;
+                    console.log('Set new value:', textarea.value);
+                    
+                    // Try multiple event types
+                    console.log('Dispatching input event');
                     textarea.dispatchEvent(new Event('input', { bubbles: true }));
+                    console.log('Dispatching change event');
+                    textarea.dispatchEvent(new Event('change', { bubbles: true }));
                     
                     // Trigger the format selection handler
+                    console.log('Waiting 200ms before clicking trigger...');
                     setTimeout(() => {
-                        const downloadTrigger = document.getElementById('download-format-trigger');
+                        console.log('Looking for download trigger button');
+                        let downloadTrigger = document.getElementById('download-format-trigger');
+                        
+                        // If not found by ID, search for hidden button
+                        if (!downloadTrigger) {
+                            console.log('Trigger not found by ID, searching for hidden buttons');
+                            const hiddenButtons = document.querySelectorAll('button[style*="display: none"], .gradio-button[style*="display: none"]');
+                            console.log('Found hidden buttons:', hiddenButtons.length);
+                            // Look for a button that's not the download button
+                            for (let btn of hiddenButtons) {
+                                if (!btn.id?.includes('download-btn') && !btn.classList.contains('download')) {
+                                    console.log('Found potential trigger button:', btn.id || btn.className);
+                                    downloadTrigger = btn;
+                                    break;
+                                }
+                            }
+                        }
+                        
                         if (downloadTrigger) {
+                            console.log('Found trigger button, clicking it');
                             downloadTrigger.click();
+                            console.log('Trigger clicked, waiting 200ms for download button...');
                             
                             // After format is set, trigger the hidden download button
                             setTimeout(() => {
-                                const hiddenDownloadBtn = document.getElementById('hidden-download-btn');
-                                if (hiddenDownloadBtn) {
-                                    // Find the actual button element (might be nested)
-                                    const actualBtn = hiddenDownloadBtn.querySelector('button') || hiddenDownloadBtn;
-                                    if (actualBtn) {
-                                        actualBtn.click();
-                                        console.log('Triggered hidden download button click');
+                                console.log('Looking for hidden download button');
+                                let hiddenDownloadBtn = document.getElementById('hidden-download-btn');
+                                
+                                // If not found by ID, search for Gradio download button
+                                if (!hiddenDownloadBtn) {
+                                    console.log('Download button not found by ID, searching for Gradio download buttons');
+                                    // Look for hidden download button components
+                                    const downloadButtons = document.querySelectorAll('.gradio-downloadbutton[style*="display: none"], [class*="download"][style*="display: none"]');
+                                    console.log('Found hidden download buttons:', downloadButtons.length);
+                                    if (downloadButtons.length > 0) {
+                                        hiddenDownloadBtn = downloadButtons[0];
+                                        console.log('Using first hidden download button');
                                     }
                                 }
-                            }, 100);
+                                
+                                if (hiddenDownloadBtn) {
+                                    console.log('Found hidden download button container');
+                                    // Find the actual button element (might be nested)
+                                    const actualBtn = hiddenDownloadBtn.querySelector('button') || hiddenDownloadBtn;
+                                    console.log('Actual button element:', actualBtn);
+                                    if (actualBtn) {
+                                        console.log('Clicking actual download button');
+                                        actualBtn.click();
+                                        console.log('Download button clicked successfully');
+                                    } else {
+                                        console.error('ERROR: Could not find actual button in hidden download button');
+                                    }
+                                } else {
+                                    console.error('ERROR: Could not find hidden download button by ID');
+                                }
+                            }, 200);
+                        } else {
+                            console.error('ERROR: Could not find download format trigger by ID');
                         }
-                    }, 100);
+                    }, 200);
+                } else {
+                    console.error('ERROR: Could not find textarea/input inside format input');
+                    console.log('Format input innerHTML:', formatInput.innerHTML);
                 }
+            } else {
+                console.error('ERROR: Could not find download format input by ID');
             }
             
             // Hide dropdown after selection
             const dropdown = document.getElementById('download-dropdown-id');
             if (dropdown) {
+                console.log('Hiding dropdown');
                 dropdown.style.display = 'none';
                 // Re-show on next hover
                 setTimeout(() => {
                     dropdown.style.removeProperty('display');
+                    console.log('Dropdown display reset');
                 }, 300);
+            } else {
+                console.log('No dropdown found to hide');
             }
+            
+            console.log('=== DOWNLOAD ITEM CLICK HANDLER END ===');
         });
     });
+    
+    console.log('=== DOWNLOAD DROPDOWN SETUP COMPLETE ===');
 }
 
 // Set up observer for workspace collapse button changes
@@ -3261,24 +3378,17 @@ function setupDraftTabFileUpload() {
     
     // Function to replace the draft tab text
     function replaceDraftTabText() {
-        console.log('🔍 replaceDraftTabText() called');
         const draftFileUpload = document.querySelector('.start-file-upload-dropzone');
-        console.log('📁 Found start-file-upload-dropzone:', !!draftFileUpload);
 
         if (draftFileUpload) {
             const wrapDivs = draftFileUpload.querySelectorAll('.wrap');
-            console.log('📦 Found wrap divs:', wrapDivs.length);
             
             wrapDivs.forEach((wrapDiv, index) => {
-                console.log(`📝 Wrap div ${index} text:`, wrapDiv.textContent);
                 
                 if (wrapDiv.textContent.includes('Drop File Here')) {
-                    console.log('✅ Found "Drop File Here" in wrap div', index);
                     wrapDiv.childNodes.forEach((node, nodeIndex) => {
                         if (node.nodeType === Node.TEXT_NODE && node.textContent.includes('Drop File Here')) {
-                            console.log(`🔄 Replacing text in node ${nodeIndex}:`, node.textContent);
                             node.textContent = node.textContent.replace('Drop File Here', 'Drop Word or Text File Here');
-                            console.log(`✨ New text:`, node.textContent);
                         }
                     });
                 } else {
@@ -3291,53 +3401,7 @@ function setupDraftTabFileUpload() {
     }
 
     // Try to replace immediately in case it's already visible
-    console.log('🚀 Running initial replaceDraftTabText()');
     replaceDraftTabText();
-
-    // Watch for the entire document body for changes since the draft tab components appear dynamically
-    const observer = new MutationObserver((mutations) => {
-        console.log('👀 MutationObserver triggered, mutations:', mutations.length);
-        
-        mutations.forEach((mutation, mutIndex) => {
-            console.log(`🔄 Mutation ${mutIndex} type: ${mutation.type}`);
-            
-            if (mutation.type === 'childList') {
-                console.log(`📝 childList - added: ${mutation.addedNodes.length}, removed: ${mutation.removedNodes.length}`);
-                
-                // Check if any added nodes contain file upload components
-                mutation.addedNodes.forEach((node, nodeIndex) => {
-                    if (node.nodeType === Node.ELEMENT_NODE) {
-                        console.log(`🧩 Added Node ${nodeIndex}:`, node.tagName, node.className);
-                        
-                        // Check if this node or its children contain the file upload dropzone
-                        if (node.classList && node.classList.contains('file-upload-dropzone')) {
-                            console.log('🎯 Found file-upload-dropzone as added node!');
-                            setTimeout(replaceDraftTabText, 100);
-                        } else if (node.querySelector && node.querySelector('.file-upload-dropzone')) {
-                            console.log('🎯 Found file-upload-dropzone inside added node!');
-                            setTimeout(replaceDraftTabText, 100);
-                        }
-                    } else {
-                        console.log(`📄 Added text node ${nodeIndex}:`, node.textContent?.substring(0, 50));
-                    }
-                });
-            } else if (mutation.type === 'attributes') {
-                console.log(`🏷️ Attribute change on:`, mutation.target.tagName, mutation.target.className, 'attr:', mutation.attributeName);
-                
-                // Check if visibility/style attributes changed on file upload elements
-                if (mutation.target.classList && mutation.target.classList.contains('file-upload-dropzone')) {
-                    console.log('🎯 File upload dropzone attribute changed!');
-                    setTimeout(replaceDraftTabText, 100);
-                } else if (mutation.target.querySelector && mutation.target.querySelector('.file-upload-dropzone')) {
-                    console.log('🎯 Element with file upload dropzone had attribute change!');
-                    setTimeout(replaceDraftTabText, 100);
-                }
-            }
-        });
-        
-        // Also try replacing text after any mutation
-        setTimeout(replaceDraftTabText, 200);
-    });
 
     // Observe the entire document body for changes
     observer.observe(document.body, {
@@ -3346,12 +3410,10 @@ function setupDraftTabFileUpload() {
         attributes: true,
         attributeFilter: ['class', 'style', 'hidden']
     });
-    console.log('👁️ MutationObserver started on document.body');
 
     // Cleanup observer after a reasonable time to avoid memory leaks
     setTimeout(() => {
         observer.disconnect();
-        console.log('🛑 MutationObserver disconnected after 30 seconds');
     }, 30000); // 30 seconds
 }
 
