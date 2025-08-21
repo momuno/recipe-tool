@@ -15,7 +15,7 @@ dependencies = [
     "python-dotenv>=1.1.0",
     "python-liquid>=2.0.1",
     "pyyaml>=6.0.2",
-    "docpack-file @ git+https://github.com/robotdad/recipe-tool.git#subdirectory=docpack-file",
+    "docpack-file>=0.1.0",
 ]
 
 [project.scripts]

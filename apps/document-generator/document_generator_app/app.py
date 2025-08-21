@@ -2,7 +2,6 @@ import argparse
 import asyncio
 import json
 import os
-import subprocess
 import tempfile
 import time
 import uuid
@@ -27,12 +26,65 @@ IS_DEV_MODE = False
 
 # Supported file types for uploads
 SUPPORTED_FILE_TYPES = [
-    ".txt", ".md", ".py", ".c", ".cpp", ".h", ".java", ".js", ".ts", ".jsx", ".tsx",
-    ".json", ".xml", ".yaml", ".yml", ".toml", ".ini", ".cfg", ".conf", ".sh", ".bash",
-    ".zsh", ".fish", ".ps1", ".bat", ".cmd", ".rs", ".go", ".rb", ".php", ".pl", ".lua",
-    ".r", ".m", ".swift", ".kt", ".scala", ".clj", ".ex", ".exs", ".elm", ".fs", ".ml",
-    ".sql", ".html", ".htm", ".css", ".scss", ".sass", ".less", ".vue", ".svelte", ".astro",
-    ".tex", ".rst", ".adoc", ".org", ".csv", ".docx"
+    ".txt",
+    ".md",
+    ".py",
+    ".c",
+    ".cpp",
+    ".h",
+    ".java",
+    ".js",
+    ".ts",
+    ".jsx",
+    ".tsx",
+    ".json",
+    ".xml",
+    ".yaml",
+    ".yml",
+    ".toml",
+    ".ini",
+    ".cfg",
+    ".conf",
+    ".sh",
+    ".bash",
+    ".zsh",
+    ".fish",
+    ".ps1",
+    ".bat",
+    ".cmd",
+    ".rs",
+    ".go",
+    ".rb",
+    ".php",
+    ".pl",
+    ".lua",
+    ".r",
+    ".m",
+    ".swift",
+    ".kt",
+    ".scala",
+    ".clj",
+    ".ex",
+    ".exs",
+    ".elm",
+    ".fs",
+    ".ml",
+    ".sql",
+    ".html",
+    ".htm",
+    ".css",
+    ".scss",
+    ".sass",
+    ".less",
+    ".vue",
+    ".svelte",
+    ".astro",
+    ".tex",
+    ".rst",
+    ".adoc",
+    ".org",
+    ".csv",
+    ".docx",
 ]
 
 
@@ -40,11 +92,11 @@ def markdown_to_docx(markdown_content: str, output_path: str) -> str:
     """Convert markdown content to docx file and return the output path."""
     try:
         pypandoc.convert_text(
-            markdown_content, 
-            'docx', 
-            format='md',
+            markdown_content,
+            "docx",
+            format="md",
             outputfile=output_path,
-            extra_args=['--extract-media=.']  # Extract images to current directory
+            extra_args=["--extract-media=."],  # Extract images to current directory
         )
         return output_path
     except Exception as e:
@@ -57,6 +109,7 @@ def check_docx_protected(docx_path: str) -> tuple[bool, str]:
     """
     try:
         from docx import Document
+
         filename = os.path.basename(docx_path)
         # Try to open the document
         doc = Document(docx_path)
@@ -67,10 +120,8 @@ def check_docx_protected(docx_path: str) -> tuple[bool, str]:
         error_msg = str(e).lower()
         filename = os.path.basename(docx_path)
         # Check for common security/encryption error messages
-        if any(term in error_msg for term in ['package not found']):
-            return True, (
-                f"Document '{filename}' appears to be protected or encrypted and cannot be processed."
-            )
+        if any(term in error_msg for term in ["package not found"]):
+            return True, (f"Document '{filename}' appears to be protected or encrypted and cannot be processed.")
         else:
             # Some other error, but not protection-related
             return False, f"Document '{filename}' may have issues: {str(e)}"
@@ -81,23 +132,20 @@ def docx_to_text(docx_path: str) -> str:
     try:
         doc = Document(docx_path)
         paragraphs = []
-        
+
         for paragraph in doc.paragraphs:
             if paragraph.text.strip():  # Only add non-empty paragraphs
                 paragraphs.append(paragraph.text.strip())
-        
-        return '\n\n'.join(paragraphs)
+
+        return "\n\n".join(paragraphs)
     except Exception as e:
         error_msg = str(e).lower()
         filename = os.path.basename(docx_path)
         # Check for common security/encryption error messages
-        if any(term in error_msg for term in ['package not found']):
-            raise Exception(
-                f"Document '{filename}' may be protected or encrypted and cannot be processed."
-            )
+        if any(term in error_msg for term in ["package not found"]):
+            raise Exception(f"Document '{filename}' may be protected or encrypted and cannot be processed.")
         else:
             raise Exception(f"Failed to extract text from '{filename}': {str(e)}")
-
 
 
 def json_to_outline(json_data: Dict[str, Any]) -> Outline:
@@ -439,14 +487,29 @@ async def handle_document_generation(title, description, resources, blocks, sess
         # Generate the document
         generated_content = await generate_document(outline, session_id, IS_DEV_MODE)
 
-        # Save markdown to temporary file for download as docx
-        docx_filename = f"{title}.docx" if title else "document.docx"
-        docx_file_path = os.path.join(temp_dir, docx_filename)
-        
-        # Convert markdown to docx
-        markdown_to_docx(generated_content, docx_file_path)
+        # Save both DOCX and Markdown versions
+        base_filename = title if title else "document"
 
-        return json_str, generated_content, docx_file_path, docx_filename
+        # Save as DOCX
+        docx_filename = f"{base_filename}.docx"
+        docx_file_path = os.path.join(temp_dir, docx_filename)
+        markdown_to_docx(generated_content, docx_file_path)
+        print(f"DEBUG: Created DOCX file at: {docx_file_path}")
+
+        # Save as Markdown
+        markdown_filename = f"{base_filename}.md"
+        markdown_file_path = os.path.join(temp_dir, markdown_filename)
+        with open(markdown_file_path, "w", encoding="utf-8") as f:
+            f.write(generated_content)
+        print(f"DEBUG: Created Markdown file at: {markdown_file_path}")
+
+        # Verify files exist
+        if os.path.exists(docx_file_path):
+            print(f"DEBUG: DOCX file exists, size: {os.path.getsize(docx_file_path)} bytes")
+        if os.path.exists(markdown_file_path):
+            print(f"DEBUG: Markdown file exists, size: {os.path.getsize(markdown_file_path)} bytes")
+
+        return json_str, generated_content, docx_file_path, markdown_file_path
 
     except Exception as e:
         error_msg = f"Error generating document: {str(e)}"
@@ -660,7 +723,7 @@ def update_block_resources(blocks, block_id, resource_json, title, description, 
                 # Auto-load the file content into the text block
                 try:
                     file_path = resource_data["path"]
-                    if file_path.lower().endswith('.docx'):
+                    if file_path.lower().endswith(".docx"):
                         # Extract text from docx file
                         block["content"] = docx_to_text(file_path)
                     else:
@@ -1573,7 +1636,7 @@ def handle_start_file_upload(files, current_resources):
             file_size = os.path.getsize(file_path)
 
             # Check if it's a docx file and if it's protected
-            if file_path.lower().endswith('.docx'):
+            if file_path.lower().endswith(".docx"):
                 is_protected, error_msg = check_docx_protected(file_path)
                 if is_protected:
                     warnings.append(error_msg)
@@ -1598,6 +1661,7 @@ def handle_start_file_upload(files, current_resources):
     # Create warning message if there were any protected files
     if warnings:
         import random
+
         warning_id = f"warning_{random.randint(1000, 9999)}"
         warning_html = f"""
         <div id="{warning_id}" style='position: relative; color: #dc2626; background: #fee2e2; padding: 8px 30px 8px 12px; border-radius: 4px; margin-top: 8px; font-size: 14px;'>
@@ -1610,7 +1674,7 @@ def handle_start_file_upload(files, current_resources):
         </div>
         """
         return new_resources, None, gr.update(value=warning_html, visible=True)
-    
+
     return new_resources, None, gr.update(visible=False)
 
 
@@ -1648,14 +1712,14 @@ async def handle_start_draft_click(prompt, resources, session_id=None):
             gr.update(),  # save_doc_btn
             gr.update(),  # switch_tab_trigger
             gr.update(
-                value=f'''<div id="prompt_error" style="position: relative; color: #dc2626; padding: 8px 30px 8px 12px; background: #fee2e2; border-radius: 4px; margin-top: 8px; font-size: 14px;">
+                value=f"""<div id="prompt_error" style="position: relative; color: #dc2626; padding: 8px 30px 8px 12px; background: #fee2e2; border-radius: 4px; margin-top: 8px; font-size: 14px;">
                     <button onclick="document.getElementById('prompt_error').style.display='none'" 
                             style="position: absolute; top: 4px; right: 5px; background: none; border: none; color: #dc2626; font-size: 18px; cursor: pointer; padding: 0 5px; opacity: 0.6;" 
                             onmouseover="this.style.opacity='1'" 
                             onmouseout="this.style.opacity='0.6'"
                             title="Close">×</button>
                     {error_msg}
-                </div>''',
+                </div>""",
                 visible=True,
             ),  # start_error_message
             gr.update(),  # start_prompt_input - no change
@@ -1799,14 +1863,14 @@ async def handle_start_draft_click(prompt, resources, session_id=None):
                 gr.update(),  # save_doc_btn
                 gr.update(),  # switch_tab_trigger
                 gr.update(
-                    value=f'''<div id="outline_error" style="position: relative; color: #dc2626; padding: 8px 30px 8px 12px; background: #fee2e2; border-radius: 4px; margin-top: 8px; font-size: 14px;">
+                    value=f"""<div id="outline_error" style="position: relative; color: #dc2626; padding: 8px 30px 8px 12px; background: #fee2e2; border-radius: 4px; margin-top: 8px; font-size: 14px;">
                         <button onclick="document.getElementById('outline_error').style.display='none'" 
                                 style="position: absolute; top: 4px; right: 5px; background: none; border: none; color: #dc2626; font-size: 18px; cursor: pointer; padding: 0 5px; opacity: 0.6;" 
                                 onmouseover="this.style.opacity='1'" 
                                 onmouseout="this.style.opacity='0.6'"
                                 title="Close">×</button>
                         {error_msg}
-                    </div>''',
+                    </div>""",
                     visible=True,
                 ),  # start_error_message
                 gr.update(lines=4, max_lines=10),  # start_prompt_input - preserve lines
@@ -1833,14 +1897,14 @@ async def handle_start_draft_click(prompt, resources, session_id=None):
             gr.update(),  # save_doc_btn
             gr.update(),  # switch_tab_trigger
             gr.update(
-                value=f'''<div id="exception_error" style="position: relative; color: #dc2626; padding: 8px 30px 8px 12px; background: #fee2e2; border-radius: 4px; margin-top: 8px; font-size: 14px;">
+                value=f"""<div id="exception_error" style="position: relative; color: #dc2626; padding: 8px 30px 8px 12px; background: #fee2e2; border-radius: 4px; margin-top: 8px; font-size: 14px;">
                     <button onclick="document.getElementById('exception_error').style.display='none'" 
                             style="position: absolute; top: 4px; right: 5px; background: none; border: none; color: #dc2626; font-size: 18px; cursor: pointer; padding: 0 5px; opacity: 0.6;" 
                             onmouseover="this.style.opacity='1'" 
                             onmouseout="this.style.opacity='0.6'"
                             title="Close">×</button>
                     {error_msg}
-                </div>''',
+                </div>""",
                 visible=True,
             ),  # start_error_message
             gr.update(),  # start_prompt_input
@@ -1874,9 +1938,9 @@ def handle_file_upload(files, current_resources, title, description, blocks, ses
             import shutil
 
             file_name = os.path.basename(file_path)
-            
+
             # Check if it's a docx file and if it's protected
-            if file_path.lower().endswith('.docx'):
+            if file_path.lower().endswith(".docx"):
                 is_protected, error_msg = check_docx_protected(file_path)
                 if is_protected:
                     warnings.append(error_msg)
@@ -1912,6 +1976,7 @@ def handle_file_upload(files, current_resources, title, description, blocks, ses
     # Create warning message if there were any protected files
     if warnings:
         import random
+
         warning_id = f"warning_{random.randint(1000, 9999)}"
         warning_html = f"""
         <div id="{warning_id}" style='position: relative; color: #dc2626; background: #fee2e2; padding: 10px 30px 10px 12px; border-radius: 4px; margin: 10px 0;'>
@@ -1927,7 +1992,7 @@ def handle_file_upload(files, current_resources, title, description, blocks, ses
         warning_update = gr.update(value=warning_html, visible=True)
     else:
         warning_update = gr.update(visible=False)
-    
+
     return (
         new_resources,
         None,  # Clear file upload
@@ -2019,10 +2084,11 @@ def replace_resource_file_gradio(resources, old_resource_path, new_file, title, 
 
     try:
         # Check if the new file is a protected docx
-        if new_file.name.lower().endswith('.docx'):
+        if new_file.name.lower().endswith(".docx"):
             is_protected, error_msg = check_docx_protected(new_file.name)
             if is_protected:
                 import random
+
                 warning_id = f"warning_{random.randint(1000, 9999)}"
                 warning_html = f"""
                 <div id="{warning_id}" style='position: relative; color: #dc2626; background: #fee2e2; padding: 8px 25px 8px 8px; border-radius: 4px; margin: 5px 0; font-size: 13px;'>
@@ -2035,7 +2101,7 @@ def replace_resource_file_gradio(resources, old_resource_path, new_file, title, 
                 </div>
                 """
                 return resources, None, "{}", None, gr.update(value=warning_html, visible=True)
-        
+
         # Get or create session
         if not session_id:
             session_id = str(uuid.uuid4())
@@ -2090,7 +2156,7 @@ def replace_resource_file_gradio(resources, old_resource_path, new_file, title, 
                                 # If it's a text block, reload the content
                                 if block["type"] == "text":
                                     try:
-                                        if dest_path.lower().endswith('.docx'):
+                                        if dest_path.lower().endswith(".docx"):
                                             # Extract text from docx file
                                             block["content"] = docx_to_text(dest_path)
                                         else:
@@ -2111,6 +2177,7 @@ def replace_resource_file_gradio(resources, old_resource_path, new_file, title, 
     except Exception as e:
         print(f"Error replacing resource file: {e}")
         import random
+
         warning_id = f"warning_{random.randint(1000, 9999)}"
         # Check if it's a protection error
         if "protected or encrypted" in str(e):
@@ -2262,7 +2329,7 @@ def create_app():
                                 show_label=False,
                                 height=90,
                             )
-                            
+
                             # Warning message for protected files
                             start_upload_warning = gr.HTML(visible=False)
 
@@ -2572,7 +2639,7 @@ def create_app():
                         height=90,
                         show_label=False,
                     )
-                    
+
                     # Warning message for protected files - placed before the render area
                     file_upload_warning = gr.HTML(visible=False, elem_classes="file-upload-warning")
 
@@ -2635,7 +2702,7 @@ def create_app():
                                             scale=1,
                                             show_label=False,
                                         )
-                                        
+
                                         # Warning message for protected files
                                         replace_warning = gr.HTML(visible=False)
 
@@ -2722,7 +2789,13 @@ def create_app():
                                                 blocks_state,
                                                 session_state,
                                             ],
-                                            outputs=[resources_state, outline_state, json_output, replace_file, replace_warning],
+                                            outputs=[
+                                                resources_state,
+                                                outline_state,
+                                                json_output,
+                                                replace_file,
+                                                replace_warning,
+                                            ],
                                         ).then(
                                             # Force JSON update after resources render
                                             fn=lambda title, desc, res, blocks: regenerate_outline_from_state(
@@ -2736,21 +2809,15 @@ def create_app():
                 with gr.Column(scale=1, elem_classes="workspace-col"):
                     with gr.Row(elem_classes="square-btn-row"):
                         ai_btn = gr.Button("+ Add Section", elem_classes="add-section-btn", size="sm")
-                        # Add spacer to push collapse/expand buttons to the right
+                        # Add spacer to push collapse/expand button to the right
                         gr.HTML("<div style='flex: 1;'></div>")
-                        # Collapse all button (same chevron as content blocks, rotated)
-                        collapse_all_btn = gr.Button(
-                            "⌵", 
-                            elem_classes="collapse-all-btn workspace-collapse-btn",
-                            elem_id="collapse-all-btn",
-                            size="sm"
-                        )
-                        # Expand all button (same chevron as content blocks) 
-                        expand_all_btn = gr.Button(
-                            "⌵",
-                            elem_classes="expand-all-btn workspace-collapse-btn", 
-                            elem_id="expand-all-btn",
-                            size="sm"
+                        # Single toggle button that reflects current state
+                        # Shows double angle quote rotated to point down or up
+                        workspace_collapse_btn = gr.Button(
+                            "»",  # Double angle quote, rotation handled by CSS
+                            elem_classes="workspace-collapse-btn collapse-mode",  # Start in collapse mode (pointing up)
+                            elem_id="workspace-collapse-btn",
+                            size="sm",
                         )
 
                     # Workspace panel for stacking content blocks
@@ -2931,19 +2998,32 @@ def create_app():
                 # Generated document column: Generate and Save Document buttons (aligned right)
                 with gr.Column(scale=1, elem_classes="generate-col"):
                     with gr.Row(elem_classes="generate-btn-row"):
-                        # Add empty space to push buttons to the right
-                        gr.HTML("<div style='flex: 1;'></div>")
                         generate_doc_btn = gr.Button(
                             "▷ Generate", elem_classes="generate-btn", variant="primary", size="sm"
                         )
-                        save_doc_btn = gr.DownloadButton(
-                            "Download",
-                            elem_classes="download-btn",
-                            variant="secondary",
-                            size="sm",
-                            visible=True,
-                            interactive=False,  # Disabled until document is generated
-                        )
+                        # Download button with dropdown container (like Template Examples)
+                        with gr.Column(elem_classes="download-container"):
+                            download_btn_display = gr.Button(
+                                "Download",
+                                elem_classes="download-btn",
+                                elem_id="download-btn-id",
+                                variant="secondary",
+                                size="sm",
+                                visible=True,
+                                interactive=False,  # Disabled until document is generated
+                            )
+                            # Dropdown menu (hidden by default via CSS)
+                            with gr.Column(elem_classes="download-dropdown", elem_id="download-dropdown-id"):
+                                gr.HTML("""
+                                    <div class="download-dropdown-item" data-format="docx">
+                                        <div class="download-title">DOCX</div>
+                                        <div class="download-desc">Word document format</div>
+                                    </div>
+                                    <div class="download-dropdown-item" data-format="markdown">
+                                        <div class="download-title">Markdown</div>
+                                        <div class="download-desc">Plain text with formatting</div>
+                                    </div>
+                                """)
 
                     # Generated document display panel
                     with gr.Column(elem_classes="generate-display"):
@@ -2953,6 +3033,14 @@ def create_app():
                             visible=True,
                         )
                         generated_content = gr.Markdown(visible=False)
+
+                        # Hidden components for download functionality
+                        docx_file_path = gr.State(None)
+                        markdown_file_path = gr.State(None)
+                        download_format_trigger = gr.Button(visible=True, elem_id="download-format-trigger", elem_classes="hidden-component")
+                        download_format_input = gr.Textbox(visible=True, elem_id="download-format-input", elem_classes="hidden-component")
+                        # Hidden download button for actual downloads
+                        save_doc_btn = gr.DownloadButton(visible=True, elem_id="hidden-download-btn", elem_classes="hidden-component")
 
                     # Debug panel for JSON display (collapsible)
                     with gr.Column(elem_classes="debug-panel", elem_id="debug-panel-container"):
@@ -2984,18 +3072,45 @@ def create_app():
             blocks = add_text_block(blocks, None)
             outline, json_str = regenerate_outline_from_state(title, description, resources, blocks)
             return blocks, outline, json_str
+
+        # Helper function to update button state based on blocks
+        def update_collapse_button_state(blocks):
+            """Update the collapse/expand button to reflect current block states."""
+            # Check if any block is expanded (collapsed = False)
+            any_expanded = any(not block.get("collapsed", False) for block in blocks if block)
+            
+            if any_expanded:
+                # Some sections open - show up pointing (rotated -90deg)
+                return gr.update(value="»", elem_classes="workspace-collapse-btn collapse-mode")
+            else:
+                # All sections closed - show down pointing (rotated 90deg)
+                return gr.update(value="»", elem_classes="workspace-collapse-btn")
         
-        # Helper function to collapse all blocks
-        def collapse_all_blocks(blocks):
+        # Helper function to toggle all blocks
+        def toggle_all_blocks(blocks):
+            """Toggle between expand all and collapse all based on current state.
+            If ANY block is expanded, collapse all. If ALL are collapsed, expand all."""
+            # Check if any block is expanded (collapsed = False)
+            any_expanded = any(not block.get("collapsed", False) for block in blocks if block)
+            
+            # If any block is expanded, collapse all; otherwise expand all
             for block in blocks:
-                block["collapsed"] = True
-            return blocks
-        
-        # Helper function to expand all blocks  
-        def expand_all_blocks(blocks):
-            for block in blocks:
-                block["collapsed"] = False
-            return blocks
+                block["collapsed"] = any_expanded
+            
+            # Update button to reflect NEW state after toggle
+            # After toggling: if we collapsed all (any_expanded was True), now all are collapsed
+            # After toggling: if we expanded all (any_expanded was False), now some are expanded
+            new_state_all_collapsed = any_expanded  # If any were expanded, we collapsed them all
+            
+            if new_state_all_collapsed:
+                # All sections now closed - show down chevron (normal)
+                elem_classes = "workspace-collapse-btn"
+            else:
+                # Some sections now open - show up chevron (rotated)
+                elem_classes = "workspace-collapse-btn collapse-mode"
+            
+            # Always use double angle quote, rotation is handled by CSS
+            return blocks, gr.update(value="»", elem_classes=elem_classes)
 
         # Connect button click to add AI block
         ai_btn.click(
@@ -3009,20 +3124,17 @@ def create_app():
             ],  # Always pass None for focused_block_id
             outputs=[blocks_state, outline_state, json_output],
         ).then(fn=render_blocks, inputs=[blocks_state, focused_block_state], outputs=blocks_display)
-        
-        # Connect collapse all button
-        collapse_all_btn.click(
-            fn=collapse_all_blocks,
-            inputs=[blocks_state],
-            outputs=[blocks_state]
-        ).then(fn=render_blocks, inputs=[blocks_state, focused_block_state], outputs=blocks_display)
-        
-        # Connect expand all button
-        expand_all_btn.click(
-            fn=expand_all_blocks,
-            inputs=[blocks_state],
-            outputs=[blocks_state]
-        ).then(fn=render_blocks, inputs=[blocks_state, focused_block_state], outputs=blocks_display)
+
+        # Connect workspace collapse/expand toggle button
+        workspace_collapse_btn.click(
+            fn=toggle_all_blocks, 
+            inputs=[blocks_state], 
+            outputs=[blocks_state, workspace_collapse_btn]
+        ).then(
+            fn=render_blocks, 
+            inputs=[blocks_state, focused_block_state], 
+            outputs=blocks_display
+        )
 
         # Connect button click to add Text block
 
@@ -3047,11 +3159,13 @@ def create_app():
             outputs=[blocks_state, outline_state, json_output],
         ).then(fn=set_focused_block, inputs=update_block_id, outputs=focused_block_state)
 
-        # Toggle collapse handler
+        # Toggle collapse handler - also update the collapse/expand all button
         toggle_trigger.click(
             fn=toggle_block_collapse, inputs=[blocks_state, toggle_block_id], outputs=blocks_state
         ).then(fn=set_focused_block, inputs=toggle_block_id, outputs=focused_block_state).then(
             fn=render_blocks, inputs=[blocks_state, toggle_block_id], outputs=blocks_display
+        ).then(
+            fn=update_collapse_button_state, inputs=[blocks_state], outputs=workspace_collapse_btn
         )
 
         # Update heading handler
@@ -3211,7 +3325,7 @@ def create_app():
         # Generate document handler - update to return the download button state
         async def handle_generate_and_update_download(title, description, resources, blocks, session_id):
             """Generate document and update download button."""
-            json_str, content, file_path, filename = await handle_document_generation(
+            json_str, content, docx_path, markdown_path = await handle_document_generation(
                 title, description, resources, blocks, session_id
             )
 
@@ -3219,15 +3333,32 @@ def create_app():
             html_update = gr.update(visible=False)
             markdown_update = gr.update(value=content, visible=True)
 
-            if file_path:
-                download_update = gr.update(value=file_path, interactive=True)
+            if docx_path:
+                # Keep the DOCX path as default for the hidden download button
+                download_update = gr.update(value=docx_path)
+                # Enable the display button
+                display_btn_update = gr.update(interactive=True)
             else:
-                download_update = gr.update(interactive=False)
+                download_update = gr.update()
+                display_btn_update = gr.update(interactive=False)
 
             # Re-enable the generate button
             generate_btn_update = gr.update(interactive=True)
 
-            return json_str, markdown_update, html_update, download_update, generate_btn_update
+            print(f"DEBUG: Returning DOCX path to state: {docx_path}")
+            print(f"DEBUG: Returning Markdown path to state: {markdown_path}")
+
+            # Return both file paths for state storage
+            return (
+                json_str,
+                markdown_update,
+                html_update,
+                download_update,
+                display_btn_update,
+                generate_btn_update,
+                docx_path,
+                markdown_path,
+            )
 
         generate_doc_btn.click(
             fn=lambda: [
@@ -3236,16 +3367,51 @@ def create_app():
                 gr.update(
                     value="<em></em><br><br><br>", visible=True
                 ),  # Show HTML with empty content but structure intact
-                gr.update(interactive=False),  # Disable download button
+                gr.update(interactive=False),  # Disable display download button
             ],
-            outputs=[generate_doc_btn, generated_content, generated_content_html, save_doc_btn],
+            outputs=[generate_doc_btn, generated_content, generated_content_html, download_btn_display],
         ).then(
             fn=handle_generate_and_update_download,
             inputs=[doc_title, doc_description, resources_state, blocks_state, session_state],
-            outputs=[json_output, generated_content, generated_content_html, save_doc_btn, generate_doc_btn],
+            outputs=[
+                json_output,
+                generated_content,
+                generated_content_html,
+                save_doc_btn,
+                download_btn_display,
+                generate_doc_btn,
+                docx_file_path,
+                markdown_file_path,
+            ],
         )
 
         # Save button is handled directly by DownloadButton with create_docpack_from_current_state
+
+        # Handle download format selection
+        def handle_download_format(format_type, docx_path, markdown_path):
+            """Handle download based on selected format."""
+            print(f"Download format selected: {format_type}")
+            print(f"DOCX path: {docx_path}")
+            print(f"Markdown path: {markdown_path}")
+
+            if format_type == "markdown" and markdown_path:
+                print(f"Setting download to markdown: {markdown_path}")
+                # Return the markdown file path for download
+                return gr.update(value=markdown_path)
+            elif format_type == "docx" and docx_path:
+                print(f"Setting download to DOCX: {docx_path}")
+                # Return the DOCX file path for download
+                return gr.update(value=docx_path)
+            else:
+                print("No valid format or path, keeping current state")
+                # Keep current state
+                return gr.update()
+
+        download_format_trigger.click(
+            fn=handle_download_format,
+            inputs=[download_format_input, docx_file_path, markdown_file_path],
+            outputs=[save_doc_btn],
+        )
 
         # Import file handler
         import_file.change(
@@ -3433,14 +3599,14 @@ def create_app():
                 # Show error message, hide loading, enable button
                 return (
                     gr.update(
-                        value='''<div id="prompt_error" style="position: relative; color: #dc2626; padding: 8px 30px 8px 12px; background: #fee2e2; border-radius: 4px; margin-top: 8px; font-size: 14px;">
+                        value="""<div id="prompt_error" style="position: relative; color: #dc2626; padding: 8px 30px 8px 12px; background: #fee2e2; border-radius: 4px; margin-top: 8px; font-size: 14px;">
                             <button onclick="document.getElementById('prompt_error').style.display='none'" 
                                     style="position: absolute; top: 4px; right: 5px; background: none; border: none; color: #dc2626; font-size: 18px; cursor: pointer; padding: 0 5px; opacity: 0.6;" 
                                     onmouseover="this.style.opacity='1'" 
                                     onmouseout="this.style.opacity='0.6'"
                                     title="Close">×</button>
                             Please enter a description of what you'd like to create.
-                        </div>''',
+                        </div>""",
                         visible=True,
                     ),
                     gr.update(interactive=True),  # Enable button
