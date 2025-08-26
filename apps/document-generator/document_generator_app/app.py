@@ -17,7 +17,7 @@ from dotenv import load_dotenv
 from .executor.runner import generate_docpack_from_prompt, generate_document
 from .models.outline import Outline, Resource, Section
 from .session import session_manager
-from .assistant import DocumentAssistant, create_chatbot_interface, handle_chat_message
+from .simple_mcp_assistant import ProperMCPAssistant, handle_simple_mcp_chat
 
 # Load environment variables from .env file
 load_dotenv()
@@ -3062,42 +3062,41 @@ def create_app():
                                 lines=20,
                             )
 
-        # Assistant Tab - AI-powered chatbot interface
+        # Assistant Tab - MCP-powered chatbot interface
         with gr.Tab("Assistant", id="assistant_tab"):
-            # Create chatbot interface
-            chatbot, msg_input, send_btn, clear_btn = create_chatbot_interface()
+            chatbot = gr.Chatbot(type="messages", height=600)
+            with gr.Row():
+                msg_input = gr.Textbox(
+                    placeholder="Ask me to help with your document...",
+                    container=False,
+                    scale=4
+                )
+                send_btn = gr.Button("Send", scale=1, variant="primary")
+                clear_btn = gr.Button("Clear", scale=1)
             
-            # Create a dictionary of app functions the assistant can call
-            app_functions = {
-                "handle_start_draft_click": handle_start_draft_click,
-                "add_ai_block": add_ai_block,
-                "add_text_block": add_text_block,
-                "delete_block": delete_block,
-                "update_block_content": update_block_content,
-                "update_block_heading": update_block_heading,
-                "handle_document_generation": handle_document_generation,
-                "handle_download_click": handle_download_click,
-                "reset_document": reset_document,  # Use the local reset_document function
-            }
-            
-            # Wire up chatbot handlers
-            def process_chat(message, history, blocks, resources, session, focused_block):
-                """Process chat message and update app state"""
+            def process_mcp_chat(message, history, blocks, resources, session, focused_block):
+                """Process chat message using MCP assistant"""
                 if not message:
                     return history, blocks, resources, ""
                     
-                # Pass current state and functions to handler
-                new_history, new_blocks, new_resources, response = handle_chat_message(
-                    message, history, blocks, resources, 
-                    session.session_id if session else str(uuid.uuid4()),
-                    focused_block, app_functions
-                )
-                
-                return new_history, new_blocks, new_resources, ""
+                try:
+                    # Call the standalone MCP chat handler
+                    new_history, new_blocks, new_resources, response = handle_simple_mcp_chat(
+                        message, history, blocks, resources, 
+                        session.session_id if session else str(uuid.uuid4()),
+                        focused_block, "http://localhost:8000"
+                    )
+                    
+                    return new_history, new_blocks, new_resources, ""
+                except Exception as e:
+                    error_msg = f"Error: {str(e)}"
+                    history.append({"role": "user", "content": message})
+                    history.append({"role": "assistant", "content": error_msg})
+                    return history, blocks, resources, ""
             
-            # Connect chat input to handler
+            # Connect chat input to MCP handler
             msg_input.submit(
-                fn=process_chat,
+                fn=process_mcp_chat,
                 inputs=[msg_input, chatbot, blocks_state, resources_state, session_state, focused_block_state],
                 outputs=[chatbot, blocks_state, resources_state, msg_input]
             ).then(
@@ -3105,25 +3104,16 @@ def create_app():
                 fn=render_blocks,
                 inputs=[blocks_state, focused_block_state],
                 outputs=blocks_display
-            ).then(
-                # Update resources display if needed
-                fn=lambda resources: render_resources(resources),
-                inputs=[resources_state],
-                outputs=resources_display
             )
             
             send_btn.click(
-                fn=process_chat,
+                fn=process_mcp_chat,
                 inputs=[msg_input, chatbot, blocks_state, resources_state, session_state, focused_block_state],
                 outputs=[chatbot, blocks_state, resources_state, msg_input]
             ).then(
                 fn=render_blocks,
                 inputs=[blocks_state, focused_block_state],
                 outputs=blocks_display
-            ).then(
-                fn=lambda resources: render_resources(resources),
-                inputs=[resources_state],
-                outputs=resources_display
             )
             
             # Clear chat history
