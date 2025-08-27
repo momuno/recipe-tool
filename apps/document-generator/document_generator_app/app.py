@@ -25,6 +25,28 @@ load_dotenv()
 # Global variable to track if app is running in dev mode
 IS_DEV_MODE = False
 
+# Global Gradio components that need to be accessible by MCP functions
+doc_title = None
+doc_description = None
+resources_state = None
+blocks_state = None
+outline_state = None
+json_output = None
+session_state = None
+generated_content_html = None
+generated_content = None
+save_doc_btn = None
+switch_tab_trigger = None
+start_error_message = None
+start_prompt_input = None
+get_started_btn = None
+blocks_display = None
+focused_block_state = None
+download_btn_display = None
+generate_doc_btn = None 
+docx_file_path = None
+markdown_file_path = None
+
 # Supported file types for uploads
 SUPPORTED_FILE_TYPES = [
     ".txt",
@@ -1691,10 +1713,50 @@ def handle_start_draft_click_wrapper(prompt, resources, session_id=None):
     return asyncio.run(handle_start_draft_click(prompt, resources, session_id))
 
 
+def create_draft_document(prompt: str, resources: list = None, session_id: str = None) -> dict:
+    """
+    Drafts the outline for the document, which the user can iterate on. Required before
+    generating the final document.
+
+    Args:
+        prompt: The user prompt for the document.
+        resources: Any resources to include in the document.
+        session_id: The session ID for the document generation if available
+    """
+    print(f"[create_draft_document] Called with prompt: '{prompt}'")
+    print(f"[create_draft_document] Resources: {resources}, Session: {session_id}")
+    
+    # Access global components  
+    global doc_title, doc_description, resources_state, blocks_state, outline_state
+    global json_output, session_state, generated_content_html, generated_content
+    global save_doc_btn, switch_tab_trigger, start_error_message, start_prompt_input, get_started_btn
+    
+    # Call the existing wrapper function
+    doc_title, doc_description, resources_state, blocks_state, outline_state, json_output, session_state, generated_content_html, generated_content, save_doc_btn, switch_tab_trigger, start_error_message, start_prompt_input, get_started_btn = handle_start_draft_click_wrapper(prompt, resources or [], session_id)
+
+    # Return MCP ToolResult format with the extracted data
+    return {
+        "content": [
+            {
+                "type": "text", 
+                "text": json.dumps({
+                    "status": "success",
+                    "message": "Document outline created successfully",
+                    "data": {}
+                })
+            }
+        ],
+        "isError": False
+    }
+        
+
+
 async def handle_start_draft_click(prompt, resources, session_id=None):
     """Handle the Draft button click on the Start tab."""
     print("DEBUG: In async handle_start_draft_click")
-    print(f"DEBUG: prompt value in async: '{prompt}'")
+    print(f"DEBUG: prompt value in async: '{prompt}' (type: {type(prompt)})")
+    print(f"DEBUG: resources value: {resources} (type: {type(resources)})")
+    print(f"DEBUG: session_id value: {session_id} (type: {type(session_id)})")
 
     if not prompt or not prompt.strip():
         error_msg = "Please enter a description of what you'd like to create."
@@ -1745,16 +1807,20 @@ async def handle_start_draft_click(prompt, resources, session_id=None):
 
         # Parse the outline JSON
         if outline_json:
+            print("DEBUG: Parsing outline JSON...")
             outline_data = json.loads(outline_json)
             print(f"DEBUG: Successfully parsed outline with title: {outline_data.get('title', 'No title')}")
 
             # Process the outline data similar to import_outline function
             title = outline_data.get("title", "Untitled Document")
             description = outline_data.get("general_instruction", "")
+            print(f"DEBUG: Extracted title: '{title}', description: '{description}'")
 
             # Process resources
+            print("DEBUG: Processing resources...")
             resources = []
             session_files_dir = session_manager.get_files_dir(session_id)
+            print(f"DEBUG: Session files dir: {session_files_dir}")
 
             for res_data in outline_data.get("resources", []):
                 resource_path = res_data.get("path", "")
@@ -1776,11 +1842,14 @@ async def handle_start_draft_click(prompt, resources, session_id=None):
                         })
 
             # Convert sections to blocks
+            print("DEBUG: Converting sections to blocks...")
             blocks = []
 
             def sections_to_blocks(sections, parent_indent=-1):
                 """Recursively convert sections to blocks."""
-                for section in sections:
+                print(f"DEBUG: Processing {len(sections)} sections at indent level {parent_indent + 1}")
+                for i, section in enumerate(sections):
+                    print(f"DEBUG: Processing section {i}: {section.get('title', 'No title')}")
                     block = {
                         "id": str(uuid.uuid4()),
                         "heading": section.get("title", ""),
@@ -1816,17 +1885,24 @@ async def handle_start_draft_click(prompt, resources, session_id=None):
                         sections_to_blocks(section["sections"], parent_indent=block["indent_level"])
 
             # Convert top-level sections
+            print("DEBUG: Starting sections_to_blocks conversion...")
             sections_to_blocks(outline_data.get("sections", []))
+            print(f"DEBUG: Converted to {len(blocks)} blocks")
 
             # Ensure the first block is expanded (consistent with import behavior)
             if blocks and len(blocks) > 0:
+                print("DEBUG: Setting first block to expanded")
                 blocks[0]["collapsed"] = False
 
             # Generate the JSON for the outline
+            print("DEBUG: Generating outline JSON...")
             outline = json_to_outline(outline_data)
             json_str = json.dumps(outline_data, indent=2)
+            print(f"DEBUG: Generated outline JSON of length {len(json_str)}")
 
             # Return all the values needed to populate the Draft+Generate tab
+            print("DEBUG: Preparing return values...")
+            print(f"DEBUG: About to return - blocks: {len(blocks)}, resources: {len(resources)}")
             # This matches what import_outline returns
             # DO NOT switch to the draft tab yet - that will happen in the next step
             return (
@@ -2209,6 +2285,12 @@ def replace_resource_file_gradio(resources, old_resource_path, new_file, title, 
 
 def create_app():
     """Create and return the Document Builder Gradio app."""
+    
+    # Declare global components
+    global doc_title, doc_description, resources_state, blocks_state, outline_state
+    global json_output, session_state, generated_content_html, generated_content
+    global save_doc_btn, switch_tab_trigger, start_error_message, start_prompt_input, get_started_btn
+    global blocks_display, focused_block_state
 
     # Load custom CSS
     css_path = Path(__file__).parent / "static" / "css" / "styles.css"
@@ -2804,6 +2886,7 @@ def create_app():
                                             )[1],
                                             inputs=[doc_title, doc_description, resources_state, blocks_state],
                                             outputs=[json_output],
+                                            show_api=False,
                                         )
 
                 # Workspace column: AI, H, T buttons (aligned left)
@@ -3035,13 +3118,78 @@ def create_app():
                         )
                         generated_content = gr.Markdown(visible=False)
 
+                    # Assistant chatbot
+                    with gr.Column(elem_classes="assistant-panel"):
+                        gr.Markdown("### 🤖 Assistant", elem_classes="assistant-title")
+                        chatbot = gr.Chatbot(
+                            type="messages", height=300, placeholder="Ask me to help with your document..."
+                        )
+                        with gr.Row():
+                            msg_input = gr.Textbox(
+                                placeholder="Ask me to help with your document...", container=False, scale=4
+                            )
+                            send_btn = gr.Button("Send", scale=1, variant="primary")
+                            clear_btn = gr.Button("Clear", scale=1)
+
+                        # MCP chat handler for assistant
+                        def process_assistant_chat(
+                            message, history, blocks, resources, session, focused_block, trigger_count
+                        ):
+                            """Process chat message using MCP assistant"""
+                            print(f"[PROCESS_ASSISTANT_CHAT] Starting with message: '{message}'")
+                            print(f"[PROCESS_ASSISTANT_CHAT] Current trigger_count: {trigger_count}")
+                            print(f"[PROCESS_ASSISTANT_CHAT] Current blocks: {len(blocks)}, resources: {len(resources)}")
+                            print(f"[PROCESS_ASSISTANT_CHAT] Session: {session.session_id if hasattr(session, 'session_id') else session}")
+                            
+                            if not message:
+                                print(f"[PROCESS_ASSISTANT_CHAT] Empty message, returning unchanged")
+                                return "", history, trigger_count
+
+                            try:
+                                print(f"[PROCESS_ASSISTANT_CHAT] Calling handle_simple_mcp_chat...")
+                                # Call the standalone MCP chat handler
+                                handle_simple_mcp_chat(
+                                    message,
+                                    history,
+                                    blocks,
+                                    resources,
+                                    session.session_id if hasattr(session, 'session_id') else (session if isinstance(session, str) else str(uuid.uuid4())),
+                                    focused_block,
+                                    "http://localhost:8000",
+                                )
+
+                                # Increment trigger to signal UI update needed
+                                new_trigger_count = trigger_count + 1
+                                print(f"[PROCESS_ASSISTANT_CHAT] Incrementing trigger: {trigger_count} -> {new_trigger_count}")
+
+                                print(f"[PROCESS_ASSISTANT_CHAT] Returning updated state")
+                                return "", history, new_trigger_count
+                            except Exception as e:
+                                error_msg = f"Error: {str(e)}"
+                                print(f"[PROCESS_ASSISTANT_CHAT] Exception occurred: {error_msg}")
+                                print(f"[PROCESS_ASSISTANT_CHAT] Exception type: {type(e)}")
+                                import traceback
+                                print(f"[PROCESS_ASSISTANT_CHAT] Traceback: {traceback.format_exc()}")
+                                history.append({"role": "user", "content": message})
+                                history.append({"role": "assistant", "content": error_msg})
+                                return "", history, trigger_count
+
                         # Hidden components for download functionality
                         docx_file_path = gr.State(None)
                         markdown_file_path = gr.State(None)
-                        download_format_trigger = gr.Button(visible=True, elem_id="download-format-trigger", elem_classes="hidden-component")
-                        download_format_input = gr.Textbox(visible=True, elem_id="download-format-input", elem_classes="hidden-component")
+                        download_format_trigger = gr.Button(
+                            visible=True, elem_id="download-format-trigger", elem_classes="hidden-component"
+                        )
+                        download_format_input = gr.Textbox(
+                            visible=True, elem_id="download-format-input", elem_classes="hidden-component"
+                        )
                         # Hidden download button for actual downloads
-                        save_doc_btn = gr.DownloadButton(visible=True, elem_id="hidden-download-btn", elem_classes="hidden-component")
+                        save_doc_btn = gr.DownloadButton(
+                            visible=True, elem_id="hidden-download-btn", elem_classes="hidden-component"
+                        )
+
+                        # Hidden trigger for UI updates after MCP calls
+                        ui_update_trigger = gr.State(value=0)
 
                     # Debug panel for JSON display (collapsible)
                     with gr.Column(elem_classes="debug-panel", elem_id="debug-panel-container"):
@@ -3062,66 +3210,6 @@ def create_app():
                                 lines=20,
                             )
 
-        # Assistant Tab - MCP-powered chatbot interface
-        with gr.Tab("Assistant", id="assistant_tab"):
-            chatbot = gr.Chatbot(type="messages", height=600)
-            with gr.Row():
-                msg_input = gr.Textbox(
-                    placeholder="Ask me to help with your document...",
-                    container=False,
-                    scale=4
-                )
-                send_btn = gr.Button("Send", scale=1, variant="primary")
-                clear_btn = gr.Button("Clear", scale=1)
-            
-            def process_mcp_chat(message, history, blocks, resources, session, focused_block):
-                """Process chat message using MCP assistant"""
-                if not message:
-                    return history, blocks, resources, ""
-                    
-                try:
-                    # Call the standalone MCP chat handler
-                    new_history, new_blocks, new_resources, response = handle_simple_mcp_chat(
-                        message, history, blocks, resources, 
-                        session.session_id if session else str(uuid.uuid4()),
-                        focused_block, "http://localhost:8000"
-                    )
-                    
-                    return new_history, new_blocks, new_resources, ""
-                except Exception as e:
-                    error_msg = f"Error: {str(e)}"
-                    history.append({"role": "user", "content": message})
-                    history.append({"role": "assistant", "content": error_msg})
-                    return history, blocks, resources, ""
-            
-            # Connect chat input to MCP handler
-            msg_input.submit(
-                fn=process_mcp_chat,
-                inputs=[msg_input, chatbot, blocks_state, resources_state, session_state, focused_block_state],
-                outputs=[chatbot, blocks_state, resources_state, msg_input]
-            ).then(
-                # Update the blocks display after chat command
-                fn=render_blocks,
-                inputs=[blocks_state, focused_block_state],
-                outputs=blocks_display
-            )
-            
-            send_btn.click(
-                fn=process_mcp_chat,
-                inputs=[msg_input, chatbot, blocks_state, resources_state, session_state, focused_block_state],
-                outputs=[chatbot, blocks_state, resources_state, msg_input]
-            ).then(
-                fn=render_blocks,
-                inputs=[blocks_state, focused_block_state],
-                outputs=blocks_display
-            )
-            
-            # Clear chat history
-            clear_btn.click(
-                fn=lambda: ([], ""),
-                outputs=[chatbot, msg_input]
-            )
-
         # Helper function to add AI block and regenerate outline
         def handle_add_ai_block_top(blocks, _, title, description, resources):
             blocks = add_ai_block(blocks, None)
@@ -3139,37 +3227,37 @@ def create_app():
             """Update the collapse/expand button to reflect current block states."""
             # Check if any block is expanded (collapsed = False)
             any_expanded = any(not block.get("collapsed", False) for block in blocks if block)
-            
+
             if any_expanded:
                 # Some sections open - show up pointing (rotated -90deg)
                 return gr.update(value="»", elem_classes="workspace-collapse-btn collapse-mode")
             else:
                 # All sections closed - show down pointing (rotated 90deg)
                 return gr.update(value="»", elem_classes="workspace-collapse-btn")
-        
+
         # Helper function to toggle all blocks
         def toggle_all_blocks(blocks):
             """Toggle between expand all and collapse all based on current state.
             If ANY block is expanded, collapse all. If ALL are collapsed, expand all."""
             # Check if any block is expanded (collapsed = False)
             any_expanded = any(not block.get("collapsed", False) for block in blocks if block)
-            
+
             # If any block is expanded, collapse all; otherwise expand all
             for block in blocks:
                 block["collapsed"] = any_expanded
-            
+
             # Update button to reflect NEW state after toggle
             # After toggling: if we collapsed all (any_expanded was True), now all are collapsed
             # After toggling: if we expanded all (any_expanded was False), now some are expanded
             new_state_all_collapsed = any_expanded  # If any were expanded, we collapsed them all
-            
+
             if new_state_all_collapsed:
                 # All sections now closed - show down chevron (normal)
                 elem_classes = "workspace-collapse-btn"
             else:
                 # Some sections now open - show up chevron (rotated)
                 elem_classes = "workspace-collapse-btn collapse-mode"
-            
+
             # Always use double angle quote, rotation is handled by CSS
             return blocks, gr.update(value="»", elem_classes=elem_classes)
 
@@ -3183,19 +3271,13 @@ def create_app():
                 doc_description,
                 resources_state,
             ],  # Always pass None for focused_block_id
-            outputs=[blocks_state, outline_state, json_output],
-        ).then(fn=render_blocks, inputs=[blocks_state, focused_block_state], outputs=blocks_display)
+            outputs=[blocks_state, outline_state, json_output], show_api=False,
+        ).then(fn=render_blocks, inputs=[blocks_state, focused_block_state], outputs=blocks_display, show_api=False,)
 
         # Connect workspace collapse/expand toggle button
         workspace_collapse_btn.click(
-            fn=toggle_all_blocks, 
-            inputs=[blocks_state], 
-            outputs=[blocks_state, workspace_collapse_btn]
-        ).then(
-            fn=render_blocks, 
-            inputs=[blocks_state, focused_block_state], 
-            outputs=blocks_display
-        )
+            fn=toggle_all_blocks, inputs=[blocks_state], outputs=[blocks_state, workspace_collapse_btn], show_api=False,
+        ).then(fn=render_blocks, inputs=[blocks_state, focused_block_state], outputs=blocks_display, show_api=False,)
 
         # Connect button click to add Text block
 
@@ -3203,31 +3285,30 @@ def create_app():
         delete_trigger.click(
             fn=delete_block,
             inputs=[blocks_state, delete_block_id, doc_title, doc_description, resources_state],
-            outputs=[blocks_state, outline_state, json_output],
-        ).then(fn=render_blocks, inputs=[blocks_state, focused_block_state], outputs=blocks_display)
+            outputs=[blocks_state, outline_state, json_output], show_api=False,
+        ).then(fn=render_blocks, inputs=[blocks_state, focused_block_state], outputs=blocks_display, show_api=False,)
 
         # Delete resource handler
         delete_resource_trigger.click(
             fn=delete_resource_gradio,
             inputs=[resources_state, delete_resource_path, doc_title, doc_description, blocks_state],
-            outputs=[resources_state, blocks_state, outline_state, json_output],
-        ).then(fn=render_blocks, inputs=[blocks_state, focused_block_state], outputs=blocks_display)
+            outputs=[resources_state, blocks_state, outline_state, json_output], show_api=False,
+        ).then(fn=render_blocks, inputs=[blocks_state, focused_block_state], outputs=blocks_display, show_api=False,)
 
         # Update block content handler
         update_trigger.click(
             fn=update_block_content,
             inputs=[blocks_state, update_block_id, update_content_input, doc_title, doc_description, resources_state],
             outputs=[blocks_state, outline_state, json_output],
-        ).then(fn=set_focused_block, inputs=update_block_id, outputs=focused_block_state)
+            show_api=False,
+        ).then(fn=set_focused_block, inputs=update_block_id, outputs=focused_block_state, show_api=False,)
 
         # Toggle collapse handler - also update the collapse/expand all button
         toggle_trigger.click(
-            fn=toggle_block_collapse, inputs=[blocks_state, toggle_block_id], outputs=blocks_state
-        ).then(fn=set_focused_block, inputs=toggle_block_id, outputs=focused_block_state).then(
-            fn=render_blocks, inputs=[blocks_state, toggle_block_id], outputs=blocks_display
-        ).then(
-            fn=update_collapse_button_state, inputs=[blocks_state], outputs=workspace_collapse_btn
-        )
+            fn=toggle_block_collapse, inputs=[blocks_state, toggle_block_id], outputs=blocks_state, show_api=False,
+        ).then(fn=set_focused_block, inputs=toggle_block_id, outputs=focused_block_state, show_api=False,).then(
+            fn=render_blocks, inputs=[blocks_state, toggle_block_id], outputs=blocks_display, show_api=False,
+        ).then(fn=update_collapse_button_state, inputs=[blocks_state], outputs=workspace_collapse_btn, show_api=False,)
 
         # Update heading handler
         update_heading_trigger.click(
@@ -3241,20 +3322,22 @@ def create_app():
                 resources_state,
             ],
             outputs=[blocks_state, outline_state, json_output],
-        ).then(fn=set_focused_block, inputs=update_heading_block_id, outputs=focused_block_state)
+            show_api=False,
+        ).then(fn=set_focused_block, inputs=update_heading_block_id, outputs=focused_block_state, show_api=False,)
 
         # Update indent handler
         indent_trigger.click(
             fn=update_block_indent,
             inputs=[blocks_state, indent_block_id, indent_direction, doc_title, doc_description, resources_state],
             outputs=[blocks_state, outline_state, json_output],
-        ).then(fn=render_blocks, inputs=[blocks_state, focused_block_state], outputs=blocks_display).then(
-            fn=set_focused_block, inputs=indent_block_id, outputs=focused_block_state
+            show_api=False,
+        ).then(fn=render_blocks, inputs=[blocks_state, focused_block_state], outputs=blocks_display, show_api=False,).then(
+            fn=set_focused_block, inputs=indent_block_id, outputs=focused_block_state, show_api=False,
         )
 
         # Focus handler
-        focus_trigger.click(fn=set_focused_block, inputs=focus_block_id, outputs=focused_block_state).then(
-            fn=render_blocks, inputs=[blocks_state, focus_block_id], outputs=blocks_display
+        focus_trigger.click(fn=set_focused_block, inputs=focus_block_id, outputs=focused_block_state, show_api=False,).then(
+            fn=render_blocks, inputs=[blocks_state, focus_block_id], outputs=blocks_display, show_api=False,
         )
 
         # Add after handler - for + button on content blocks
@@ -3272,14 +3355,16 @@ def create_app():
             fn=handle_add_after,
             inputs=[blocks_state, add_after_block_id, add_after_type, doc_title, doc_description, resources_state],
             outputs=[blocks_state, outline_state, json_output],
-        ).then(fn=render_blocks, inputs=[blocks_state, focused_block_state], outputs=blocks_display)
+            show_api=False,
+        ).then(fn=render_blocks, inputs=[blocks_state, focused_block_state], outputs=blocks_display, show_api=False,)
 
         # Convert block type handler
         convert_trigger.click(
             fn=convert_block_type,
             inputs=[blocks_state, convert_block_id, convert_type, doc_title, doc_description, resources_state],
             outputs=[blocks_state, outline_state, json_output],
-        ).then(fn=render_blocks, inputs=[blocks_state, focused_block_state], outputs=blocks_display)
+            show_api=False,
+        ).then(fn=render_blocks, inputs=[blocks_state, focused_block_state], outputs=blocks_display, show_api=False,)
 
         # Update block resources handler
         update_resources_trigger.click(
@@ -3293,7 +3378,8 @@ def create_app():
                 resources_state,
             ],
             outputs=[blocks_state, outline_state, json_output],
-        ).then(fn=render_blocks, inputs=[blocks_state, focused_block_state], outputs=blocks_display)
+            show_api=False,
+        ).then(fn=render_blocks, inputs=[blocks_state, focused_block_state], outputs=blocks_display, show_api=False,)
 
         # Remove block resource handler
         remove_resource_trigger.click(
@@ -3307,7 +3393,8 @@ def create_app():
                 resources_state,
             ],
             outputs=[blocks_state, outline_state, json_output],
-        ).then(fn=render_blocks, inputs=[blocks_state, focused_block_state], outputs=blocks_display)
+            show_api=False,
+        ).then(fn=render_blocks, inputs=[blocks_state, focused_block_state], outputs=blocks_display, show_api=False,)
 
         # Delete resource from panel handler
         def delete_and_render(resources, resource_path, title, description, blocks, focused_id):
@@ -3341,6 +3428,7 @@ def create_app():
                 focused_block_state,
             ],
             outputs=[resources_state, blocks_state, outline_state, json_output, blocks_display],
+            show_api=False,
         )
 
         # Update resource description handler - don't re-render blocks to avoid interrupting typing
@@ -3356,6 +3444,7 @@ def create_app():
                 resources_state,
             ],
             outputs=[blocks_state, outline_state, json_output],
+            show_api=False,
         )
 
         # Title and description change handlers
@@ -3363,12 +3452,14 @@ def create_app():
             fn=update_document_metadata,
             inputs=[doc_title, doc_description, resources_state, blocks_state],
             outputs=[outline_state, json_output],
+            show_api=False,
         )
 
         doc_description.change(
             fn=update_document_metadata,
             inputs=[doc_title, doc_description, resources_state, blocks_state],
             outputs=[outline_state, json_output],
+            show_api=False,
         )
 
         # Handle file uploads (defined after json_output is created)
@@ -3376,11 +3467,13 @@ def create_app():
             fn=handle_file_upload,
             inputs=[file_upload, resources_state, doc_title, doc_description, blocks_state, session_state],
             outputs=[resources_state, file_upload, outline_state, json_output, session_state, file_upload_warning],
+            show_api=False,
         ).then(
             # Force JSON update after resources render
             fn=lambda title, desc, res, blocks: regenerate_outline_from_state(title, desc, res, blocks)[1],
             inputs=[doc_title, doc_description, resources_state, blocks_state],
             outputs=[json_output],
+            show_api=False,
         )
 
         # Generate document handler - update to return the download button state
@@ -3431,6 +3524,7 @@ def create_app():
                 gr.update(interactive=False),  # Disable display download button
             ],
             outputs=[generate_doc_btn, generated_content, generated_content_html, download_btn_display],
+            show_api=False,
         ).then(
             fn=handle_generate_and_update_download,
             inputs=[doc_title, doc_description, resources_state, blocks_state, session_state],
@@ -3444,9 +3538,41 @@ def create_app():
                 docx_file_path,
                 markdown_file_path,
             ],
+            show_api=False,
         )
 
-        # Save button is handled directly by DownloadButton with create_docpack_from_current_state
+        def generate_final_document() -> dict:
+            """
+            Generates the final document, which the user can then download. Required before
+            downloading the final document.
+
+            Args:
+            """
+            print(f"[generate_final_document] Called")
+            
+            # Access global components  
+            global doc_title, doc_description, resources_state, blocks_state, outline_state
+            global json_output, session_state, generated_content_html, generated_content
+            global save_doc_btn, switch_tab_trigger, start_error_message, start_prompt_input, get_started_btn
+            global download_btn_display, generate_doc_btn, docx_file_path, markdown_file_path
+
+            json_output, generated_content, generated_content_html, save_doc_btn, download_btn_display, generate_doc_btn, docx_file_path, markdown_file_path = asyncio.run(handle_generate_and_update_download(doc_title, doc_description, resources_state, blocks_state, session_state))
+
+            # Return MCP ToolResult format with the extracted data
+            return {
+                "content": [
+                    {
+                        "type": "text", 
+                        "text": json.dumps({
+                            "status": "success",
+                            "message": "Document outline created successfully",
+                            "data": {}
+                        })
+                    }
+                ],
+                "isError": False
+            }
+
 
         # Handle download format selection
         def handle_download_format(format_type, docx_path, markdown_path):
@@ -3472,6 +3598,7 @@ def create_app():
             fn=handle_download_format,
             inputs=[download_format_input, docx_file_path, markdown_file_path],
             outputs=[save_doc_btn],
+            show_api=False,
         )
 
         # Import file handler
@@ -3491,10 +3618,11 @@ def create_app():
                 generated_content,
                 save_doc_btn,
             ],
-        ).then(fn=render_blocks, inputs=[blocks_state, focused_block_state], outputs=blocks_display)
+            show_api=False,
+        ).then(fn=render_blocks, inputs=[blocks_state, focused_block_state], outputs=blocks_display, show_api=False,)
 
         # Update save button value whenever outline changes
-        outline_state.change(fn=lambda: gr.update(value=create_docpack_from_current_state()), outputs=save_outline_btn)
+        outline_state.change(fn=lambda: gr.update(value=create_docpack_from_current_state()), outputs=save_outline_btn, show_api=False,)
 
         # Load example handler
         load_example_trigger.click(
@@ -3512,7 +3640,8 @@ def create_app():
                 generated_content,
                 save_doc_btn,
             ],
-        ).then(fn=render_blocks, inputs=[blocks_state, focused_block_state], outputs=blocks_display)
+            show_api=False,
+        ).then(fn=render_blocks, inputs=[blocks_state, focused_block_state], outputs=blocks_display, show_api=False)
 
         # Update resource title handler - don't re-render resources to avoid interrupting typing
         update_title_trigger.click(
@@ -3526,6 +3655,7 @@ def create_app():
                 blocks_state,
             ],
             outputs=[resources_state, outline_state, json_output],
+            show_api=False,
         )
 
         # Update resource panel description handler - reuse the same inputs
@@ -3540,6 +3670,7 @@ def create_app():
                 blocks_state,
             ],
             outputs=[resources_state, outline_state, json_output],
+            show_api=False,
         )
 
         # Replace resource file handler
@@ -3579,10 +3710,12 @@ def create_app():
                 json_output,
                 replace_success_msg,
             ],
-        ).then(fn=render_blocks, inputs=[blocks_state, focused_block_state], outputs=blocks_display).then(
+            show_api=False,
+        ).then(fn=render_blocks, inputs=[blocks_state, focused_block_state], outputs=blocks_display,show_api=False,).then(
             # Clear the file input after processing
             fn=lambda: None,
             outputs=replace_resource_file_input,
+            show_api=False,
         )
 
         # New button - reset document to initial state
@@ -3646,7 +3779,8 @@ def create_app():
                 save_doc_btn,
                 focused_block_state,
             ],
-        ).then(fn=render_blocks, inputs=[blocks_state, focused_block_state], outputs=blocks_display)
+            show_api=False,
+        ).then(fn=render_blocks, inputs=[blocks_state, focused_block_state], outputs=blocks_display, show_api=False)
 
         # Create a hidden HTML component for tab switching trigger
         switch_tab_trigger = gr.HTML("", visible=True, elem_id="switch-tab-trigger", elem_classes="hidden-component")
@@ -3684,6 +3818,7 @@ def create_app():
             inputs=[start_prompt_input],
             outputs=[start_error_message, get_started_btn],
             queue=False,  # Run immediately
+            show_api=False,
         ).success(
             fn=handle_start_draft_click,
             inputs=[start_prompt_input, start_resources_state, session_state],
@@ -3703,10 +3838,12 @@ def create_app():
                 start_prompt_input,
                 get_started_btn,
             ],
-        ).then(fn=render_blocks, inputs=[blocks_state, focused_block_state], outputs=blocks_display).then(
+            show_api=False,
+        ).then(fn=render_blocks, inputs=[blocks_state, focused_block_state], outputs=blocks_display, show_api=False,).then(
             fn=regenerate_outline_from_state,
             inputs=[doc_title, doc_description, resources_state, blocks_state],
             outputs=[outline_state, json_output],
+            show_api=False,
         )
 
         # Wrapper for file upload that includes rendering
@@ -3721,10 +3858,11 @@ def create_app():
             fn=handle_start_file_upload_with_render,
             inputs=[start_file_upload, start_resources_state],
             outputs=[start_resources_state, start_file_upload, start_resources_display, start_upload_warning],
+            show_api=False,
         )
 
         # Clear error message when user starts typing
-        start_prompt_input.input(fn=lambda: gr.update(visible=False), outputs=[start_error_message], queue=False)
+        start_prompt_input.input(fn=lambda: gr.update(visible=False), outputs=[start_error_message], show_api=False, queue=False)
 
         # Example button handlers
         def extract_resources_from_docpack(docpack_path, session_id=None):
@@ -3942,6 +4080,7 @@ def create_app():
             inputs=[session_state],
             outputs=[start_prompt_input, start_resources_state, session_state, start_resources_display],
             queue=False,
+            show_api=False,
         )
 
         example_product_launch_btn.click(
@@ -3949,6 +4088,7 @@ def create_app():
             inputs=[session_state],
             outputs=[start_prompt_input, start_resources_state, session_state, start_resources_display],
             queue=False,
+            show_api=False,
         )
 
         example_performance_review_btn.click(
@@ -3956,6 +4096,7 @@ def create_app():
             inputs=[session_state],
             outputs=[start_prompt_input, start_resources_state, session_state, start_resources_display],
             queue=False,
+            show_api=False,
         )
 
         # Hidden inputs for Start tab resource removal
@@ -4013,7 +4154,86 @@ def create_app():
             fn=remove_start_resource,
             inputs=[start_resources_state, start_remove_resource_index, start_remove_resource_name],
             outputs=[start_resources_state, start_resources_display],
+            show_api=False,
         )
+
+        # Assistant chat handlers
+        msg_input.submit(
+            fn=process_assistant_chat,
+            inputs=[
+                msg_input,
+                chatbot,
+                blocks_state,
+                resources_state,
+                session_state,
+                focused_block_state,
+                ui_update_trigger,
+            ],
+            outputs=[msg_input, chatbot, ui_update_trigger],
+            show_api=False,
+        )
+
+        send_btn.click(
+            fn=process_assistant_chat,
+            inputs=[
+                msg_input,
+                chatbot,
+                blocks_state,
+                resources_state,
+                session_state,
+                focused_block_state,
+                ui_update_trigger,
+            ],
+            outputs=[msg_input, chatbot, ui_update_trigger],
+            show_api=False,
+        )
+
+        # Clear chat history
+        clear_btn.click(fn=lambda: ([], ""), outputs=[chatbot, msg_input], show_api=False)
+
+        # UI update trigger - when this changes, update all components
+        def trigger_ui_updates(trigger_value):
+            """Debug wrapper for UI updates triggered by MCP chat"""
+            print(f"[UI_UPDATE_TRIGGER] Trigger fired with value: {trigger_value}")
+            global doc_title, doc_description, resources_state, blocks_state, outline_state
+            global json_output, session_state, generated_content_html, generated_content
+            global save_doc_btn, switch_tab_trigger, start_error_message, start_prompt_input, get_started_btn
+            
+            return doc_title, doc_description, resources_state, blocks_state, outline_state, json_output, session_state, generated_content_html, generated_content, save_doc_btn, switch_tab_trigger, start_error_message, start_prompt_input, get_started_btn
+        
+        ui_update_trigger.change(
+            fn=trigger_ui_updates,
+            inputs=[ui_update_trigger],
+            outputs=[
+                doc_title,
+                doc_description,
+                resources_state,
+                blocks_state,
+                outline_state,
+                json_output,
+                session_state,
+                generated_content_html,
+                generated_content,
+                save_doc_btn,
+                switch_tab_trigger,
+                start_error_message,
+                start_prompt_input,
+                get_started_btn,
+            ],
+            show_api=False,
+        ).then(fn=render_blocks, inputs=[blocks_state, focused_block_state], outputs=blocks_display, show_api=False,).then(
+            fn=regenerate_outline_from_state,
+            inputs=[doc_title, doc_description, resources_state, blocks_state],
+            outputs=[outline_state, json_output],
+            show_api=False,
+        )
+
+        # Expose MCP-compatible wrapper as an API tool
+        gr.api(create_draft_document)
+        gr.api(generate_final_document)
+        #gr.api(download_word_document)
+        #gr.api(download_markdown_document)
+        #gr.api(add_new_section_to_outline)
 
     return app
 
