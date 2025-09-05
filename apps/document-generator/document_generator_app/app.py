@@ -16,11 +16,8 @@ from docpack_file import DocpackHandler
 from dotenv import load_dotenv
 
 # Configure logging for drag-drop debugging
-logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger('drag_drop')
+logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+logger = logging.getLogger("drag_drop")
 
 from .executor.runner import generate_docpack_from_prompt, generate_document
 from .models.outline import Outline, Resource, Section
@@ -713,7 +710,7 @@ def update_document_metadata(title, description, resources, blocks):
 def update_block_resources(blocks, block_id, resource_json, title, description, resources):
     """Update a block's resources when a resource is dropped on it."""
     import json
-    
+
     logger.info(f"=== update_block_resources called ===")
     logger.debug(f"block_id: {block_id}")
     logger.debug(f"resource_json: {resource_json}")
@@ -733,7 +730,7 @@ def update_block_resources(blocks, block_id, resource_json, title, description, 
         if block["id"] == block_id:
             block_found = True
             logger.info(f"Found block at index {idx} with id {block_id}")
-            
+
             if "resources" not in block:
                 block["resources"] = []
                 logger.debug(f"Initialized resources array for block {block_id}")
@@ -750,7 +747,7 @@ def update_block_resources(blocks, block_id, resource_json, title, description, 
                 try:
                     file_path = resource_data["path"]
                     logger.debug(f"Loading file content from: {file_path}")
-                    
+
                     if file_path.lower().endswith(".docx"):
                         # Extract text from docx file
                         content = docx_to_text(file_path)
@@ -800,7 +797,7 @@ def update_block_resources(blocks, block_id, resource_json, title, description, 
                 else:
                     logger.info(f"Resource already in block, skipping")
             break
-    
+
     if not block_found:
         logger.error(f"Block {block_id} not found in blocks list!")
         logger.debug(f"Available block IDs: {[b['id'] for b in blocks]}")
@@ -934,7 +931,7 @@ def update_resource_title(resources, resource_path, new_title, doc_title, doc_de
     logger.debug(f"resource_path: {resource_path}")
     logger.debug(f"new_title: {new_title}")
     logger.debug(f"Number of resources: {len(resources) if resources else 0}")
-    
+
     # Update the title in the resources list
     for resource in resources:
         if resource.get("path") == resource_path:
@@ -953,7 +950,7 @@ def update_resource_panel_description(resources, resource_path, new_description,
     logger.debug(f"resource_path: {resource_path}")
     logger.debug(f"new_description: {new_description}")
     logger.debug(f"Number of resources: {len(resources) if resources else 0}")
-    
+
     # Update the description in the resources list
     for resource in resources:
         if resource.get("path") == resource_path:
@@ -1438,11 +1435,11 @@ def create_docpack_from_current_state():
 
     global current_document_state
 
-    print(f"=== CREATING DOCPACK at {datetime.now().isoformat()} ===")
-    print(f"Title: {current_document_state.get('title', 'N/A') if current_document_state else 'No state'}")
-    print(f"Has outline_json: {'outline_json' in current_document_state if current_document_state else False}")
-    print(f"Number of blocks: {len(current_document_state.get('blocks', [])) if current_document_state else 0}")
-    print(f"Full current_document_state: {current_document_state}")
+    # print(f"=== CREATING DOCPACK at {datetime.now().isoformat()} ===")
+    # print(f"Title: {current_document_state.get('title', 'N/A') if current_document_state else 'No state'}")
+    # print(f"Has outline_json: {'outline_json' in current_document_state if current_document_state else False}")
+    # print(f"Number of blocks: {len(current_document_state.get('blocks', [])) if current_document_state else 0}")
+    # print(f"Full current_document_state: {current_document_state}")
 
     if not current_document_state:
         print("ERROR: No current_document_state available for docpack creation")
@@ -1538,7 +1535,7 @@ def render_blocks(blocks, focused_block_id=None):
     logger.debug(f"Number of blocks: {len(blocks) if blocks else 0}")
     logger.debug(f"Focused block ID: {focused_block_id}")
     logger.debug(f"Timestamp: {timestamp}")
-    
+
     if blocks:
         for i, block in enumerate(blocks):
             res_count = len(block.get("resources", []))
@@ -1736,6 +1733,275 @@ def handle_start_file_upload(files, current_resources):
     return new_resources, None, gr.update(visible=False)
 
 
+def refresh_url_resource(resources, resource_path, original_url, title, description, blocks, session_id=None):
+    """Refresh a URL resource by re-downloading its content."""
+    print(f"DEBUG: Refreshing URL resource from {original_url}")
+
+    # Get or create session ID
+    if not session_id:
+        session_id = str(uuid.uuid4())
+
+    try:
+        import urllib.request
+        from urllib.parse import urlparse
+
+        # Convert GitHub URLs to raw content URLs
+        download_url = original_url
+        if "github.com" in original_url and "/blob/" in original_url:
+            download_url = original_url.replace("github.com", "raw.githubusercontent.com").replace("/blob/", "/")
+            print(f"DEBUG: Converted GitHub URL to raw: {download_url}")
+        elif "gitlab.com" in original_url and "/blob/" in original_url:
+            download_url = original_url.replace("/blob/", "/raw/")
+            print(f"DEBUG: Converted GitLab URL to raw: {download_url}")
+
+        # Download the URL content to the existing file path
+        target_path = Path(resource_path)
+
+        # Download the URL content
+        with urllib.request.urlopen(download_url) as response:
+            content_bytes = response.read()
+            content_type = response.headers.get("Content-Type", "")
+
+        # Check if it's HTML content
+        is_html = "text/html" in content_type or download_url.endswith(".html") or download_url.endswith(".htm")
+
+        if is_html:
+            try:
+                # Try to use trafilatura for better content extraction
+                import trafilatura
+
+                # Extract the main content from HTML
+                extracted = trafilatura.extract(content_bytes, include_formatting=True, include_links=True)
+
+                if extracted:
+                    # Save the extracted text content
+                    with open(target_path, "w", encoding="utf-8") as f:
+                        f.write(extracted)
+                    print(f"DEBUG: Refreshed content from {original_url} using trafilatura")
+                else:
+                    # If extraction failed, save raw content
+                    with open(target_path, "wb") as f:
+                        f.write(content_bytes)
+                    print(f"DEBUG: Trafilatura couldn't extract, saved raw HTML")
+
+            except ImportError:
+                # Fallback: try BeautifulSoup
+                try:
+                    from bs4 import BeautifulSoup
+
+                    content_str = content_bytes.decode("utf-8", errors="ignore")
+                    soup = BeautifulSoup(content_str, "html.parser")
+
+                    # Remove script and style elements
+                    for script in soup(["script", "style"]):
+                        script.decompose()
+
+                    # Get text
+                    text = soup.get_text(separator="\n", strip=True)
+
+                    with open(target_path, "w", encoding="utf-8") as f:
+                        f.write(text)
+                    print(f"DEBUG: Refreshed content using BeautifulSoup")
+                except:
+                    # Last resort: save as-is
+                    with open(target_path, "wb") as f:
+                        f.write(content_bytes)
+                    print(f"DEBUG: Saved raw content")
+        else:
+            # Not HTML, save as-is
+            with open(target_path, "wb") as f:
+                f.write(content_bytes)
+            print(f"DEBUG: Refreshed non-HTML content from {original_url}")
+
+        # Update file size in resources
+        file_size = os.path.getsize(target_path)
+        if file_size < 1024:
+            size_str = f"{file_size} B"
+        elif file_size < 1024 * 1024:
+            size_str = f"{file_size / 1024:.1f} KB"
+        else:
+            size_str = f"{file_size / (1024 * 1024):.1f} MB"
+
+        # Update the resource's size
+        for resource in resources:
+            if resource["path"] == resource_path:
+                resource["size"] = size_str
+                break
+
+        # Regenerate outline
+        outline, json_str = regenerate_outline_from_state(title, description, resources, blocks)
+
+        return resources, outline, json_str, gr.update(value=f"✓ Refreshed from URL")
+
+    except Exception as e:
+        print(f"ERROR: Failed to refresh URL {original_url}: {str(e)}")
+        return resources, gr.update(), gr.update(), gr.update(value=f"Failed to refresh: {str(e)}")
+
+
+def handle_start_url_submit(url_input, current_resources, session_id=None):
+    """Handle URL submission on the Start tab - download content immediately."""
+    if not url_input or not url_input.strip():
+        return current_resources, gr.update(value=""), gr.update(visible=False)
+
+    # Get or create session ID
+    if not session_id:
+        session_id = str(uuid.uuid4())
+
+    # Get session files directory
+    session_files_dir = session_manager.get_files_dir(session_id)
+
+    # Split URLs by comma and clean them
+    urls = [url.strip() for url in url_input.split(",") if url.strip()]
+
+    new_resources = current_resources.copy() if current_resources else []
+    warnings = []
+
+    for url in urls:
+        # Basic URL validation
+        if not url.startswith(("http://", "https://")):
+            warnings.append(f"Invalid URL: {url} (must start with http:// or https://)")
+            continue
+
+        try:
+            import urllib.request
+            from urllib.parse import urlparse
+
+            # Convert GitHub URLs to raw content URLs
+            download_url = url
+            if "github.com" in url and "/blob/" in url:
+                # Convert GitHub blob URL to raw content URL
+                # From: https://github.com/user/repo/blob/branch/file
+                # To: https://raw.githubusercontent.com/user/repo/branch/file
+                download_url = url.replace("github.com", "raw.githubusercontent.com").replace("/blob/", "/")
+                print(f"DEBUG: Converted GitHub URL to raw: {download_url}")
+            elif "gitlab.com" in url and "/blob/" in url:
+                # Convert GitLab blob URL to raw content URL
+                download_url = url.replace("/blob/", "/raw/")
+                print(f"DEBUG: Converted GitLab URL to raw: {download_url}")
+
+            # Extract filename from URL
+            parsed_url = urlparse(url)
+            filename = os.path.basename(parsed_url.path)
+
+            # If no filename in URL, generate one
+            if not filename or filename == "/":
+                filename = f"url_resource_{len(new_resources) + 1}.txt"
+
+            # Ensure unique filename in session directory
+            target_path = session_files_dir / filename
+            counter = 1
+            while target_path.exists():
+                name_parts = filename.rsplit(".", 1)
+                if len(name_parts) == 2:
+                    new_filename = f"{name_parts[0]}_{counter}.{name_parts[1]}"
+                else:
+                    new_filename = f"{filename}_{counter}"
+                target_path = session_files_dir / new_filename
+                counter += 1
+
+            # Download the URL content
+            with urllib.request.urlopen(download_url) as response:
+                content_bytes = response.read()
+                content_type = response.headers.get("Content-Type", "")
+
+            # Check if it's HTML content
+            is_html = "text/html" in content_type or download_url.endswith(".html") or download_url.endswith(".htm")
+
+            if is_html:
+                try:
+                    # Try to use trafilatura for better content extraction
+                    import trafilatura
+
+                    # Extract the main content from HTML
+                    extracted = trafilatura.extract(content_bytes, include_formatting=True, include_links=True)
+
+                    if extracted:
+                        # Save the extracted text content
+                        with open(target_path, "w", encoding="utf-8") as f:
+                            f.write(extracted)
+                        print(f"DEBUG: Extracted main content from HTML using trafilatura for {url}")
+                    else:
+                        # If extraction failed, save raw content
+                        with open(target_path, "wb") as f:
+                            f.write(content_bytes)
+                        print(f"DEBUG: Trafilatura couldn't extract content, saved raw HTML for {url}")
+
+                except ImportError:
+                    print(f"DEBUG: trafilatura not installed, trying fallback method")
+                    # Fallback: try BeautifulSoup
+                    try:
+                        from bs4 import BeautifulSoup
+
+                        content_str = content_bytes.decode("utf-8", errors="ignore")
+                        soup = BeautifulSoup(content_str, "html.parser")
+
+                        # Remove script and style elements
+                        for script in soup(["script", "style"]):
+                            script.decompose()
+
+                        # Get text
+                        text = soup.get_text(separator="\n", strip=True)
+
+                        with open(target_path, "w", encoding="utf-8") as f:
+                            f.write(text)
+                        print(f"DEBUG: Extracted text using BeautifulSoup for {url}")
+                    except:
+                        # Last resort: save as-is
+                        with open(target_path, "wb") as f:
+                            f.write(content_bytes)
+                        print(f"DEBUG: Saved raw content for {url}")
+            else:
+                # Not HTML, save as-is
+                with open(target_path, "wb") as f:
+                    f.write(content_bytes)
+                print(f"DEBUG: Saved non-HTML content for {url}")
+
+            # Get file size
+            file_size = os.path.getsize(target_path)
+            if file_size < 1024:
+                size_str = f"{file_size} B"
+            elif file_size < 1024 * 1024:
+                size_str = f"{file_size / 1024:.1f} KB"
+            else:
+                size_str = f"{file_size / (1024 * 1024):.1f} MB"
+
+            # Check if already in resources (by path)
+            if not any(r["path"] == str(target_path) for r in new_resources):
+                resource_entry = {
+                    "path": str(target_path),
+                    "name": target_path.name,
+                    "size": size_str,
+                    "is_url": True,  # Mark as URL resource for display purposes
+                    "original_url": url,  # Keep track of original URL
+                }
+                new_resources.append(resource_entry)
+                print(f"DEBUG: Downloaded URL {url} to {target_path}")
+                print(f"DEBUG: Added resource entry: {resource_entry}")
+
+        except Exception as e:
+            warnings.append(f"Failed to download {url}: {str(e)}")
+            continue
+
+    # Create warning message if there were any issues
+    if warnings:
+        import random
+
+        warning_id = f"warning_{random.randint(1000, 9999)}"
+        warning_html = f"""
+        <div id="{warning_id}" style='position: relative; color: #dc2626; background: #fee2e2; padding: 8px 30px 8px 12px; border-radius: 4px; margin-top: 8px; font-size: 14px;'>
+            <button onclick="document.getElementById('{warning_id}').style.display='none'" 
+                    style='position: absolute; top: 4px; right: 5px; background: none; border: none; color: #dc2626; font-size: 18px; cursor: pointer; padding: 0 5px; opacity: 0.6;' 
+                    onmouseover="this.style.opacity='1'" 
+                    onmouseout="this.style.opacity='0.6'"
+                    title='Close'>×</button>
+            {"<br>".join(warnings)}
+        </div>
+        """
+        return new_resources, gr.update(value=""), gr.update(value=warning_html, visible=True)
+
+    return new_resources, gr.update(value=""), gr.update(visible=False)
+
+
 def handle_start_draft_click_wrapper(prompt, resources, session_id=None):
     """Wrapper to handle the Draft button click synchronously."""
     print("DEBUG: handle_start_draft_click_wrapper called")
@@ -1791,6 +2057,12 @@ async def handle_start_draft_click(prompt, resources, session_id=None):
             print(f"DEBUG: Created new session_id: {session_id}")
 
         print(f"DEBUG: Calling generate_docpack_from_prompt with {len(resources) if resources else 0} resources")
+        # Debug: Log resources to see if URL metadata is present
+        if resources:
+            for i, res in enumerate(resources):
+                print(
+                    f"DEBUG: Resource {i}: is_url={res.get('is_url')}, original_url={res.get('original_url')}, path={res.get('path')}"
+                )
 
         # Call the docpack generation function
         docpack_path, outline_json = await generate_docpack_from_prompt(
@@ -1825,12 +2097,20 @@ async def handle_start_draft_click(prompt, resources, session_id=None):
 
                             shutil.copy2(source_path, target_path)
 
-                        resources.append({
+                        # Check if this resource came from the Start tab with URL info
+                        resource_item = {
                             "key": res_data.get("key", ""),
                             "name": source_path.name,
                             "path": str(target_path),
                             "description": res_data.get("description", ""),
-                        })
+                        }
+
+                        # Preserve URL information if present
+                        if res_data.get("is_url"):
+                            resource_item["is_url"] = True
+                            resource_item["original_url"] = res_data.get("original_url", "")
+
+                        resources.append(resource_item)
 
             # Convert sections to blocks
             blocks = []
@@ -2356,17 +2636,32 @@ def create_app():
                                     print(
                                         f"DEBUG render_start_resources called with {len(resources) if resources else 0} resources"
                                     )
+                                    # Debug: Show full resource data
+                                    if resources:
+                                        for i, res in enumerate(resources):
+                                            print(f"DEBUG render resource {i}: {res}")
                                     if resources and len(resources) > 0:
                                         # Create a flex container for resources
                                         html_content = '<div class="start-resources-list">'
                                         for idx, resource in enumerate(resources):
                                             print(f"  Rendering resource: {resource['name']}")
-                                            html_content += f"""
-                                                <div class="dropped-resource">
-                                                    <span>{resource["name"]}</span>
-                                                    <button class="remove-resource" onclick="event.stopPropagation(); removeStartResourceByIndex({idx}, '{resource["name"]}'); return false;">🗑</button>
-                                                </div>
-                                            """
+                                            # Show URL indicator for URL resources
+                                            if resource.get("is_url"):
+                                                # Use original URL for tooltip if available, otherwise use path
+                                                tooltip = resource.get("original_url", resource["path"])
+                                                html_content += f"""
+                                                    <div class="dropped-resource url-resource">
+                                                        <span title="{tooltip}">🔗 {resource["name"]}</span>
+                                                        <button class="remove-resource" onclick="event.stopPropagation(); removeStartResourceByIndex({idx}, '{resource["name"]}'); return false;">🗑</button>
+                                                    </div>
+                                                """
+                                            else:
+                                                html_content += f"""
+                                                    <div class="dropped-resource">
+                                                        <span>{resource["name"]}</span>
+                                                        <button class="remove-resource" onclick="event.stopPropagation(); removeStartResourceByIndex({idx}, '{resource["name"]}'); return false;">🗑</button>
+                                                    </div>
+                                                """
                                         html_content += "</div>"
                                         return html_content
                                     else:
@@ -2388,7 +2683,23 @@ def create_app():
                                 height=90,
                             )
 
-                            # Warning message for protected files
+                            # URL input section
+                            with gr.Row(elem_classes="start-url-input-section"):
+                                with gr.Column(scale=3):
+                                    start_url_input = gr.Textbox(
+                                        placeholder="Enter URL(s) to reference documents (comma-separated for multiple)",
+                                        show_label=False,
+                                        elem_classes="start-url-input",
+                                    )
+                                with gr.Column(scale=1, elem_classes="start-url-btn-col"):
+                                    start_url_submit_btn = gr.Button(
+                                        "Add URL(s)",
+                                        variant="primary",
+                                        size="sm",
+                                        elem_classes="start-url-submit-btn",
+                                    )
+
+                            # Warning message for protected files and URLs
                             start_upload_warning = gr.HTML(visible=False)
 
                             # Draft button - full width below dropzone
@@ -2713,7 +3024,15 @@ def create_app():
                                 )
                             else:
                                 for idx, resource in enumerate(resources):
-                                    with gr.Group(elem_classes="resource-item-gradio"):
+                                    # Check if this is a URL resource
+                                    # Note: URL resources have local paths after download, so we check the is_url flag
+                                    is_url_resource = resource.get("is_url", False)
+
+                                    with gr.Group(
+                                        elem_classes="resource-item-gradio url-resource-item"
+                                        if is_url_resource
+                                        else "resource-item-gradio"
+                                    ):
                                         # Hidden element containing resource path for drag and drop
                                         gr.HTML(
                                             f'<div class="resource-path-hidden" style="display:none;" data-path="{resource["path"]}">{resource["path"]}</div>'
@@ -2746,26 +3065,68 @@ def create_app():
                                                     scale=1,
                                                 )
 
-                                                # Filename display
-                                                gr.HTML(
-                                                    elem_classes="resource-filename",
-                                                    value=f"<div>  {resource['name']}</div>",
+                                                # Filename/URL display
+                                                if is_url_resource:
+                                                    # For URL resources, show the original URL
+                                                    original_url = resource.get("original_url", resource["path"])
+                                                    gr.HTML(
+                                                        elem_classes="resource-filename url-filename",
+                                                        value=f"<div>🔗 {original_url}</div>",
+                                                    )
+                                                else:
+                                                    # For file resources, show just the filename
+                                                    gr.HTML(
+                                                        elem_classes="resource-filename",
+                                                        value=f"<div>  {resource['name']}</div>",
+                                                    )
+
+                                        # Get resource path first (needed for event handlers)
+                                        resource_path = resource["path"]
+
+                                        # File replacement upload area (only for non-URL resources)
+                                        if not is_url_resource:
+                                            replace_file = gr.File(
+                                                label="Drop file here to replace",
+                                                file_types=SUPPORTED_FILE_TYPES,
+                                                elem_classes="resource-upload-gradio",
+                                                scale=1,
+                                                show_label=False,
+                                            )
+                                        else:
+                                            # For URL resources, show a refresh button
+                                            with gr.Row(elem_classes="url-resource-controls"):
+                                                refresh_btn = gr.Button(
+                                                    "🔄 Refresh from URL",
+                                                    elem_classes="url-refresh-btn",
+                                                    size="sm",
+                                                    variant="secondary",
                                                 )
 
-                                        # File replacement upload area
-                                        replace_file = gr.File(
-                                            label="Drop file here to replace",
-                                            file_types=SUPPORTED_FILE_TYPES,
-                                            elem_classes="resource-upload-gradio",
-                                            scale=1,
-                                            show_label=False,
-                                        )
+                                            # Connect refresh button event
+                                            if resource.get("original_url"):
+                                                refresh_btn.click(
+                                                    fn=refresh_url_resource,
+                                                    inputs=[
+                                                        resources_state,
+                                                        gr.State(resource_path),
+                                                        gr.State(resource.get("original_url")),
+                                                        doc_title,
+                                                        doc_description,
+                                                        blocks_state,
+                                                        session_state,
+                                                    ],
+                                                    outputs=[
+                                                        resources_state,
+                                                        outline_state,
+                                                        json_output,
+                                                        gr.State(),  # Dummy for refresh message
+                                                    ],
+                                                )
+
+                                            replace_file = None
 
                                         # Warning message for protected files
                                         replace_warning = gr.HTML(visible=False)
-
-                                        # Connect events for this resource
-                                        resource_path = resource["path"]
 
                                         # Title update - don't update resources_state to avoid re-render
                                         resource_title.change(
@@ -2835,33 +3196,34 @@ def create_app():
                                             ],
                                         )
 
-                                        # File replacement
-                                        replace_file.upload(
-                                            fn=replace_resource_file_gradio,
-                                            inputs=[
-                                                resources_state,
-                                                gr.State(resource_path),
-                                                replace_file,
-                                                doc_title,
-                                                doc_description,
-                                                blocks_state,
-                                                session_state,
-                                            ],
-                                            outputs=[
-                                                resources_state,
-                                                outline_state,
-                                                json_output,
-                                                replace_file,
-                                                replace_warning,
-                                            ],
-                                        ).then(
-                                            # Force JSON update after resources render
-                                            fn=lambda title, desc, res, blocks: regenerate_outline_from_state(
-                                                title, desc, res, blocks
-                                            )[1],
-                                            inputs=[doc_title, doc_description, resources_state, blocks_state],
-                                            outputs=[json_output],
-                                        )
+                                        # File replacement (only for non-URL resources)
+                                        if replace_file is not None:
+                                            replace_file.upload(
+                                                fn=replace_resource_file_gradio,
+                                                inputs=[
+                                                    resources_state,
+                                                    gr.State(resource_path),
+                                                    replace_file,
+                                                    doc_title,
+                                                    doc_description,
+                                                    blocks_state,
+                                                    session_state,
+                                                ],
+                                                outputs=[
+                                                    resources_state,
+                                                    outline_state,
+                                                    json_output,
+                                                    replace_file,
+                                                    replace_warning,
+                                                ],
+                                            ).then(
+                                                # Force JSON update after resources render
+                                                fn=lambda title, desc, res, blocks: regenerate_outline_from_state(
+                                                    title, desc, res, blocks
+                                                )[1],
+                                                inputs=[doc_title, doc_description, resources_state, blocks_state],
+                                                outputs=[json_output],
+                                            )
 
                 # Workspace column: AI, H, T buttons (aligned left)
                 with gr.Column(scale=1, elem_classes="workspace-col"):
@@ -3095,10 +3457,16 @@ def create_app():
                         # Hidden components for download functionality
                         docx_file_path = gr.State(None)
                         markdown_file_path = gr.State(None)
-                        download_format_trigger = gr.Button(visible=True, elem_id="download-format-trigger", elem_classes="hidden-component")
-                        download_format_input = gr.Textbox(visible=True, elem_id="download-format-input", elem_classes="hidden-component")
+                        download_format_trigger = gr.Button(
+                            visible=True, elem_id="download-format-trigger", elem_classes="hidden-component"
+                        )
+                        download_format_input = gr.Textbox(
+                            visible=True, elem_id="download-format-input", elem_classes="hidden-component"
+                        )
                         # Hidden download button for actual downloads
-                        save_doc_btn = gr.DownloadButton(visible=True, elem_id="hidden-download-btn", elem_classes="hidden-component")
+                        save_doc_btn = gr.DownloadButton(
+                            visible=True, elem_id="hidden-download-btn", elem_classes="hidden-component"
+                        )
 
                     # Debug panel for JSON display (collapsible)
                     with gr.Column(elem_classes="debug-panel", elem_id="debug-panel-container"):
@@ -3136,37 +3504,37 @@ def create_app():
             """Update the collapse/expand button to reflect current block states."""
             # Check if any block is expanded (collapsed = False)
             any_expanded = any(not block.get("collapsed", False) for block in blocks if block)
-            
+
             if any_expanded:
                 # Some sections open - show up pointing (rotated -90deg)
                 return gr.update(value="»", elem_classes="workspace-collapse-btn collapse-mode")
             else:
                 # All sections closed - show down pointing (rotated 90deg)
                 return gr.update(value="»", elem_classes="workspace-collapse-btn")
-        
+
         # Helper function to toggle all blocks
         def toggle_all_blocks(blocks):
             """Toggle between expand all and collapse all based on current state.
             If ANY block is expanded, collapse all. If ALL are collapsed, expand all."""
             # Check if any block is expanded (collapsed = False)
             any_expanded = any(not block.get("collapsed", False) for block in blocks if block)
-            
+
             # If any block is expanded, collapse all; otherwise expand all
             for block in blocks:
                 block["collapsed"] = any_expanded
-            
+
             # Update button to reflect NEW state after toggle
             # After toggling: if we collapsed all (any_expanded was True), now all are collapsed
             # After toggling: if we expanded all (any_expanded was False), now some are expanded
             new_state_all_collapsed = any_expanded  # If any were expanded, we collapsed them all
-            
+
             if new_state_all_collapsed:
                 # All sections now closed - show down chevron (normal)
                 elem_classes = "workspace-collapse-btn"
             else:
                 # Some sections now open - show up chevron (rotated)
                 elem_classes = "workspace-collapse-btn collapse-mode"
-            
+
             # Always use double angle quote, rotation is handled by CSS
             return blocks, gr.update(value="»", elem_classes=elem_classes)
 
@@ -3185,14 +3553,8 @@ def create_app():
 
         # Connect workspace collapse/expand toggle button
         workspace_collapse_btn.click(
-            fn=toggle_all_blocks, 
-            inputs=[blocks_state], 
-            outputs=[blocks_state, workspace_collapse_btn]
-        ).then(
-            fn=render_blocks, 
-            inputs=[blocks_state, focused_block_state], 
-            outputs=blocks_display
-        )
+            fn=toggle_all_blocks, inputs=[blocks_state], outputs=[blocks_state, workspace_collapse_btn]
+        ).then(fn=render_blocks, inputs=[blocks_state, focused_block_state], outputs=blocks_display)
 
         # Connect button click to add Text block
 
@@ -3222,9 +3584,7 @@ def create_app():
             fn=toggle_block_collapse, inputs=[blocks_state, toggle_block_id], outputs=blocks_state
         ).then(fn=set_focused_block, inputs=toggle_block_id, outputs=focused_block_state).then(
             fn=render_blocks, inputs=[blocks_state, focused_block_state], outputs=blocks_display
-        ).then(
-            fn=update_collapse_button_state, inputs=[blocks_state], outputs=workspace_collapse_btn
-        )
+        ).then(fn=update_collapse_button_state, inputs=[blocks_state], outputs=workspace_collapse_btn)
 
         # Update heading handler
         update_heading_trigger.click(
@@ -3718,6 +4078,19 @@ def create_app():
             fn=handle_start_file_upload_with_render,
             inputs=[start_file_upload, start_resources_state],
             outputs=[start_resources_state, start_file_upload, start_resources_display, start_upload_warning],
+        )
+
+        # Start tab URL submit handler
+        def handle_start_url_submit_with_render(url_input, current_resources, session_id):
+            """Handle URL submission with resource rendering."""
+            new_resources, url_clear, warning_update = handle_start_url_submit(url_input, current_resources, session_id)
+            rendered_html = render_start_resources(new_resources)
+            return new_resources, url_clear, rendered_html, warning_update
+
+        start_url_submit_btn.click(
+            fn=handle_start_url_submit_with_render,
+            inputs=[start_url_input, start_resources_state, session_state],
+            outputs=[start_resources_state, start_url_input, start_resources_display, start_upload_warning],
         )
 
         # Clear error message when user starts typing

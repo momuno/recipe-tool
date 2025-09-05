@@ -2887,6 +2887,119 @@ input.no-drop,
     opacity: 0.6;
 }
 
+/* URL Resource Styling */
+.start-url-input-section {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid #e5e5e5;
+    gap: 12px;
+}
+
+.start-url-input input {
+    font-size: 13px;
+    padding: 8px 12px;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    background-color: white;
+}
+
+.start-url-input input:focus {
+    outline: none;
+    border-color: #4a9d9e;
+}
+
+.start-url-submit-btn {
+    min-width: 120px;
+    background-color: #4a9d9e !important;
+    color: white !important;
+    border-color: #4a9d9e !important;
+    font-weight: 500;
+    padding: 8px 16px !important;
+    margin-top: 2px;
+}
+
+.start-url-submit-btn:hover {
+    background-color: #2d7474 !important;
+    border-color: #2d7474 !important;
+}
+
+.start-url-btn-col {
+    display: flex;
+    justify-content: center;
+    align-items: flex-end;
+}
+
+/* URL resource indicator in Start tab */
+.dropped-resource.url-resource {
+    background-color: #ff9966;
+    border-color: #ff9966;
+    color: white;
+}
+
+.dropped-resource.url-resource:hover {
+    background-color: #d47239;
+    border-color: #d47239;
+    color: white;
+}
+
+.dropped-resource.url-resource span {
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* URL resource in Update/Generate tab */
+.resource-item-gradio.url-resource-item {
+    background: #ffede0 !important;
+    border-color: #ff9966 !important;
+}
+
+.resource-item-gradio.url-resource-item > div,
+.resource-item-gradio.url-resource-item > .form,
+.resource-item-gradio.url-resource-item > .form > .wrap,
+.resource-item-gradio.url-resource-item > .form > .wrap > .wrap {
+    background: #ffede0 !important;
+}
+
+.resource-filename.url-filename {
+    background-color: #ff9966 !important;
+    color: white !important;
+    font-size: 10px !important;
+}
+
+.url-resource-placeholder {
+    background: #ffede0;
+    border: 1px dashed #ff9966;
+    border-radius: 4px;
+    min-height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #d47239;
+}
+
+/* URL resource controls in Update/Generate tab */
+.url-resource-controls {
+    padding: 8px 0;
+    display: flex;
+    justify-content: center;
+}
+
+.url-refresh-btn {
+    background-color: #ff9966 !important;
+    color: white !important;
+    border-color: #ff9966 !important;
+    font-size: 11px !important;
+    padding: 6px 12px !important;
+    min-width: 140px;
+}
+
+.url-refresh-btn:hover {
+    background-color: #d47239 !important;
+    border-color: #d47239 !important;
+}
+
 /* Start tab error message styling */
 .start-error-message {
     margin-top: 8px;

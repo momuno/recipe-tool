@@ -207,6 +207,11 @@ async def generate_docpack_from_prompt(
     logger.info(f"Running in {'development' if dev_mode else 'production'} mode")
     logger.info(f"Prompt: {prompt}")
     logger.info(f"Resources: {len(resources)} files")
+    # Debug: Log resources to see URL metadata
+    for i, res in enumerate(resources):
+        logger.info(
+            f"Input resource {i}: is_url={res.get('is_url')}, original_url={res.get('original_url')}, path={res.get('path')}"
+        )
 
     # Setup paths
     APP_ROOT = Path(__file__).resolve().parents[2]
@@ -312,29 +317,50 @@ async def generate_docpack_from_prompt(
             outline_json = outline_path.read_text()
             logger.info(f"Generated outline loaded from: {outline_path}")
 
-            # If we have docx conversions, fix the paths in the outline
-            if docx_conversion_map:
-                try:
-                    import json
+            # Always process the outline to fix paths and preserve metadata
+            try:
+                import json
 
-                    outline_data = json.loads(outline_json)
+                outline_data = json.loads(outline_json)
+                modified = False
 
-                    # Fix resource paths to point back to original docx files
-                    for resource in outline_data.get("resources", []):
-                        resource_path = resource.get("path", "")
-                        if resource_path in docx_conversion_map:
-                            original_path = docx_conversion_map[resource_path]
-                            logger.info(f"Restoring original path: {resource_path} -> {original_path}")
-                            resource["path"] = original_path  # Restore original docx path
-                            resource["txt_path"] = resource_path  # Keep txt path for future use
+                # Process resources to fix paths and preserve metadata
+                for outline_resource in outline_data.get("resources", []):
+                    resource_path = outline_resource.get("path", "")
 
-                    # Save the fixed outline
+                    # Fix docx conversion paths if needed
+                    if docx_conversion_map and resource_path in docx_conversion_map:
+                        original_path = docx_conversion_map[resource_path]
+                        logger.info(f"Restoring original path: {resource_path} -> {original_path}")
+                        outline_resource["path"] = original_path  # Restore original docx path
+                        outline_resource["txt_path"] = resource_path  # Keep txt path for future use
+                        resource_path = original_path  # Update for matching below
+                        modified = True
+
+                    # Find matching input resource by path to preserve URL metadata
+                    for input_resource in resources:
+                        input_path = input_resource.get("path", "")
+                        logger.info(f"Checking match: outline_path='{resource_path}' vs input_path='{input_path}'")
+                        # Match by path (accounting for potential path differences)
+                        if input_path == resource_path or Path(input_path).name == Path(resource_path).name:
+                            logger.info(f"Found match! input_resource has is_url={input_resource.get('is_url')}")
+                            if input_resource.get("is_url"):
+                                outline_resource["is_url"] = True
+                                outline_resource["original_url"] = input_resource.get("original_url", "")
+                                logger.info(
+                                    f"Preserving URL metadata for {resource_path}: {input_resource.get('original_url', '')}"
+                                )
+                                modified = True
+                            break
+
+                # Save the modified outline if changes were made
+                if modified:
                     outline_json = json.dumps(outline_data, indent=2)
-                    logger.info("Fixed outline paths to preserve original docx references")
+                    logger.info("Updated outline with fixed paths and preserved metadata")
 
-                except Exception as e:
-                    logger.error(f"Error fixing outline paths: {e}")
-                    # Continue with original outline_json if fixing fails
+            except Exception as e:
+                logger.error(f"Error processing outline: {e}")
+                # Continue with original outline_json if processing fails
 
         else:
             logger.error(f"Outline file not found at: {outline_path}")

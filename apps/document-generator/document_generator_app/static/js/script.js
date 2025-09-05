@@ -746,6 +746,10 @@ function setupExpandableInput() {
             const card = document.querySelector('.start-input-card');
             if (card) card.classList.add('has-expanded');
             
+            // Also expand the expandable section
+            const expandableSection = document.getElementById('start-expandable-section');
+            if (expandableSection) expandableSection.classList.add('expanded');
+            
             // Replace file upload text after expansion
             setTimeout(() => {
                 const draftFileUpload = document.querySelector('.start-file-upload-dropzone');
@@ -769,6 +773,10 @@ function setupExpandableInput() {
             // Add class to card for styling
             const card = document.querySelector('.start-input-card');
             if (card) card.classList.add('has-expanded');
+            
+            // Also expand the expandable section
+            const expandableSection = document.getElementById('start-expandable-section');
+            if (expandableSection) expandableSection.classList.add('expanded');
             
             // Replace file upload text after expansion
             setTimeout(() => {
@@ -811,6 +819,10 @@ function setupExpandableInput() {
                 // Remove class from card
                 const card = document.querySelector('.start-input-card');
                 if (card) card.classList.remove('has-expanded');
+                
+                // Also collapse the expandable section
+                const expandableSection = document.getElementById('start-expandable-section');
+                if (expandableSection) expandableSection.classList.remove('expanded');
             }
         });
 
