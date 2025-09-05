@@ -1,13 +1,495 @@
 // Document Builder JavaScript
 console.log('🚀 JavaScript file loaded successfully!');
 
+// Drag and Drop Debug Logger
+const DragDropLogger = {
+    enabled: true,
+    logHistory: [],
+    maxHistorySize: 500,
+    
+    log: function(level, category, message, data = {}) {
+        if (!this.enabled) return;
+        
+        const timestamp = new Date().toISOString();
+        const logEntry = {
+            timestamp,
+            level,
+            category,
+            message,
+            data,
+            stack: new Error().stack
+        };
+        
+        // Add to history
+        this.logHistory.push(logEntry);
+        if (this.logHistory.length > this.maxHistorySize) {
+            this.logHistory.shift();
+        }
+        
+        // Console output with styling
+        const colors = {
+            'ERROR': 'color: red; font-weight: bold',
+            'WARN': 'color: orange; font-weight: bold',
+            'INFO': 'color: blue',
+            'DEBUG': 'color: gray',
+            'SUCCESS': 'color: green; font-weight: bold'
+        };
+        
+        console.log(
+            `%c[${level}] [${category}] ${timestamp.split('T')[1]}`,
+            colors[level] || 'color: black',
+            message,
+            data
+        );
+    },
+    
+    error: function(category, message, data) {
+        this.log('ERROR', category, message, data);
+    },
+    
+    warn: function(category, message, data) {
+        this.log('WARN', category, message, data);
+    },
+    
+    info: function(category, message, data) {
+        this.log('INFO', category, message, data);
+    },
+    
+    debug: function(category, message, data) {
+        this.log('DEBUG', category, message, data);
+    },
+    
+    success: function(category, message, data) {
+        this.log('SUCCESS', category, message, data);
+    },
+    
+    getDragDropState: function() {
+        const state = {
+            timestamp: new Date().toISOString(),
+            resourceItems: [],
+            dropZones: [],
+            draggedResource: window.draggedResource,
+            currentDraggedResource: window.currentDraggedResource
+        };
+        
+        // Analyze resource items
+        const resourceItems = document.querySelectorAll('.resource-item-gradio');
+        resourceItems.forEach((item, index) => {
+            state.resourceItems.push({
+                index,
+                draggable: item.getAttribute('draggable'),
+                hasListeners: !!item._dragStartHandler || !!item._dragEndHandler,
+                hasDragStart: !!item._dragStartHandler,
+                hasDragEnd: !!item._dragEndHandler,
+                classList: Array.from(item.classList),
+                path: item.dataset.resourcePath,
+                visible: item.offsetParent !== null,
+                dimensions: {
+                    width: item.offsetWidth,
+                    height: item.offsetHeight
+                }
+            });
+        });
+        
+        // Analyze drop zones
+        const dropZones = document.querySelectorAll('.block-resources');
+        dropZones.forEach((zone, index) => {
+            const blockElement = zone.closest('.content-block');
+            state.dropZones.push({
+                index,
+                hasListeners: !!zone._dragEnterHandler || !!zone._dropHandler,
+                hasDragEnter: !!zone._dragEnterHandler,
+                hasDragOver: !!zone._dragOverHandler,
+                hasDrop: !!zone._dropHandler,
+                hasDragLeave: !!zone._dragLeaveHandler,
+                classList: Array.from(zone.classList),
+                visible: zone.offsetParent !== null,
+                parentBlockId: blockElement?.id,
+                parentBlockDataId: blockElement?.dataset?.id,
+                parentBlockExists: !!blockElement
+            });
+        });
+        
+        return state;
+    },
+    
+    dumpState: function() {
+        const state = this.getDragDropState();
+        console.group('🔍 Current Drag-Drop State');
+        console.log('Resource Items:', state.resourceItems);
+        console.log('Drop Zones:', state.dropZones);
+        console.log('Current Dragged Resource:', state.draggedResource);
+        console.log('Window Dragged Resource:', state.currentDraggedResource);
+        console.groupEnd();
+        return state;
+    },
+    
+    exportLogs: function() {
+        const blob = new Blob([JSON.stringify(this.logHistory, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `dragdrop-logs-${new Date().toISOString()}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+    }
+};
+
+// Make logger globally available for debugging
+window.DragDropLogger = DragDropLogger;
+
+// Drag-Drop Monitoring System
+function startDragDropMonitoring() {
+    DragDropLogger.info('MONITOR', 'Starting drag-drop monitoring system');
+    
+    // Track block interactions
+    let blockInteractionDetected = false;
+    let lastBlockRenderTime = 0;
+    let lastResourceCount = 0;
+    let resourceCountCheckInterval = null;
+    
+    // Monitor for DOM changes that might affect drag-drop
+    const monitorObserver = new MutationObserver((mutations) => {
+        let resourceItemsChanged = false;
+        let dropZonesChanged = false;
+        let blocksChanged = false;
+        
+        mutations.forEach((mutation) => {
+            // Check if resource items were added/removed
+            if (mutation.type === 'childList') {
+                const addedResources = Array.from(mutation.addedNodes).filter(node => 
+                    node.nodeType === 1 && node.classList?.contains('resource-item-gradio')
+                );
+                const removedResources = Array.from(mutation.removedNodes).filter(node => 
+                    node.nodeType === 1 && node.classList?.contains('resource-item-gradio')
+                );
+                
+                if (addedResources.length > 0) {
+                    resourceItemsChanged = true;
+                    DragDropLogger.warn('MONITOR', `${addedResources.length} resource items added to DOM`);
+                    
+                    // Force immediate setup for new resources
+                    setTimeout(() => {
+                        DragDropLogger.info('MONITOR', 'New resources detected - forcing immediate setup');
+                        setupDragAndDrop();
+                    }, 50);
+                }
+                if (removedResources.length > 0) {
+                    resourceItemsChanged = true;
+                    DragDropLogger.warn('MONITOR', `${removedResources.length} resource items removed from DOM`);
+                }
+                
+                // Check for content block changes (indicates interaction)
+                const addedBlocks = Array.from(mutation.addedNodes).filter(node => 
+                    node.nodeType === 1 && (node.classList?.contains('content-block') || 
+                    node.querySelector?.('.content-block'))
+                );
+                const removedBlocks = Array.from(mutation.removedNodes).filter(node => 
+                    node.nodeType === 1 && (node.classList?.contains('content-block') ||
+                    node.querySelector?.('.content-block'))
+                );
+                
+                if (addedBlocks.length > 0 || removedBlocks.length > 0) {
+                    blocksChanged = true;
+                    blockInteractionDetected = true;
+                    lastBlockRenderTime = Date.now();
+                    DragDropLogger.warn('MONITOR', 'Content blocks changed - likely due to interaction', {
+                        added: addedBlocks.length,
+                        removed: removedBlocks.length
+                    });
+                }
+                
+                // Check for drop zones changes
+                const addedDropZones = Array.from(mutation.addedNodes).filter(node => 
+                    node.nodeType === 1 && (node.classList?.contains('block-resources') || 
+                    node.querySelector?.('.block-resources'))
+                );
+                const removedDropZones = Array.from(mutation.removedNodes).filter(node => 
+                    node.nodeType === 1 && (node.classList?.contains('block-resources') ||
+                    node.querySelector?.('.block-resources'))
+                );
+                
+                if (addedDropZones.length > 0 || removedDropZones.length > 0) {
+                    dropZonesChanged = true;
+                    DragDropLogger.warn('MONITOR', 'Drop zones changed in DOM');
+                }
+            }
+            
+            // Check if draggable attribute was changed
+            if (mutation.type === 'attributes' && mutation.attributeName === 'draggable') {
+                const element = mutation.target;
+                if (element.classList?.contains('resource-item-gradio')) {
+                    const currentValue = element.getAttribute('draggable');
+                    DragDropLogger.error('MONITOR', 'Draggable attribute changed!', {
+                        element,
+                        newValue: currentValue,
+                        oldValue: mutation.oldValue
+                    });
+                    
+                    // Auto-fix if draggable was removed
+                    if (currentValue !== 'true') {
+                        element.setAttribute('draggable', 'true');
+                        DragDropLogger.warn('MONITOR', 'Auto-fixed draggable attribute');
+                    }
+                }
+            }
+            
+            // CRITICAL: Watch for class changes that indicate collapse/expand
+            if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
+                const element = mutation.target;
+                if (element.classList?.contains('content-block') || 
+                    element.classList?.contains('block-content') ||
+                    element.classList?.contains('collapsed')) {
+                    
+                    DragDropLogger.warn('MONITOR', 'Block class change detected - likely collapse/expand!', {
+                        element: element.tagName,
+                        classes: Array.from(element.classList)
+                    });
+                    
+                    // Schedule aggressive drop zone repair
+                    setTimeout(() => {
+                        const zones = document.querySelectorAll('.block-resources');
+                        DragDropLogger.info('MONITOR', `Emergency repair of ${zones.length} drop zones after collapse toggle`);
+                        setupDropZones(zones);
+                        
+                        // Also check resource items
+                        const resources = document.querySelectorAll('.resource-item-gradio');
+                        resources.forEach((item, idx) => {
+                            if (!item._dragStartHandler || item.getAttribute('draggable') !== 'true') {
+                                DragDropLogger.warn('MONITOR', `Resource ${idx} lost handlers, repairing`);
+                            }
+                        });
+                        
+                        // Full setup to be sure
+                        setTimeout(setupDragAndDrop, 200);
+                    }, 150);
+                }
+            }
+        });
+        
+        // Re-setup drag and drop if significant changes detected
+        if (resourceItemsChanged || dropZonesChanged || blocksChanged) {
+            DragDropLogger.warn('MONITOR', 'Significant DOM changes detected, re-running setup', {
+                resourceItemsChanged,
+                dropZonesChanged,
+                blocksChanged,
+                blockInteractionDetected
+            });
+            
+            // Use longer delay after block interactions to let DOM stabilize
+            const delay = blocksChanged ? 300 : 100;
+            
+            setTimeout(() => {
+                setupDragAndDrop();
+                DragDropLogger.info('MONITOR', 'Re-ran setupDragAndDrop after DOM changes', {
+                    delay,
+                    reason: blocksChanged ? 'block interaction' : 'resource/zone change'
+                });
+                
+                // Reset block interaction flag
+                if (blocksChanged) {
+                    blockInteractionDetected = false;
+                }
+            }, delay);
+        }
+    });
+    
+    // Start observing
+    monitorObserver.observe(document.body, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeOldValue: true,
+        attributeFilter: ['draggable', 'class', 'style']
+    });
+    
+    // Periodic health check - MORE AGGRESSIVE FOR DROP ZONES
+    setInterval(() => {
+        const state = DragDropLogger.getDragDropState();
+        const brokenItems = state.resourceItems.filter(item => 
+            item.draggable !== 'true' || !item.hasListeners
+        );
+        
+        // CHECK DROP ZONES TOO!
+        const brokenZones = state.dropZones.filter(zone => !zone.hasListeners);
+        
+        // Check if we recently had block interactions
+        const timeSinceBlockRender = Date.now() - lastBlockRenderTime;
+        const recentBlockInteraction = timeSinceBlockRender < 10000; // Within last 10 seconds
+        
+        if (brokenItems.length > 0 || brokenZones.length > 0) {
+            DragDropLogger.error('MONITOR', 'Found broken drag-drop elements', {
+                brokenItems: brokenItems.length,
+                brokenZones: brokenZones.length,
+                brokenZoneDetails: brokenZones,
+                recentBlockInteraction,
+                timeSinceBlockRender: timeSinceBlockRender + 'ms'
+            });
+            // Auto-repair
+            setupDragAndDrop();
+            DragDropLogger.warn('MONITOR', 'Auto-repaired drag-drop setup', {
+                trigger: recentBlockInteraction ? 'post-block-interaction' : 'periodic-check',
+                fixedItems: brokenItems.length,
+                fixedZones: brokenZones.length
+            });
+        } else if (recentBlockInteraction && state.resourceItems.length > 0) {
+            // Preemptively refresh after block interactions even if not broken yet
+            DragDropLogger.info('MONITOR', 'Preemptive refresh after recent block interaction');
+            setupDragAndDrop();
+        }
+    }, 3000); // Check every 3 seconds (more frequent)
+    
+    // Monitor for specific block interaction events
+    document.addEventListener('click', function(e) {
+        // Check if click was on a block-related element
+        const target = e.target;
+        const isBlockInteraction = 
+            target.closest('.content-block') ||
+            target.closest('.add-after-btn') ||
+            target.closest('.delete-block-btn') ||
+            target.closest('.toggle-btn') ||
+            target.closest('.convert-btn') ||
+            target.closest('.block-heading') ||
+            target.closest('.block-content');
+            
+        if (isBlockInteraction) {
+            DragDropLogger.info('MONITOR', 'Block interaction detected via click', {
+                element: target.tagName,
+                classes: Array.from(target.classList)
+            });
+            
+            // Schedule drag-drop refresh after likely re-render
+            setTimeout(() => {
+                DragDropLogger.info('MONITOR', 'Refreshing drag-drop after block interaction');
+                setupDragAndDrop();
+            }, 500);
+        }
+    }, true);
+    
+    // Resource count monitoring - check if count changes but DOM doesn't update properly
+    resourceCountCheckInterval = setInterval(() => {
+        const currentResources = document.querySelectorAll('.resource-item-gradio');
+        const currentCount = currentResources.length;
+        
+        if (currentCount !== lastResourceCount) {
+            DragDropLogger.warn('RESOURCE_COUNT', `Resource count changed: ${lastResourceCount} -> ${currentCount}`);
+            
+            // Check if all resources have drag handlers
+            let needsRepair = false;
+            currentResources.forEach((item, idx) => {
+                if (!item._dragStartHandler || item.getAttribute('draggable') !== 'true') {
+                    DragDropLogger.error('RESOURCE_COUNT', `Resource ${idx} missing handlers after count change`);
+                    needsRepair = true;
+                }
+            });
+            
+            if (needsRepair || currentCount > lastResourceCount) {
+                DragDropLogger.info('RESOURCE_COUNT', 'Repairing drag-drop after resource count change');
+                setTimeout(() => {
+                    setupDragAndDrop();
+                    DragDropLogger.success('RESOURCE_COUNT', 'Drag-drop repaired after resource count change');
+                }, 100);
+            }
+            
+            lastResourceCount = currentCount;
+        }
+    }, 1000); // Check every second
+    
+    // Initialize resource count
+    lastResourceCount = document.querySelectorAll('.resource-item-gradio').length;
+    DragDropLogger.info('MONITOR', `Initial resource count: ${lastResourceCount}`);
+    
+    DragDropLogger.success('MONITOR', 'Monitoring system active with resource count tracking');
+}
+
+// Debug helper functions for manual troubleshooting
+window.debugDragDrop = {
+    status: function() {
+        return DragDropLogger.dumpState();
+    },
+    
+    repairAll: function() {
+        DragDropLogger.info('DEBUG', 'Manual repair requested');
+        setupInProgress = false; // Force allow setup
+        setupDragAndDrop();
+        return 'Drag-drop setup re-initialized';
+    },
+    
+    repairDropZones: function() {
+        DragDropLogger.info('DEBUG', 'Repairing drop zones only');
+        const dropZones = document.querySelectorAll('.block-resources');
+        setupDropZones(dropZones);
+        return `Repaired ${dropZones.length} drop zones`;
+    },
+    
+    exportLogs: function() {
+        DragDropLogger.exportLogs();
+    },
+    
+    testDrag: function(index = 0) {
+        const items = document.querySelectorAll('.resource-item-gradio');
+        if (items[index]) {
+            const testEvent = new DragEvent('dragstart', { bubbles: true });
+            items[index].dispatchEvent(testEvent);
+            DragDropLogger.info('DEBUG', `Simulated dragstart on item ${index}`);
+        }
+    },
+    
+    checkItem: function(index = 0) {
+        const items = document.querySelectorAll('.resource-item-gradio');
+        if (items[index]) {
+            const item = items[index];
+            const pathHidden = item.querySelector('.resource-path-hidden');
+            const info = {
+                draggable: item.getAttribute('draggable'),
+                hasHandlers: !!item._dragStartHandler,
+                classList: Array.from(item.classList),
+                path: item.dataset.resourcePath,
+                actualPath: pathHidden?.getAttribute('data-path') || pathHidden?.textContent?.trim(),
+                visible: item.offsetParent !== null,
+                dimensions: {
+                    width: item.offsetWidth,
+                    height: item.offsetHeight
+                }
+            };
+            console.log(`Resource item ${index}:`, info);
+            return info;
+        }
+    },
+    
+    checkAllItems: function() {
+        const items = document.querySelectorAll('.resource-item-gradio');
+        console.log(`Total resources: ${items.length}`);
+        const details = [];
+        items.forEach((item, idx) => {
+            const pathHidden = item.querySelector('.resource-path-hidden');
+            details.push({
+                index: idx,
+                path: pathHidden?.getAttribute('data-path') || pathHidden?.textContent?.trim(),
+                draggable: item.getAttribute('draggable'),
+                hasHandlers: !!item._dragStartHandler
+            });
+        });
+        console.table(details);
+        return details;
+    },
+    
+    forceRefresh: function() {
+        DragDropLogger.info('DEBUG', 'Forcing complete refresh');
+        setupInProgress = false;
+        const items = document.querySelectorAll('.resource-item-gradio');
+        const zones = document.querySelectorAll('.block-resources');
+        DragDropLogger.info('DEBUG', `Found ${items.length} resources and ${zones.length} drop zones`);
+        setupDragAndDrop();
+        return `Refreshed ${items.length} resources and ${zones.length} drop zones`;
+    }
+};
+
 // Auto-resize textarea function
 function autoResizeTextarea(textarea) {
-    console.log('Auto-resizing textarea:', textarea);
     textarea.style.height = 'auto';
     const newHeight = Math.max(120, textarea.scrollHeight);
     textarea.style.height = newHeight + 'px';
-    console.log('Set textarea height to:', newHeight + 'px', 'scrollHeight:', textarea.scrollHeight);
 }
 
 // Setup auto-resize for all text block textareas
@@ -57,46 +539,33 @@ window.addEventListener('beforeunload', function (e) {
 });
 
 function refresh() {
-    console.log('refresh() called');
     const url = new URL(window.location);
     elements = document.getElementsByClassName("dark")
-    console.log('Found dark elements:', elements.length);
     if (elements.length != 0) {
-        console.log('Dark elements:', elements)
         elements[0].classList.remove("dark");
-        console.log('Refreshing in light mode - removed dark class');
     }
 }
 
 
 // Toggle debug panel visibility
 function toggleDebugPanel() {
-    console.log('toggleDebugPanel called');
     const content = document.getElementById('debug-panel-content');
     const icon = document.getElementById('debug-collapse-icon');
 
-    console.log('Debug panel content element:', content);
-    console.log('Current display style:', content ? content.style.display : 'content not found');
-    console.log('Icon element:', icon);
-
     if (content) {
         if (content.style.display === 'none' || content.style.display === '') {
-            console.log('Opening debug panel');
             content.style.display = 'block';
             if (icon) {
                 icon.textContent = '⌵';
                 icon.style.transform = 'rotate(180deg)';  // Rotate down chevron to point up
             }
         } else {
-            console.log('Closing debug panel');
             content.style.display = 'none';
             if (icon) {
                 icon.textContent = '⌵';
                 icon.style.transform = 'rotate(0deg)';  // Normal down chevron
             }
         }
-    } else {
-        console.error('Debug panel content element not found!');
     }
 }
 
@@ -195,12 +664,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // Setup auto-expand for resource description textareas
 function setupResourceDescriptionAutoExpand() {
-    console.log('🔧 Setting up resource description auto-expand...');
-    
     // Find all existing resource description textareas
     const resourceDescTextareas = document.querySelectorAll('.resource-desc-gradio textarea');
-    console.log(`🔧 Found ${resourceDescTextareas.length} resource description textareas`);
-    
+
     resourceDescTextareas.forEach(textarea => {
         setupSingleResourceDescTextarea(textarea);
     });
@@ -217,14 +683,12 @@ function setupResourceDescriptionAutoExpand() {
                     
                     newTextareas.forEach(textarea => {
                         if (!textarea.dataset.autoExpandSetup) {
-                            console.log('Setting up auto-expand for new resource description textarea');
                             setupSingleResourceDescTextarea(textarea);
                         }
                     });
                     
                     // Also check if the node itself is a resource desc textarea
                     if (node.matches && node.matches('.resource-desc-gradio textarea') && !node.dataset.autoExpandSetup) {
-                        console.log('Setting up auto-expand for new resource description textarea (direct match)');
                         setupSingleResourceDescTextarea(node);
                     }
                 }
@@ -243,12 +707,10 @@ function setupResourceDescriptionAutoExpand() {
 // Setup auto-expand for a single resource description textarea
 function setupSingleResourceDescTextarea(textarea) {
     if (textarea.dataset.autoExpandSetup) {
-        console.log('🔧 Resource description textarea already setup, skipping');
         return; // Already setup
     }
     
     textarea.dataset.autoExpandSetup = 'true';
-    console.log('🔧 Setting up auto-expand for resource description textarea:', textarea);
     
     // Initial sizing
     autoExpandResourceDescription(textarea);
@@ -266,67 +728,20 @@ function setupSingleResourceDescTextarea(textarea) {
     });
 }
 
-// Expandable input section - try multiple approaches
-console.log('Script loaded - setting up expandable section');
 
 // Function to set up the expandable behavior
 function setupExpandableInput() {
-    console.log('=== EXPANDABLE SETUP DEBUG ===');
-    console.log('Attempting to set up expandable input...');
-
-    // Debug: Check for start-prompt-input element
-    const startPromptContainer = document.getElementById('start-prompt-input');
-    console.log('start-prompt-input container:', startPromptContainer);
-    
-    if (startPromptContainer) {
-        const textareas = startPromptContainer.querySelectorAll('textarea');
-        const inputs = startPromptContainer.querySelectorAll('input');
-        console.log('Found textareas in container:', textareas.length, textareas);
-        console.log('Found inputs in container:', inputs.length, inputs);
-    }
 
     // Try multiple selectors for the prompt input
     const promptInput1 = document.querySelector('#start-prompt-input textarea');
     const promptInput2 = document.querySelector('#start-prompt-input input');
     const promptInput3 = document.querySelector('[id*="start-prompt"] textarea');
     const promptInput4 = document.querySelector('[id*="start-prompt"] input');
-    
-    console.log('Selector #start-prompt-input textarea:', promptInput1);
-    console.log('Selector #start-prompt-input input:', promptInput2);
-    console.log('Selector [id*="start-prompt"] textarea:', promptInput3);
-    console.log('Selector [id*="start-prompt"] input:', promptInput4);
-    
     const promptInput = promptInput1 || promptInput2 || promptInput3 || promptInput4;
-    console.log('Final selected promptInput:', promptInput);
-
-    // Debug: Check for expandable section
-    const expandableSection = document.getElementById('start-expandable-section');
-    console.log('start-expandable-section:', expandableSection);
     
-    if (!expandableSection) {
-        const allExpandableElements = document.querySelectorAll('[id*="expandable"]');
-        console.log('All elements with "expandable" in id:', allExpandableElements);
-        const allStartElements = document.querySelectorAll('[id*="start"]');
-        console.log('All elements with "start" in id:', allStartElements);
-    }
-
-    if (promptInput && expandableSection) {
-        console.log('✓ Found both elements - setting up event listeners');
-        console.log('promptInput element type:', promptInput.tagName);
-        console.log('expandableSection element type:', expandableSection.tagName);
-        
-        // Debug: Check current height of prompt input
-        const currentHeight = window.getComputedStyle(promptInput).height;
-        const currentScrollHeight = promptInput.scrollHeight;
-        console.log(`📏 Main input current height: ${currentHeight}, scrollHeight: ${currentScrollHeight}px, content length: ${promptInput.value.length}`);
-
+    if (promptInput ) {
         // Expand on focus
         promptInput.addEventListener('focus', () => {
-            console.log('✓ Input focused - expanding');
-            expandableSection.classList.add('expanded');
-            // Remove inline styles to let CSS handle the transition
-            expandableSection.style.removeProperty('display');
-            expandableSection.style.removeProperty('opacity');
             // Add class to card for styling
             const card = document.querySelector('.start-input-card');
             if (card) card.classList.add('has-expanded');
@@ -340,7 +755,6 @@ function setupExpandableInput() {
                         if (wrapDiv.textContent.includes('Drop File Here')) {
                             wrapDiv.childNodes.forEach(node => {
                                 if (node.nodeType === Node.TEXT_NODE && node.textContent.includes('Drop File Here')) {
-                                    console.log('✅ Replacing "Drop File Here" on focus expansion');
                                     node.textContent = node.textContent.replace('Drop File Here', 'Drop Word or Text File Here');
                                 }
                             });
@@ -350,48 +764,8 @@ function setupExpandableInput() {
             }, 100);
         });
 
-        // Also expand on click
-        promptInput.addEventListener('click', () => {
-            console.log('✓ Input clicked - current expanded state:', expandableSection.classList.contains('expanded'));
-            if (!expandableSection.classList.contains('expanded')) {
-                console.log('✓ Input clicked - expanding');
-                expandableSection.classList.add('expanded');
-                // Remove inline styles to let CSS handle the transition
-                expandableSection.style.removeProperty('display');
-                expandableSection.style.removeProperty('opacity');
-                // Add class to card for styling
-                const card = document.querySelector('.start-input-card');
-                if (card) card.classList.add('has-expanded');
-                
-                // Replace file upload text after expansion
-                setTimeout(() => {
-                    const draftFileUpload = document.querySelector('.start-file-upload-dropzone');
-                    if (draftFileUpload) {
-                        const wrapDivs = draftFileUpload.querySelectorAll('.wrap');
-                        wrapDivs.forEach(wrapDiv => {
-                            if (wrapDiv.textContent.includes('Drop File Here')) {
-                                wrapDiv.childNodes.forEach(node => {
-                                    if (node.nodeType === Node.TEXT_NODE && node.textContent.includes('Drop File Here')) {
-                                        console.log('✅ Replacing "Drop File Here" on click expansion');
-                                        node.textContent = node.textContent.replace('Drop File Here', 'Drop Word or Text File Here');
-                                    }
-                                });
-                            }
-                        });
-                    }
-                }, 100);
-            } else {
-                console.log('✓ Input clicked - already expanded');
-            }
-        });
-
         // Function to expand the card
         function expandCard() {
-            console.log('Expanding card');
-            expandableSection.classList.add('expanded');
-            // Remove inline styles to let CSS handle the transition
-            expandableSection.style.removeProperty('display');
-            expandableSection.style.removeProperty('opacity');
             // Add class to card for styling
             const card = document.querySelector('.start-input-card');
             if (card) card.classList.add('has-expanded');
@@ -405,7 +779,6 @@ function setupExpandableInput() {
                         if (wrapDiv.textContent.includes('Drop File Here')) {
                             wrapDiv.childNodes.forEach(node => {
                                 if (node.nodeType === Node.TEXT_NODE && node.textContent.includes('Drop File Here')) {
-                                    console.log('✅ Replacing "Drop File Here" on expandCard()');
                                     node.textContent = node.textContent.replace('Drop File Here', 'Drop Word or Text File Here');
                                 }
                             });
@@ -419,7 +792,6 @@ function setupExpandableInput() {
         const exampleButtons = document.querySelectorAll('.start-example-btn');
         exampleButtons.forEach(button => {
             button.addEventListener('click', () => {
-                console.log('Example button clicked - expanding card');
                 // Small delay to ensure the content is loaded first
                 setTimeout(expandCard, 100);
             });
@@ -434,36 +806,16 @@ function setupExpandableInput() {
             const isExampleButton = e.target.closest('.start-example-btn');
             const isRemoveButton = e.target.closest('.remove-resource');
 
-            console.log('✓ Click outside check:', {
-                target: e.target.tagName + (e.target.className ? '.' + e.target.className : ''),
-                isClickInInput,
-                isClickInExpandable,
-                isExampleButton: !!isExampleButton,
-                isRemoveButton: !!isRemoveButton,
-                currentlyExpanded: expandableSection.classList.contains('expanded')
-            });
-
             // Always collapse when clicking outside, unless it's a remove resource button
             if (!isClickInInput && !isClickInExpandable && !isExampleButton && !isRemoveButton) {
-                console.log('✓ Clicking outside - collapsing');
-                expandableSection.classList.remove('expanded');
-                // Remove inline styles to let CSS handle the transition
-                expandableSection.style.removeProperty('display');
-                expandableSection.style.removeProperty('opacity');
                 // Remove class from card
                 const card = document.querySelector('.start-input-card');
                 if (card) card.classList.remove('has-expanded');
-            } else {
-                console.log('✓ Click inside or on special element - not collapsing');
             }
         });
 
         return true;
     } else {
-        console.log('✗ Missing elements:');
-        console.log('  promptInput:', !!promptInput);
-        console.log('  expandableSection:', !!expandableSection);
-        console.log('=== END EXPANDABLE SETUP DEBUG ===');
         return false;
     }
 }
@@ -473,20 +825,15 @@ let expandableSetupAttempts = 0;
 const maxExpandableAttempts = 4;
 
 function trySetupExpandableInput() {
-    console.log('🔄 trySetupExpandableInput() called, attempt:', expandableSetupAttempts + 1);
     if (setupExpandableInput()) {
-        console.log('✅ Expandable input setup successful');
         return;
     }
     
     expandableSetupAttempts++;
     if (expandableSetupAttempts < maxExpandableAttempts) {
         const delay = 500 * Math.pow(2, expandableSetupAttempts - 1); // 500ms, 1000ms, 2000ms
-        console.log(`❌ Expandable input not ready, retrying in ${delay}ms... (attempt ${expandableSetupAttempts}/${maxExpandableAttempts})`);
         setTimeout(trySetupExpandableInput, delay);
-    } else {
-        console.log('❌ Expandable input setup failed after all attempts');
-    }
+    } 
 }
 
 // Initial attempt after a short delay
@@ -534,31 +881,18 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // Tab switching helper
 function switchToDraftTab() {
-    console.log('Switching to Update + Generate tab');
 
     // Find all tab buttons
-    const tabButtons = document.querySelectorAll('button[role="tab"]');
-    console.log('DEBUG: Found tab buttons:', tabButtons.length);
-    
-    // Log all tab button texts for debugging
-    tabButtons.forEach((button, index) => {
-        console.log(`DEBUG: Tab ${index}: "${button.textContent.trim()}"`);
-    });
+    const tabButtons = document.querySelectorAll('button[role="tab"]'); 
 
     // Find the Update + Generate tab button and click it (the second tab)
     let found = false;
     tabButtons.forEach(button => {
         if (button.textContent.includes('Update + Generate')) {
-            console.log('DEBUG: Found Update + Generate tab, clicking...');
             button.click();
-            console.log('Clicked Update + Generate tab');
             found = true;
         }
     });
-    
-    if (!found) {
-        console.log('DEBUG: No Update + Generate tab found');
-    }
 }
 
 // Track processed trigger timestamps to prevent repeated switching
@@ -578,7 +912,6 @@ setInterval(() => {
                 
                 // Only process if we haven't seen this timestamp before
                 if (!processedTriggers.has(timestamp)) {
-                    console.log('DEBUG: Found new SWITCH_TO_DRAFT_TAB trigger with timestamp:', timestamp);
                     processedTriggers.add(timestamp);
                     switchToDraftTab();
                     
@@ -587,8 +920,6 @@ setInterval(() => {
                         const timestamps = Array.from(processedTriggers).sort();
                         processedTriggers.delete(timestamps[0]);
                     }
-                } else {
-                    console.log('DEBUG: Ignoring already processed trigger:', timestamp);
                 }
             }
         }
@@ -599,29 +930,17 @@ setInterval(() => {
 document.addEventListener('click', function(e) {
     // Only show detailed logging for tab clicks to reduce noise
     if (e.target && e.target.getAttribute('role') === 'tab') {
-        console.log('DEBUG: Tab click detected on element:', e.target);
-        console.log('DEBUG: Element role:', e.target.getAttribute('role'));
-        console.log('DEBUG: Element textContent:', e.target.textContent);
-        console.log('DEBUG: Element classList:', e.target.classList);
         
         // Try multiple ways to detect Draft tab click (it's called "Draft" not "Start")
         const isDraftTab1 = e.target && e.target.getAttribute('role') === 'tab' && e.target.textContent.includes('Draft');
         const isDraftTab2 = e.target && e.target.textContent && e.target.textContent.trim() === 'Draft';
         const isDraftTab3 = e.target && e.target.classList && e.target.classList.contains('tab') && e.target.textContent.includes('Draft');
         const isDraftTab4 = e.target && e.target.closest('button[role="tab"]') && e.target.textContent.includes('Draft');
-        
-        console.log('DEBUG: Draft tab detection methods:');
-        console.log('  Method 1 (role=tab + Draft text):', isDraftTab1);
-        console.log('  Method 2 (text === Draft):', isDraftTab2);  
-        console.log('  Method 3 (class=tab + Draft text):', isDraftTab3);
-        console.log('  Method 4 (closest tab + Draft text):', isDraftTab4);
-        
+
         if (isDraftTab1 || isDraftTab2 || isDraftTab3 || isDraftTab4) {
-            console.log('🔄 DEBUG: Draft tab clicked, re-initializing expandable functionality');
             setTimeout(() => {
                 // Reset the setup attempts counter to allow re-setup
                 expandableSetupAttempts = 0;
-                console.log('🔄 DEBUG: About to call trySetupExpandableInput()');
                 trySetupExpandableInput();
             }, 100);
         }
@@ -634,7 +953,6 @@ const tabObserver = new MutationObserver((mutations) => {
         if (mutation.type === 'attributes' && mutation.attributeName === 'aria-selected') {
             const target = mutation.target;
             if (target.textContent && target.textContent.includes('Draft') && target.getAttribute('aria-selected') === 'true') {
-                console.log('DEBUG: Draft tab became active via MutationObserver');
                 setTimeout(() => {
                     expandableSetupAttempts = 0;
                     trySetupExpandableInput();
@@ -648,14 +966,11 @@ const tabObserver = new MutationObserver((mutations) => {
 setTimeout(() => {
     const tabContainer = document.querySelector('.tab-nav') || document.querySelector('[role="tablist"]');
     if (tabContainer) {
-        console.log('DEBUG: Found tab container, starting MutationObserver');
         tabObserver.observe(tabContainer, {
             attributes: true,
             subtree: true,
             attributeFilter: ['aria-selected']
         });
-    } else {
-        console.log('DEBUG: No tab container found for MutationObserver');
     }
 }, 1000);
 
@@ -663,17 +978,141 @@ setTimeout(() => {
 
 // Note: Resource delete buttons now use onclick attribute directly
 
+// Monitor for file uploads that add new resources
+function monitorFileUploads() {
+    DragDropLogger.info('UPLOAD', 'Setting up file upload monitoring');
+    
+    // Watch for changes in the file upload area
+    const uploadObserver = new MutationObserver((mutations) => {
+        let uploadDetected = false;
+        
+        mutations.forEach(mutation => {
+            // Check for changes that might indicate file upload
+            if (mutation.type === 'childList') {
+                const hasNewUpload = 
+                    Array.from(mutation.addedNodes).some(node => 
+                        node.nodeType === 1 && (
+                            node.classList?.contains('resource-item-gradio') ||
+                            node.querySelector?.('.resource-item-gradio')
+                        )
+                    );
+                
+                if (hasNewUpload) {
+                    uploadDetected = true;
+                }
+            }
+        });
+        
+        if (uploadDetected) {
+            DragDropLogger.warn('UPLOAD', 'New file upload detected - resources may have changed');
+            
+            // Schedule multiple checks to catch the update
+            [100, 300, 500, 1000].forEach(delay => {
+                setTimeout(() => {
+                    const currentCount = document.querySelectorAll('.resource-item-gradio').length;
+                    DragDropLogger.info('UPLOAD', `Checking resources after upload (${delay}ms): ${currentCount} items`);
+                    
+                    // Force setup if we find uninitialized resources
+                    const uninitializedItems = Array.from(document.querySelectorAll('.resource-item-gradio'))
+                        .filter(item => !item._dragStartHandler || item.getAttribute('draggable') !== 'true');
+                    
+                    if (uninitializedItems.length > 0) {
+                        DragDropLogger.error('UPLOAD', `Found ${uninitializedItems.length} uninitialized resources after upload`);
+                        setupDragAndDrop();
+                        DragDropLogger.success('UPLOAD', 'Re-initialized drag-drop after file upload');
+                    }
+                }, delay);
+            });
+        }
+    });
+    
+    // Try to find the resources container to observe
+    setTimeout(() => {
+        const resourcesContainer = document.querySelector('.resources-panel') || 
+                                  document.querySelector('[id*="resources"]') ||
+                                  document.querySelector('.resource-item-gradio')?.parentElement?.parentElement;
+        
+        if (resourcesContainer) {
+            uploadObserver.observe(resourcesContainer, {
+                childList: true,
+                subtree: true
+            });
+            DragDropLogger.success('UPLOAD', 'File upload monitoring active');
+        } else {
+            DragDropLogger.warn('UPLOAD', 'Could not find resources container for upload monitoring');
+        }
+    }, 1000);
+}
+
+// Start file upload monitoring
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', monitorFileUploads);
+} else {
+    monitorFileUploads();
+}
+
+// CRITICAL FIX: Monitor and repair drop zones after toggle clicks
+function monitorToggleClicks() {
+    DragDropLogger.info('MONITOR', 'Setting up toggle click monitoring');
+    
+    // Use event delegation to catch all toggle clicks
+    document.addEventListener('click', function(e) {
+        const target = e.target;
+        
+        // Check if this is a toggle-related click
+        if (target.classList?.contains('toggle-btn') || 
+            target.closest('.toggle-btn') ||
+            target.classList?.contains('block-heading') ||
+            target.closest('.block-heading')) {
+            
+            DragDropLogger.warn('TOGGLE', 'Toggle/heading click detected - DROP ZONES WILL BREAK!');
+            
+            // Aggressive repair schedule
+            const repairDelays = [50, 150, 300, 500, 750];
+            repairDelays.forEach(delay => {
+                setTimeout(() => {
+                    DragDropLogger.info('TOGGLE', `Repairing drop zones (${delay}ms after toggle)`);
+                    
+                    // Find and repair all drop zones
+                    const zones = document.querySelectorAll('.block-resources');
+                    if (zones.length > 0) {
+                        // Check if they're actually broken
+                        let brokenCount = 0;
+                        zones.forEach(zone => {
+                            if (!zone._dropHandler) {
+                                brokenCount++;
+                            }
+                        });
+                        
+                        if (brokenCount > 0) {
+                            DragDropLogger.error('TOGGLE', `Found ${brokenCount}/${zones.length} broken drop zones`);
+                            setupDropZones(zones);
+                            DragDropLogger.success('TOGGLE', 'Drop zones repaired');
+                        } else {
+                            DragDropLogger.debug('TOGGLE', `All ${zones.length} drop zones still have handlers`);
+                        }
+                    }
+                }, delay);
+            });
+        }
+    }, true); // Use capture phase to catch events early
+}
+
+// Start monitoring immediately
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', monitorToggleClicks);
+} else {
+    monitorToggleClicks();
+}
+
 // Delete resource function
 function deleteResource(resourcePath) {
-    console.log('deleteResource called with resourcePath:', resourcePath);
     // Set the resource path in the hidden textbox
     const resourcePathInput = document.getElementById('delete-resource-path');
-    console.log('Delete resource path input element:', resourcePathInput);
 
     if (resourcePathInput) {
         // Find the textarea element and set its value
         const textarea = resourcePathInput.querySelector('textarea') || resourcePathInput.querySelector('input[type="text"]');
-        console.log('Delete resource textarea element:', textarea);
 
         if (textarea) {
             textarea.value = resourcePath;
@@ -681,186 +1120,122 @@ function deleteResource(resourcePath) {
 
             // Trigger the hidden delete button
             const deleteButton = document.getElementById('delete-resource-trigger');
-            console.log('Delete resource trigger button:', deleteButton);
 
             if (deleteButton) {
                 deleteButton.click();
-                console.log('Clicked delete resource trigger');
-            } else {
-                console.error('Delete resource trigger button not found');
             }
-        } else {
-            console.error('Delete resource textarea not found');
         }
-    } else {
-        console.error('Delete resource path input not found');
     }
 }
 
 // Delete block function
 function deleteBlock(blockId) {
-    console.log('deleteBlock called with blockId:', blockId);
     // Set the block ID in the hidden textbox
     const blockIdInput = document.getElementById('delete-block-id');
-    console.log('Delete block ID input element:', blockIdInput);
 
     if (blockIdInput) {
         // Find the textarea element and set its value
         const textarea = blockIdInput.querySelector('textarea') || blockIdInput.querySelector('input[type="text"]');
-        console.log('Delete block textarea element:', textarea);
 
         if (textarea) {
             textarea.value = blockId;
             textarea.dispatchEvent(new Event('input', { bubbles: true }));
-            console.log('Set block ID in textarea:', blockId);
 
             // Trigger the hidden delete button
             setTimeout(() => {
                 const deleteBtn = document.getElementById('delete-trigger');
-                console.log('Delete trigger button:', deleteBtn);
 
                 if (deleteBtn) {
                     deleteBtn.click();
-                    console.log('Clicked delete trigger button');
-                } else {
-                    console.error('Delete trigger button not found!');
                 }
             }, 100);
-        } else {
-            console.error('Textarea not found in delete block ID input!');
         }
-    } else {
-        console.error('Delete block ID input not found!');
     }
 }
 
 // Update block content function
 function updateBlockContent(blockId, content) {
-    console.log('updateBlockContent called with blockId:', blockId, 'content:', content);
     // Set the block ID and content in hidden inputs
     const blockIdInput = document.getElementById('update-block-id');
     const contentInput = document.getElementById('update-content-input');
-    console.log('Update block ID input:', blockIdInput, 'Content input:', contentInput);
 
     if (blockIdInput && contentInput) {
         const blockIdTextarea = blockIdInput.querySelector('textarea') || blockIdInput.querySelector('input[type="text"]');
         const contentTextarea = contentInput.querySelector('textarea') || contentInput.querySelector('input[type="text"]');
-        console.log('Block ID textarea:', blockIdTextarea, 'Content textarea:', contentTextarea);
 
         if (blockIdTextarea && contentTextarea) {
             blockIdTextarea.value = blockId;
             contentTextarea.value = content;
-            console.log('Set values in textareas');
 
             // Dispatch input events
             blockIdTextarea.dispatchEvent(new Event('input', { bubbles: true }));
             contentTextarea.dispatchEvent(new Event('input', { bubbles: true }));
-            console.log('Dispatched input events');
 
             // Trigger the update button
             setTimeout(() => {
                 const updateBtn = document.getElementById('update-trigger');
-                console.log('Update trigger button:', updateBtn);
-
+ 
                 if (updateBtn) {
                     updateBtn.click();
-                    console.log('Clicked update trigger button');
-                } else {
-                    console.error('Update trigger button not found!');
+
                 }
             }, 100);
-        } else {
-            console.error('One or both textareas not found!');
-        }
-    } else {
-        console.error('One or both input containers not found!');
+        } 
     }
 }
 
 // Update block heading function
 function updateBlockHeading(blockId, heading) {
-    console.log('updateBlockHeading called with blockId:', blockId, 'heading:', heading);
     // Set the block ID and heading in hidden inputs
     const blockIdInput = document.getElementById('update-heading-block-id');
     const headingInput = document.getElementById('update-heading-input');
-    console.log('Block ID input element:', blockIdInput);
-    console.log('Heading input element:', headingInput);
 
     if (blockIdInput && headingInput) {
         const blockIdTextarea = blockIdInput.querySelector('textarea') || blockIdInput.querySelector('input[type="text"]');
         const headingTextarea = headingInput.querySelector('textarea') || headingInput.querySelector('input[type="text"]');
-        console.log('Block ID textarea:', blockIdTextarea);
-        console.log('Heading textarea:', headingTextarea);
 
         if (blockIdTextarea && headingTextarea) {
             blockIdTextarea.value = blockId;
             headingTextarea.value = heading;
-            console.log('Set block ID:', blockId);
-            console.log('Set heading:', heading);
 
             // Dispatch input events
             blockIdTextarea.dispatchEvent(new Event('input', { bubbles: true }));
             headingTextarea.dispatchEvent(new Event('input', { bubbles: true }));
-            console.log('Dispatched input events for both textareas');
 
             // Trigger the update button
             setTimeout(() => {
                 const updateBtn = document.getElementById('update-heading-trigger');
-                console.log('Update heading trigger button:', updateBtn);
 
                 if (updateBtn) {
                     updateBtn.click();
-                    console.log('Clicked update heading trigger button');
-                } else {
-                    console.error('Update heading trigger button not found!');
-                }
+                } 
             }, 100);
-        } else {
-            console.error('One or both textareas not found!');
-            console.error('blockIdTextarea:', blockIdTextarea);
-            console.error('headingTextarea:', headingTextarea);
         }
-    } else {
-        console.error('One or both input containers not found!');
-        console.error('blockIdInput:', blockIdInput);
-        console.error('headingInput:', headingInput);
     }
 }
 
 // Toggle block collapse function
 function toggleBlockCollapse(blockId) {
-    console.log('toggleBlockCollapse called with blockId:', blockId);
     // Set the block ID in the hidden input
     const blockIdInput = document.getElementById('toggle-block-id');
-    console.log('Toggle block ID input:', blockIdInput);
 
     if (blockIdInput) {
         const textarea = blockIdInput.querySelector('textarea') || blockIdInput.querySelector('input[type="text"]');
-        console.log('Toggle block textarea:', textarea);
 
         if (textarea) {
             textarea.value = blockId;
             textarea.dispatchEvent(new Event('input', { bubbles: true }));
-            console.log('Set block ID in textarea:', blockId);
 
             // Trigger the hidden toggle button
             setTimeout(() => {
                 const toggleBtn = document.getElementById('toggle-trigger');
-                console.log('Toggle trigger button:', toggleBtn);
 
                 if (toggleBtn) {
                     toggleBtn.click();
-                    console.log('Clicked toggle trigger button');
-                } else {
-                    console.error('Toggle trigger button not found!');
-                }
+                } 
             }, 100);
-        } else {
-            console.error('Textarea not found in toggle block ID input!');
-        }
-    } else {
-        console.error('Toggle block ID input not found!');
-    }
+        } 
+    } 
 }
 
 // Expand block if collapsed when heading is focused
@@ -918,7 +1293,6 @@ function autoExpandTextarea(textarea) {
     // Skip the main start prompt input - it should maintain its own sizing
     const isStartPromptInput = textarea.closest('#start-prompt-input');
     if (isStartPromptInput) {
-        console.log('🚫 Skipping auto-expand for main start prompt input');
         return;
     }
 
@@ -973,20 +1347,14 @@ function autoExpandResourceDescription(textarea) {
         textarea.classList.remove('scrollable');
     }
     
-    console.log(`🔧 Resource desc auto-expand - content: "${textarea.value.substring(0, 50)}...", lines: ${lines}, finalLines: ${finalLines}, height: ${finalHeight}px`);
-    
     // Debug: Check if the height was actually applied
     setTimeout(() => {
         const actualHeight = window.getComputedStyle(textarea).height;
         const actualScrollHeight = textarea.scrollHeight;
-        console.log(`🔧 Height check - set: ${finalHeight}px, actual: ${actualHeight}, scrollHeight: ${actualScrollHeight}px`);
-        
+
         // Only override if there's a significant difference (more than 1px)
         if (Math.abs(parseFloat(actualHeight) - finalHeight) > 1) {
-            console.log('🔧 Significant height override detected, forcing with inline style');
             textarea.setAttribute('style', `height: ${finalHeight}px !important; overflow-y: ${lines > maxLines ? 'auto' : 'hidden'} !important;`);
-        } else {
-            console.log('🔧 Height applied correctly (within tolerance)');
         }
     }, 100);
 }
@@ -1075,7 +1443,6 @@ document.addEventListener('dragenter', function(e) {
 
         if (hasFiles && !isFromResourceItem && !isDraggingFromExternal) {
             isDraggingFromExternal = true;
-            console.log('External file drag detected');
             draggedResource = null;
         }
     }
@@ -1103,7 +1470,6 @@ document.addEventListener('dragstart', function(e) {
 // Setup observers for resource title changes in Gradio components
 function setupResourceTitleObservers() {
     const resourceItems = document.querySelectorAll('.resource-item-gradio');
-    console.log('Setting up title observers for', resourceItems.length, 'resource items');
 
     resourceItems.forEach((item, index) => {
         // Find the title textarea
@@ -1112,28 +1478,23 @@ function setupResourceTitleObservers() {
 
         if (titleTextarea && pathDiv) {
             const resourcePath = pathDiv.getAttribute('data-path') || pathDiv.textContent.trim();
-            console.log(`Resource ${index}: path="${resourcePath}"`);
-
+ 
             // Remove any existing listener to avoid duplicates
             titleTextarea.removeEventListener('input', titleTextarea._titleUpdateHandler);
 
             // Create and store the handler function
             titleTextarea._titleUpdateHandler = function() {
                 const newTitle = this.value;
-                console.log(`Title changed for resource "${resourcePath}": "${newTitle}"`);
 
                 // Immediately update all dropped resources with this path
                 const droppedResources = document.querySelectorAll('.dropped-resource[data-resource-path]');
-                console.log(`Found ${droppedResources.length} dropped resources to check`);
 
                 droppedResources.forEach(dropped => {
                     const droppedPath = dropped.getAttribute('data-resource-path');
-                    console.log(`Checking dropped resource with path="${droppedPath}"`);
 
                     if (droppedPath === resourcePath) {
                         const titleSpan = dropped.querySelector('.dropped-resource-title');
                         if (titleSpan) {
-                            console.log(`Updating title span to: "${newTitle}"`);
                             titleSpan.textContent = newTitle;
                         }
                     }
@@ -1142,9 +1503,6 @@ function setupResourceTitleObservers() {
 
             // Add the event listener
             titleTextarea.addEventListener('input', titleTextarea._titleUpdateHandler);
-            console.log(`Added input listener to resource ${index}`);
-        } else {
-            console.log(`Resource ${index}: Missing textarea or path div`);
         }
     });
 }
@@ -1154,7 +1512,10 @@ window.addEventListener('load', function() {
     // Upload resource setup no longer needed - using Gradio's native component
     setTimeout(setupAutoExpand, 100);
     // Also setup drag and drop on window load
-    setTimeout(setupDragAndDrop, 200);
+    setTimeout(() => {
+        DragDropLogger.info('REINIT', 'Re-initializing drag-drop on window load (200ms)');
+        setupDragAndDrop();
+    }, 200);
     setTimeout(setupFileUploadDragAndDrop, 250);
     // Removed setupDescriptionToggle - causes phantom Gradio events
 
@@ -1195,11 +1556,26 @@ function setupResourceObserver() {
             });
 
             if (hasResourceChanges) {
-                console.log('Resources added, setting up drag and drop');
+                DragDropLogger.info('REINIT', 'Resources added, setting up drag and drop');
+                
+                // Get current count for verification
+                const currentCount = document.querySelectorAll('.resource-item-gradio').length;
+                DragDropLogger.info('REINIT', `Current resource count after change: ${currentCount}`);
+                
                 // Wait a bit for DOM to stabilize then setup drag and drop
                 resourceSetupTimeout = setTimeout(() => {
+                    DragDropLogger.info('REINIT', 'Re-initializing drag-drop after resources changed');
+                    
+                    // Double-check the count before setup
+                    const preSetupCount = document.querySelectorAll('.resource-item-gradio').length;
+                    DragDropLogger.info('REINIT', `Resource count before setup: ${preSetupCount}`);
+                    
                     setupDragAndDrop();
                     setupResourceTitleObservers();
+                    
+                    // Verify after setup
+                    const postSetupCount = document.querySelectorAll('.resource-item-gradio').length;
+                    DragDropLogger.info('REINIT', `Resource count after setup: ${postSetupCount}`);
                 }, 200);
             }
         });
@@ -1232,7 +1608,10 @@ function setupResourceObserver() {
                         // Set up new observer
                         currentObserver = observeResourcesArea(newResourcesArea);
                         // Setup drag and drop for any existing items
-                        setTimeout(setupDragAndDrop, 200);
+                        setTimeout(() => {
+                            DragDropLogger.info('REINIT', 'Re-initializing drag-drop after tab switch (200ms)');
+                            setupDragAndDrop();
+                        }, 200);
                         // Setup title observers too
                         setTimeout(setupResourceTitleObservers, 300);
                     }
@@ -1355,6 +1734,7 @@ const observer = new MutationObserver(function(mutations) {
 
         // Delay drag and drop setup slightly to ensure DOM is ready
         setTimeout(() => {
+            DragDropLogger.info('REINIT', 'Re-initializing drag-drop after blocks rendered');
             setupDragAndDrop();
             setupFileUploadDragAndDrop();
             setupResourceTitleObservers();
@@ -1385,99 +1765,63 @@ if (document.body) {
 
 // Update block indent function
 function updateBlockIndent(blockId, direction) {
-    console.log('updateBlockIndent called with blockId:', blockId, 'direction:', direction);
 
     // Set focused block when indenting
     setFocusedBlock(blockId);
-    console.log('Called setFocusedBlock for blockId:', blockId);
 
     // Set the block ID and direction in hidden inputs
     const blockIdInput = document.getElementById('indent-block-id');
     const directionInput = document.getElementById('indent-direction');
-    console.log('Block ID input element:', blockIdInput);
-    console.log('Direction input element:', directionInput);
 
     if (blockIdInput && directionInput) {
         const blockIdTextarea = blockIdInput.querySelector('textarea') || blockIdInput.querySelector('input[type="text"]');
         const directionTextarea = directionInput.querySelector('textarea') || directionInput.querySelector('input[type="text"]');
-        console.log('Block ID textarea:', blockIdTextarea);
-        console.log('Direction textarea:', directionTextarea);
 
         if (blockIdTextarea && directionTextarea) {
             blockIdTextarea.value = blockId;
             directionTextarea.value = direction;
-            console.log('Set block ID:', blockId);
-            console.log('Set direction:', direction);
 
             // Dispatch input events
             blockIdTextarea.dispatchEvent(new Event('input', { bubbles: true }));
             directionTextarea.dispatchEvent(new Event('input', { bubbles: true }));
-            console.log('Dispatched input events for both textareas');
 
             // Trigger the update button
             setTimeout(() => {
                 const indentBtn = document.getElementById('indent-trigger');
-                console.log('Indent trigger button:', indentBtn);
 
                 if (indentBtn) {
                     indentBtn.click();
-                    console.log('Clicked indent trigger button');
-                } else {
-                    console.error('Indent trigger button not found!');
                 }
             }, 100);
-        } else {
-            console.error('One or both textareas not found!');
-            console.error('blockIdTextarea:', blockIdTextarea);
-            console.error('directionTextarea:', directionTextarea);
         }
-    } else {
-        console.error('One or both input containers not found!');
-        console.error('blockIdInput:', blockIdInput);
-        console.error('directionInput:', directionInput);
     }
 }
 
 // Set focused block function
 function setFocusedBlock(blockId, skipRender = false) {
-    console.log('setFocusedBlock called with blockId:', blockId, 'skipRender:', skipRender);
 
     const focusIdInput = document.getElementById('focus-block-id');
-    console.log('Focus ID input element:', focusIdInput);
 
     if (focusIdInput) {
         const textarea = focusIdInput.querySelector('textarea') || focusIdInput.querySelector('input[type="text"]');
-        console.log('Focus ID textarea:', textarea);
 
         if (textarea) {
             textarea.value = blockId;
-            console.log('Set focus block ID:', blockId);
 
             textarea.dispatchEvent(new Event('input', { bubbles: true }));
-            console.log('Dispatched input event');
 
             // Only trigger render if not skipping
             if (!skipRender) {
-                console.log('Not skipping render, will trigger focus button');
                 setTimeout(() => {
                     const focusBtn = document.getElementById('focus-trigger');
-                    console.log('Focus trigger button:', focusBtn);
 
                     if (focusBtn) {
                         focusBtn.click();
-                        console.log('Clicked focus trigger button');
-                    } else {
-                        console.error('Focus trigger button not found!');
+
                     }
                 }, 100);
-            } else {
-                console.log('Skipping render as requested');
             }
-        } else {
-            console.error('Textarea not found in focus ID input!');
         }
-    } else {
-        console.error('Focus ID input not found!');
     }
 }
 
@@ -1523,68 +1867,45 @@ function addBlockAfter(blockId) {
 
 // Convert block type function
 function convertBlock(blockId, toType) {
-    console.log('convertBlock called with blockId:', blockId, 'toType:', toType);
 
     // Set the values in hidden inputs
     const blockIdInput = document.getElementById('convert-block-id');
     const typeInput = document.getElementById('convert-type');
-    console.log('Block ID input element:', blockIdInput);
-    console.log('Type input element:', typeInput);
 
     if (blockIdInput && typeInput) {
         const blockIdTextarea = blockIdInput.querySelector('textarea') || blockIdInput.querySelector('input[type="text"]');
         const typeTextarea = typeInput.querySelector('textarea') || typeInput.querySelector('input[type="text"]');
-        console.log('Block ID textarea:', blockIdTextarea);
-        console.log('Type textarea:', typeTextarea);
 
         if (blockIdTextarea && typeTextarea) {
             blockIdTextarea.value = blockId;
             typeTextarea.value = toType;
-            console.log('Set block ID:', blockId);
-            console.log('Set convert to type:', toType);
 
             // Dispatch input events
             blockIdTextarea.dispatchEvent(new Event('input', { bubbles: true }));
             typeTextarea.dispatchEvent(new Event('input', { bubbles: true }));
-            console.log('Dispatched input events for both textareas');
 
             // Trigger the convert button
             setTimeout(() => {
                 const convertBtn = document.getElementById('convert-trigger');
-                console.log('Convert trigger button:', convertBtn);
 
                 if (convertBtn) {
                     convertBtn.click();
-                    console.log('Clicked convert trigger button');
 
                     // Focus the textarea after conversion
                     setTimeout(() => {
                         const block = document.querySelector(`[data-id="${blockId}"]`);
-                        console.log('Found converted block:', block);
 
                         if (block) {
                             const textarea = block.querySelector('textarea') || block.querySelector('input[type="text"]');
-                            console.log('Found textarea in converted block:', textarea);
 
                             if (textarea) {
                                 textarea.focus();
-                                console.log('Focused textarea in converted block');
                             }
                         }
                     }, 200);
-                } else {
-                    console.error('Convert trigger button not found!');
                 }
             }, 100);
-        } else {
-            console.error('One or both textareas not found!');
-            console.error('blockIdTextarea:', blockIdTextarea);
-            console.error('typeTextarea:', typeTextarea);
         }
-    } else {
-        console.error('One or both input containers not found!');
-        console.error('blockIdInput:', blockIdInput);
-        console.error('typeInput:', typeInput);
     }
 }
 
@@ -1937,7 +2258,6 @@ window.setupAutoExpand = setupAutoExpand;
 // Setup import button functionality
 function setupImportButton() {
     const importBtn = document.getElementById('import-builder-btn-id');
-    console.log('Setting up import button, found:', importBtn);
 
     if (importBtn) {
         // Remove any existing listeners first
@@ -2015,7 +2335,6 @@ function setupFileUploadDragAndDrop() {
     // Function to run text replacement after card expansion
     function runTextReplacementAfterExpansion() {
         setTimeout(() => {
-            console.log('Card expanded - running replaceDraftTabText()');
             const draftFileUpload = document.querySelector('.start-file-upload-dropzone');
             if (draftFileUpload) {
                 const wrapDivs = draftFileUpload.querySelectorAll('.wrap');
@@ -2124,24 +2443,83 @@ function setupFileUploadDragAndDrop() {
     setTimeout(() => dragObserver.disconnect(), 5000);
 }
 
+// Track setup calls to prevent infinite loops
+let setupInProgress = false;
+let lastSetupTime = 0;
+
 // Drag and drop functionality for resources
 function setupDragAndDrop() {
-    console.log('Setting up drag and drop...');
+    // Prevent rapid re-setup  
+    const now = Date.now();
+    if (setupInProgress || (now - lastSetupTime) < 50) {
+        DragDropLogger.debug('SETUP', 'Skipping setup - too soon or already in progress', {
+            setupInProgress,
+            timeSinceLastSetup: now - lastSetupTime
+        });
+        return;
+    }
+    
+    setupInProgress = true;
+    lastSetupTime = now;
+    
+    DragDropLogger.info('SETUP', 'Starting drag and drop setup');
+    
+    // Log current DOM state
+    const initialState = DragDropLogger.getDragDropState();
+    DragDropLogger.debug('SETUP', 'Initial DOM state', initialState);
+    
+    // Log broken zones specifically
+    const brokenZones = initialState.dropZones.filter(z => !z.hasListeners);
+    if (brokenZones.length > 0) {
+        DragDropLogger.warn('SETUP', `Found ${brokenZones.length} drop zones without listeners`, brokenZones);
+    }
 
     // Setup draggable resources - now look for Gradio resource components
     const resourceItems = document.querySelectorAll('.resource-item-gradio');
-    console.log('Found Gradio resource items:', resourceItems.length);
+    DragDropLogger.info('SETUP', `Found ${resourceItems.length} Gradio resource items`);
+    
+    // Log details about each resource for debugging
+    if (resourceItems.length > 0) {
+        const resourceDetails = [];
+        resourceItems.forEach((item, idx) => {
+            const pathHidden = item.querySelector('.resource-path-hidden');
+            const path = pathHidden?.getAttribute('data-path') || pathHidden?.textContent?.trim();
+            resourceDetails.push({
+                index: idx,
+                path: path,
+                hasDragHandler: !!item._dragStartHandler,
+                isDraggable: item.getAttribute('draggable') === 'true'
+            });
+        });
+        DragDropLogger.debug('SETUP', 'Resource details', resourceDetails);
+    }
 
     resourceItems.forEach((item, index) => {
+        DragDropLogger.debug('SETUP', `Processing resource item ${index}`, {
+            element: item,
+            currentDraggable: item.getAttribute('draggable'),
+            classList: Array.from(item.classList)
+        });
+        
         // Make sure the item is draggable
+        const wasDraggable = item.getAttribute('draggable');
         item.setAttribute('draggable', 'true');
+        
+        if (wasDraggable !== 'true') {
+            DragDropLogger.warn('SETUP', `Resource item ${index} was not draggable, fixed`, {
+                wasDraggable,
+                nowDraggable: item.getAttribute('draggable')
+            });
+        }
 
         // Just store the path on the element for reference during drag
         const pathHidden = item.querySelector('.resource-path-hidden');
         if (pathHidden) {
             const path = pathHidden.getAttribute('data-path') || pathHidden.textContent.trim();
             item.dataset.resourcePath = path;
-            console.log(`Resource ${index} path:`, path);
+            DragDropLogger.debug('SETUP', `Resource ${index} path set`, { path });
+        } else {
+            DragDropLogger.warn('SETUP', `Resource ${index} has no path element`);
         }
 
         // Also make child elements not draggable to prevent conflicts
@@ -2149,60 +2527,188 @@ function setupDragAndDrop() {
         inputs.forEach(input => {
             input.setAttribute('draggable', 'false');
         });
+        DragDropLogger.debug('SETUP', `Disabled dragging on ${inputs.length} child inputs for resource ${index}`);
 
+        // Check if listeners already exist
+        const hasExistingListeners = item._dragStartHandler || item._dragEndHandler;
+        
         // Remove existing listeners to avoid duplicates
-        item.removeEventListener('dragstart', handleDragStart);
-        item.removeEventListener('dragend', handleDragEnd);
+        if (item._dragStartHandler) {
+            item.removeEventListener('dragstart', item._dragStartHandler);
+            DragDropLogger.debug('SETUP', `Removed existing dragstart listener for resource ${index}`);
+        }
+        if (item._dragEndHandler) {
+            item.removeEventListener('dragend', item._dragEndHandler);
+            DragDropLogger.debug('SETUP', `Removed existing dragend listener for resource ${index}`);
+        }
+
+        // Create wrapped handlers to track them
+        item._dragStartHandler = function(e) {
+            DragDropLogger.debug('EVENT', `dragstart triggered on resource ${index}`);
+            handleDragStart.call(this, e);
+        };
+        item._dragEndHandler = function(e) {
+            DragDropLogger.debug('EVENT', `dragend triggered on resource ${index}`);
+            handleDragEnd.call(this, e);
+        };
 
         // Add new listeners
-        item.addEventListener('dragstart', handleDragStart);
-        item.addEventListener('dragend', handleDragEnd);
+        item.addEventListener('dragstart', item._dragStartHandler);
+        item.addEventListener('dragend', item._dragEndHandler);
+        
+        DragDropLogger.success('SETUP', `Resource ${index} setup complete`, {
+            draggable: item.getAttribute('draggable'),
+            hasListeners: true,
+            path: item.dataset.resourcePath
+        });
     });
 
     // Setup drop zones
     const dropZones = document.querySelectorAll('.block-resources');
-    console.log('Found drop zones:', dropZones.length);
+    DragDropLogger.info('SETUP', `Found ${dropZones.length} drop zones`);
 
     if (dropZones.length === 0) {
-        console.warn('No drop zones found! Blocks might not be rendered yet.');
+        DragDropLogger.warn('SETUP', 'No drop zones found! Blocks might not be rendered yet.');
         // Try again after a short delay
         setTimeout(() => {
             const retryDropZones = document.querySelectorAll('.block-resources');
-            console.log('Retry - Found drop zones:', retryDropZones.length);
-            setupDropZones(retryDropZones);
+            DragDropLogger.info('SETUP', `Retry - Found ${retryDropZones.length} drop zones`);
+            if (retryDropZones.length > 0) {
+                setupDropZones(retryDropZones);
+            } else {
+                DragDropLogger.error('SETUP', 'Still no drop zones found after retry');
+            }
         }, 500);
     } else {
         setupDropZones(dropZones);
     }
+    
+    DragDropLogger.success('SETUP', 'Drag and drop setup completed');
+    
+    // Final verification
+    const finalState = DragDropLogger.getDragDropState();
+    const stillBrokenZones = finalState.dropZones.filter(z => !z.hasListeners);
+    if (stillBrokenZones.length > 0) {
+        DragDropLogger.error('SETUP', `WARNING: ${stillBrokenZones.length} drop zones STILL without listeners after setup!`, stillBrokenZones);
+    }
+    
+    DragDropLogger.dumpState();
+    setupInProgress = false;
 }
 
 function setupDropZones(dropZones) {
-    dropZones.forEach((zone, index) => {
+    DragDropLogger.info('DROPZONE', `Setting up ${dropZones.length} drop zones`);
+    
+    // First, verify drop zones are valid
+    const validZones = Array.from(dropZones).filter(zone => {
+        const isValid = zone && zone.nodeType === 1 && zone.offsetParent !== null;
+        if (!isValid) {
+            DragDropLogger.warn('DROPZONE', 'Skipping invalid drop zone', {
+                exists: !!zone,
+                nodeType: zone?.nodeType,
+                visible: zone?.offsetParent !== null
+            });
+        }
+        return isValid;
+    });
+    
+    DragDropLogger.info('DROPZONE', `${validZones.length} valid drop zones out of ${dropZones.length}`);
+    
+    validZones.forEach((zone, index) => {
+        const blockId = zone.closest('.content-block')?.id;
+        const blockDataId = zone.closest('.content-block')?.dataset?.id;
+        
+        DragDropLogger.debug('DROPZONE', `Processing drop zone ${index}`, {
+            blockId,
+            blockDataId,
+            classList: Array.from(zone.classList),
+            hasParentBlock: !!zone.closest('.content-block')
+        });
+        
+        // Check for existing listeners
+        const hasExistingListeners = zone._dragEnterHandler || zone._dragOverHandler || 
+                                     zone._dropHandler || zone._dragLeaveHandler;
+        
         // Remove existing listeners to avoid duplicates
-        zone.removeEventListener('dragenter', handleDragEnter);
-        zone.removeEventListener('dragover', handleDragOver);
-        zone.removeEventListener('drop', handleDrop);
-        zone.removeEventListener('dragleave', handleDragLeave);
+        if (zone._dragEnterHandler) {
+            zone.removeEventListener('dragenter', zone._dragEnterHandler);
+            DragDropLogger.debug('DROPZONE', `Removed existing dragenter listener for zone ${index}`);
+        }
+        if (zone._dragOverHandler) {
+            zone.removeEventListener('dragover', zone._dragOverHandler);
+            DragDropLogger.debug('DROPZONE', `Removed existing dragover listener for zone ${index}`);
+        }
+        if (zone._dropHandler) {
+            zone.removeEventListener('drop', zone._dropHandler);
+            DragDropLogger.debug('DROPZONE', `Removed existing drop listener for zone ${index}`);
+        }
+        if (zone._dragLeaveHandler) {
+            zone.removeEventListener('dragleave', zone._dragLeaveHandler);
+            DragDropLogger.debug('DROPZONE', `Removed existing dragleave listener for zone ${index}`);
+        }
+
+        // Create wrapped handlers to track them
+        zone._dragEnterHandler = function(e) {
+            DragDropLogger.debug('EVENT', `dragenter on zone ${index}`, { blockId });
+            handleDragEnter.call(this, e);
+        };
+        zone._dragOverHandler = function(e) {
+            handleDragOver.call(this, e);
+        };
+        zone._dropHandler = function(e) {
+            DragDropLogger.debug('EVENT', `drop on zone ${index}`, { blockId });
+            handleDrop.call(this, e);
+        };
+        zone._dragLeaveHandler = function(e) {
+            DragDropLogger.debug('EVENT', `dragleave on zone ${index}`, { blockId });
+            handleDragLeave.call(this, e);
+        };
 
         // Add new listeners
-        zone.addEventListener('dragenter', handleDragEnter);
-        zone.addEventListener('dragover', handleDragOver);
-        zone.addEventListener('drop', handleDrop);
-        zone.addEventListener('dragleave', handleDragLeave);
+        zone.addEventListener('dragenter', zone._dragEnterHandler);
+        zone.addEventListener('dragover', zone._dragOverHandler);
+        zone.addEventListener('drop', zone._dropHandler);
+        zone.addEventListener('dragleave', zone._dragLeaveHandler);
 
         // Add data attribute to help debug
         zone.setAttribute('data-drop-zone-index', index);
-        console.log(`Set up drop zone ${index} on element:`, zone);
+        
+        DragDropLogger.success('DROPZONE', `Drop zone ${index} setup complete`, {
+            blockId,
+            hasListeners: true
+        });
     });
+    
+    DragDropLogger.success('DROPZONE', 'All drop zones configured');
+    
+    // Verify handlers are actually attached
+    setTimeout(() => {
+        const zones = document.querySelectorAll('.block-resources');
+        let brokenCount = 0;
+        zones.forEach((zone, idx) => {
+            if (!zone._dropHandler) {
+                brokenCount++;
+                DragDropLogger.error('DROPZONE', `Zone ${idx} missing handlers after setup!`);
+            }
+        });
+        if (brokenCount > 0) {
+            DragDropLogger.error('DROPZONE', `${brokenCount} zones failed to attach handlers`);
+        }
+    }, 100);
 }
 
 let draggedResource = null;
 
 function handleDragStart(e) {
-    console.log('handleDragStart called on:', e.target);
+    DragDropLogger.info('DRAG', 'handleDragStart called', {
+        target: e.target,
+        targetTag: e.target.tagName,
+        targetClasses: Array.from(e.target.classList)
+    });
 
     // Prevent dragging when clicking on input elements
     if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON') {
+        DragDropLogger.warn('DRAG', 'Prevented drag from input element', { tagName: e.target.tagName });
         e.preventDefault();
         return;
     }
@@ -2210,10 +2716,13 @@ function handleDragStart(e) {
     // For Gradio components, we need to extract data differently
     const resourceElement = e.target.closest('.resource-item-gradio');
     if (resourceElement) {
-        console.log('Resource element found:', resourceElement);
+        DragDropLogger.info('DRAG', 'Resource element found', {
+            element: resourceElement,
+            draggable: resourceElement.getAttribute('draggable')
+        });
 
         // Always extract current values dynamically to get latest updates
-        console.log('Extracting current resource data...');
+        DragDropLogger.info('DRAG', 'Extracting current resource data');
 
         // Look for elements - Gradio might have nested structures
         const titleInput = resourceElement.querySelector('.resource-title-gradio input[type="text"], .resource-title-gradio textarea');
@@ -2222,18 +2731,19 @@ function handleDragStart(e) {
         const filenameDiv = resourceElement.querySelector('.resource-filename');
 
         // Debug logging
-        console.log('Title input found:', !!titleInput);
-        if (titleInput) {
-            console.log('Title input type:', titleInput.tagName);
-            console.log('Title value:', titleInput.value);
-        }
-
-        console.log('Found elements:', {
+        const elementState = {
             titleInput: !!titleInput,
+            titleInputType: titleInput?.tagName,
+            titleValue: titleInput?.value,
             descInput: !!descInput,
+            descValue: descInput?.value,
             pathDiv: !!pathDiv,
-            filenameDiv: !!filenameDiv
-        });
+            pathData: pathDiv?.getAttribute('data-path'),
+            pathText: pathDiv?.textContent?.trim(),
+            filenameDiv: !!filenameDiv,
+            filenameText: filenameDiv?.textContent?.trim()
+        };
+        DragDropLogger.debug('DRAG', 'Found elements', elementState);
 
         if (pathDiv && filenameDiv) {
             const path = pathDiv.getAttribute('data-path') || pathDiv.textContent.trim();
@@ -2249,13 +2759,25 @@ function handleDragStart(e) {
                 type: 'text',
                 description: description
             };
-            console.log('Dynamically extracted resource:', draggedResource);
-            console.log('Title being sent:', title);
-            console.log('Filename being sent:', filename);
+            
+            DragDropLogger.success('DRAG', 'Dynamically extracted resource', {
+                resource: draggedResource,
+                titleSource: titleInput && titleInput.value ? 'input' : 'filename',
+                hasDescription: !!description
+            });
+        } else {
+            DragDropLogger.error('DRAG', 'Missing required elements for resource extraction', {
+                hasPathDiv: !!pathDiv,
+                hasFilenameDiv: !!filenameDiv
+            });
         }
 
         if (draggedResource) {
-            console.log('Started dragging Gradio resource:', draggedResource);
+            DragDropLogger.success('DRAG', 'Started dragging resource', {
+                resource: draggedResource,
+                elementClasses: Array.from(resourceElement.classList)
+            });
+            
             resourceElement.classList.add('dragging');
             document.body.classList.add('dragging-resource');
             e.dataTransfer.effectAllowed = 'copy';
@@ -2263,19 +2785,34 @@ function handleDragStart(e) {
 
             // Set global variable to ensure it persists
             window.currentDraggedResource = draggedResource;
+            window.draggedResource = draggedResource;
+            
+            DragDropLogger.debug('DRAG', 'Set global drag state', {
+                windowCurrentDraggedResource: !!window.currentDraggedResource,
+                windowDraggedResource: !!window.draggedResource,
+                localDraggedResource: !!draggedResource
+            });
         } else {
-            console.error('Could not extract resource data for drag');
+            DragDropLogger.error('DRAG', 'Could not extract resource data for drag', {
+                resourceElement: !!resourceElement,
+                pathDiv: !!pathDiv,
+                filenameDiv: !!filenameDiv
+            });
         }
     }
 }
 
 function handleDragEnd(e) {
+    DragDropLogger.info('DRAG', 'handleDragEnd called');
+    
     // For Gradio components
     const resourceElement = e.target.closest('.resource-item-gradio');
     if (resourceElement) {
         resourceElement.classList.remove('dragging');
+        DragDropLogger.debug('DRAG', 'Removed dragging class from resource element');
     } else {
         e.target.classList.remove('dragging');
+        DragDropLogger.debug('DRAG', 'Removed dragging class from target');
     }
 
     // Remove dragging class from body
@@ -2283,19 +2820,32 @@ function handleDragEnd(e) {
 
     // Clear draggedResource after a small delay to ensure drop completes
     setTimeout(() => {
+        DragDropLogger.debug('DRAG', 'Clearing dragged resource state (100ms delay)');
         draggedResource = null;
         window.currentDraggedResource = null;
+        window.draggedResource = null;
     }, 100);
 }
 
 function handleDragEnter(e) {
     e.preventDefault();
     e.stopPropagation();
-    const resource = draggedResource || window.currentDraggedResource;
-    console.log('DragEnter event - draggedResource:', resource);
+    
+    const resource = draggedResource || window.currentDraggedResource || window.draggedResource;
+    const blockId = e.currentTarget.closest('.content-block')?.dataset?.id;
+    
+    DragDropLogger.debug('DROP', 'handleDragEnter', {
+        hasResource: !!resource,
+        resourceFrom: draggedResource ? 'local' : (window.currentDraggedResource ? 'window.current' : 'window.dragged'),
+        blockId,
+        targetClasses: Array.from(e.currentTarget.classList)
+    });
 
     if (resource) {
         e.currentTarget.classList.add('drag-over');
+        DragDropLogger.debug('DROP', 'Added drag-over class to drop zone');
+    } else {
+        DragDropLogger.warn('DROP', 'No resource found during dragEnter');
     }
 }
 
@@ -2305,12 +2855,16 @@ function handleDragOver(e) {
         e.preventDefault();
         e.stopPropagation();
 
-        const resource = draggedResource || window.currentDraggedResource;
+        const resource = draggedResource || window.currentDraggedResource || window.draggedResource;
 
         // Debug logging - reduce verbosity
         if (!e.currentTarget.dataset.loggedOnce) {
-            console.log('DragOver event - draggedResource:', resource);
-            console.log('DragOver target:', e.currentTarget);
+            const blockId = e.currentTarget.closest('.content-block')?.dataset?.id;
+            DragDropLogger.debug('DROP', 'handleDragOver (first time)', {
+                hasResource: !!resource,
+                blockId,
+                dropEffect: e.dataTransfer.dropEffect
+            });
             e.currentTarget.dataset.loggedOnce = 'true';
         }
 
@@ -2322,13 +2876,23 @@ function handleDragOver(e) {
 
             // Force cursor style
             e.currentTarget.style.cursor = 'copy';
+        } else if (!e.currentTarget.dataset.warnedOnce) {
+            DragDropLogger.warn('DROP', 'No resource during dragOver');
+            e.currentTarget.dataset.warnedOnce = 'true';
         }
     }
 }
 
 function handleDragLeave(e) {
+    const blockId = e.currentTarget.closest('.content-block')?.dataset?.id;
+    DragDropLogger.debug('DROP', 'handleDragLeave', { blockId });
+    
     e.currentTarget.classList.remove('drag-over');
     e.currentTarget.style.cursor = '';
+    
+    // Reset logging flags
+    delete e.currentTarget.dataset.loggedOnce;
+    delete e.currentTarget.dataset.warnedOnce;
 }
 
 function handleDrop(e) {
@@ -2336,29 +2900,41 @@ function handleDrop(e) {
     e.stopPropagation();
     e.currentTarget.classList.remove('drag-over');
 
-    const resource = draggedResource || window.currentDraggedResource;
+    const resource = draggedResource || window.currentDraggedResource || window.draggedResource;
 
-    console.log('Drop event triggered');
-    console.log('Drop target:', e.currentTarget);
-    console.log('Drop zone index:', e.currentTarget.getAttribute('data-drop-zone-index'));
-    console.log('Dragged resource:', resource);
+    DragDropLogger.info('DROP', 'handleDrop triggered', {
+        hasResource: !!resource,
+        resourceFrom: draggedResource ? 'local' : (window.currentDraggedResource ? 'window.current' : 'window.dragged'),
+        dropZoneIndex: e.currentTarget.getAttribute('data-drop-zone-index'),
+        targetClasses: Array.from(e.currentTarget.classList)
+    });
 
     if (!resource) {
-        console.error('No dragged resource found');
+        DragDropLogger.error('DROP', 'No dragged resource found', {
+            localDraggedResource: !!draggedResource,
+            windowCurrentDraggedResource: !!window.currentDraggedResource,
+            windowDraggedResource: !!window.draggedResource
+        });
+        DragDropLogger.dumpState();
         return;
     }
 
     // Find the block ID from the parent content block
     const contentBlock = e.currentTarget.closest('.content-block');
     if (!contentBlock) {
-        console.error('No parent content block found');
-        console.log('Current target classes:', e.currentTarget.className);
-        console.log('Parent element:', e.currentTarget.parentElement);
+        DragDropLogger.error('DROP', 'No parent content block found', {
+            currentTargetClasses: e.currentTarget.className,
+            parentElement: e.currentTarget.parentElement?.tagName,
+            parentClasses: e.currentTarget.parentElement?.className
+        });
         return;
     }
 
     const blockId = contentBlock.dataset.id;
-    console.log('Dropping resource on block:', blockId, resource);
+    DragDropLogger.success('DROP', 'Dropping resource on block', {
+        blockId,
+        resource: resource
+    });
 
     // Update the block's resources
     updateBlockResources(blockId, resource);
@@ -2366,67 +2942,79 @@ function handleDrop(e) {
     // Clear both variables and remove body class
     draggedResource = null;
     window.currentDraggedResource = null;
+    window.draggedResource = null;
     document.body.classList.remove('dragging-resource');
+    
+    DragDropLogger.info('DROP', 'Drop completed and state cleared');
 }
 
 // Function to update block resources
 function updateBlockResources(blockId, resource) {
-    console.log('updateBlockResources called with blockId:', blockId);
-    console.log('Resource object:', resource);
+    DragDropLogger.info('UPDATE', 'updateBlockResources called', {
+        blockId,
+        resource
+    });
 
     // Set the values in hidden inputs
     const blockIdInput = document.getElementById('update-resources-block-id');
-    console.log('Update resources block ID input element:', blockIdInput);
-
     const resourceInput = document.getElementById('update-resources-input');
-    console.log('Update resources input element:', resourceInput);
+    
+    DragDropLogger.debug('UPDATE', 'Found hidden inputs', {
+        hasBlockIdInput: !!blockIdInput,
+        hasResourceInput: !!resourceInput
+    });
 
     if (blockIdInput && resourceInput) {
         const blockIdTextarea = blockIdInput.querySelector('textarea') || blockIdInput.querySelector('input[type="text"]');
-        console.log('Block ID textarea element:', blockIdTextarea);
-
         const resourceTextarea = resourceInput.querySelector('textarea') || resourceInput.querySelector('input[type="text"]');
-        console.log('Resource textarea element:', resourceTextarea);
+        
+        DragDropLogger.debug('UPDATE', 'Found textareas', {
+            hasBlockIdTextarea: !!blockIdTextarea,
+            hasResourceTextarea: !!resourceTextarea
+        });
 
         if (blockIdTextarea && resourceTextarea) {
             // Set block ID
             blockIdTextarea.value = blockId;
-            console.log('Set block ID in textarea:', blockId);
+            DragDropLogger.debug('UPDATE', 'Set block ID in textarea', { blockId });
 
             // Set resource JSON
             const resourceJson = JSON.stringify(resource);
             resourceTextarea.value = resourceJson;
-            console.log('Set resource JSON in textarea:', resourceJson);
+            DragDropLogger.debug('UPDATE', 'Set resource JSON in textarea', { resourceJson });
 
             // Dispatch input events
-            console.log('Dispatching input event for block ID textarea');
             blockIdTextarea.dispatchEvent(new Event('input', { bubbles: true }));
+            DragDropLogger.debug('UPDATE', 'Dispatched input event for block ID');
 
-            console.log('Dispatching input event for resource textarea');
             resourceTextarea.dispatchEvent(new Event('input', { bubbles: true }));
+            DragDropLogger.debug('UPDATE', 'Dispatched input event for resource');
 
             // Trigger the update button
-            console.log('Setting timeout to trigger update button');
             setTimeout(() => {
                 const updateBtn = document.getElementById('update-resources-trigger');
-                console.log('Update resources trigger button:', updateBtn);
-
+                
                 if (updateBtn) {
                     updateBtn.click();
-                    console.log('Clicked update resources trigger button');
+                    DragDropLogger.success('UPDATE', 'Clicked update resources trigger button');
                 } else {
-                    console.error('Update resources trigger button not found!');
+                    DragDropLogger.error('UPDATE', 'Update resources trigger button not found!');
+                    DragDropLogger.dumpState();
                 }
             }, 100);
         } else {
-            console.error('One or both textareas not found!');
-            console.error('Block ID textarea:', blockIdTextarea);
-            console.error('Resource textarea:', resourceTextarea);
+            DragDropLogger.error('UPDATE', 'One or both textareas not found!', {
+                blockIdTextarea: !!blockIdTextarea,
+                resourceTextarea: !!resourceTextarea
+            });
+            DragDropLogger.dumpState();
         }
     } else {
-        console.error('One or both input containers not found!');
-        console.error('Block ID input:', blockIdInput);
-        console.error('Resource input:', resourceInput);
+        DragDropLogger.error('UPDATE', 'One or both input containers not found!', {
+            blockIdInput: !!blockIdInput,
+            resourceInput: !!resourceInput
+        });
+        DragDropLogger.dumpState();
     }
 }
 
@@ -2438,7 +3026,6 @@ function setupExampleSelection() {
         item.addEventListener('click', function(e) {
             e.stopPropagation();
             const exampleId = this.getAttribute('data-example');
-            console.log('Selected example:', exampleId);
 
             // Set the example ID in hidden input
             const exampleIdInput = document.getElementById('example-id-input');
@@ -2460,17 +3047,8 @@ function setupExampleSelection() {
                             //     // Doc description will be handled by the interval watcher
                             // }, 500);
                         }
-                        else {
-                            console.log('loadExampleBtn not found');
-                        }
                     }, 100);
                 }
-                else {
-                    console.log('textarea not found');
-                }
-            }
-            else {
-                console.log('ExampleIdInput not found');
             }
 
             // Hide dropdown after selection
@@ -2488,56 +3066,26 @@ function setupExampleSelection() {
 
 // Setup download dropdown functionality
 function setupDownloadDropdown() {
-    console.log('=== DOWNLOAD DROPDOWN SETUP START ===');
     const downloadItems = document.querySelectorAll('.download-dropdown-item');
-    console.log('Found download dropdown items:', downloadItems.length);
-    
-    // Log each item found
-    downloadItems.forEach((item, index) => {
-        console.log(`Item ${index}: data-format="${item.getAttribute('data-format')}", text="${item.textContent}"`);
-    });
     
     downloadItems.forEach((item, index) => {
         // Check if already has listener
         if (item.dataset.listenerAttached === 'true') {
-            console.log(`Item ${index} already has listener, skipping`);
             return; // Skip if already has listener
         }
         
         item.dataset.listenerAttached = 'true'; // Mark as having listener
-        console.log(`Attaching click listener to item ${index}`);
         
         item.addEventListener('click', function(e) {
-            console.log('=== DOWNLOAD ITEM CLICKED ===');
-            console.log('Event type:', e.type);
-            console.log('Target element:', e.target);
-            console.log('Current target:', e.currentTarget);
-            
             e.preventDefault();
             e.stopPropagation();
             
             const format = this.getAttribute('data-format');
-            console.log('Format attribute value:', format);
-            
-            // Log all IDs we're looking for (local environment)
-            console.log('Looking for element IDs:');
-            console.log('- download-format-input:', document.getElementById('download-format-input'));
-            console.log('- download-format-trigger:', document.getElementById('download-format-trigger'));
-            console.log('- hidden-download-btn:', document.getElementById('hidden-download-btn'));
             
             // Set the format in hidden input - Gradio may change IDs in production
             let formatInput = document.getElementById('download-format-input');
             
-            // If not found by ID, search for the Gradio textbox component
-            if (!formatInput) {
-                console.log('Format input not found by ID.');
-            }
-            
             if (formatInput) {
-                console.log('Found format input element');
-                console.log('Format input tagName:', formatInput.tagName);
-                console.log('Format input className:', formatInput.className);
-                
                 // Gradio textbox can have textarea or input nested inside
                 let textarea = formatInput.querySelector('textarea') || 
                               formatInput.querySelector('input[type="text"]') ||
@@ -2552,34 +3100,23 @@ function setupDownloadDropdown() {
                     }
                 }
                 
-                console.log('Found textarea/input:', textarea);
-                
                 if (textarea) {
-                    console.log('Found textarea/input, current value:', textarea.value);
                     textarea.value = format;
-                    console.log('Set new value:', textarea.value);
                     
                     // Try multiple event types
-                    console.log('Dispatching input event');
                     textarea.dispatchEvent(new Event('input', { bubbles: true }));
-                    console.log('Dispatching change event');
                     textarea.dispatchEvent(new Event('change', { bubbles: true }));
                     
                     // Trigger the format selection handler
-                    console.log('Waiting 200ms before clicking trigger...');
                     setTimeout(() => {
-                        console.log('Looking for download trigger button');
                         let downloadTrigger = document.getElementById('download-format-trigger');
                         
                         // If not found by ID, search for hidden button
                         if (!downloadTrigger) {
-                            console.log('Trigger not found by ID, searching for hidden buttons');
                             const hiddenButtons = document.querySelectorAll('button[style*="display: none"], .gradio-button[style*="display: none"]');
-                            console.log('Found hidden buttons:', hiddenButtons.length);
                             // Look for a button that's not the download button
                             for (let btn of hiddenButtons) {
                                 if (!btn.id?.includes('download-btn') && !btn.classList.contains('download')) {
-                                    console.log('Found potential trigger button:', btn.id || btn.className);
                                     downloadTrigger = btn;
                                     break;
                                 }
@@ -2587,74 +3124,46 @@ function setupDownloadDropdown() {
                         }
                         
                         if (downloadTrigger) {
-                            console.log('Found trigger button, clicking it');
                             downloadTrigger.click();
-                            console.log('Trigger clicked, waiting 200ms for download button...');
-                            
+                                     
                             // After format is set, trigger the hidden download button
                             setTimeout(() => {
-                                console.log('Looking for hidden download button');
                                 let hiddenDownloadBtn = document.getElementById('hidden-download-btn');
                                 
                                 // If not found by ID, search for Gradio download button
                                 if (!hiddenDownloadBtn) {
-                                    console.log('Download button not found by ID, searching for Gradio download buttons');
+
                                     // Look for hidden download button components
                                     const downloadButtons = document.querySelectorAll('.gradio-downloadbutton[style*="display: none"], [class*="download"][style*="display: none"]');
-                                    console.log('Found hidden download buttons:', downloadButtons.length);
                                     if (downloadButtons.length > 0) {
                                         hiddenDownloadBtn = downloadButtons[0];
-                                        console.log('Using first hidden download button');
                                     }
                                 }
                                 
                                 if (hiddenDownloadBtn) {
-                                    console.log('Found hidden download button container');
                                     // Find the actual button element (might be nested)
                                     const actualBtn = hiddenDownloadBtn.querySelector('button') || hiddenDownloadBtn;
-                                    console.log('Actual button element:', actualBtn);
                                     if (actualBtn) {
-                                        console.log('Clicking actual download button');
                                         actualBtn.click();
-                                        console.log('Download button clicked successfully');
-                                    } else {
-                                        console.error('ERROR: Could not find actual button in hidden download button');
                                     }
-                                } else {
-                                    console.error('ERROR: Could not find hidden download button by ID');
                                 }
                             }, 200);
-                        } else {
-                            console.error('ERROR: Could not find download format trigger by ID');
                         }
                     }, 200);
-                } else {
-                    console.error('ERROR: Could not find textarea/input inside format input');
-                    console.log('Format input innerHTML:', formatInput.innerHTML);
                 }
-            } else {
-                console.error('ERROR: Could not find download format input by ID');
             }
             
             // Hide dropdown after selection
             const dropdown = document.getElementById('download-dropdown-id');
             if (dropdown) {
-                console.log('Hiding dropdown');
                 dropdown.style.display = 'none';
                 // Re-show on next hover
                 setTimeout(() => {
                     dropdown.style.removeProperty('display');
-                    console.log('Dropdown display reset');
                 }, 300);
-            } else {
-                console.log('No dropdown found to hide');
             }
-            
-            console.log('=== DOWNLOAD ITEM CLICK HANDLER END ===');
         });
     });
-    
-    console.log('=== DOWNLOAD DROPDOWN SETUP COMPLETE ===');
 }
 
 // Set up observer for workspace collapse button changes
@@ -3374,8 +3883,6 @@ function setupResourceUploadZones() {
 
 // Setup draft tab file upload text monitoring
 function setupDraftTabFileUpload() {
-    console.log('🔧 setupDraftTabFileUpload() called');
-    
     // Function to replace the draft tab text
     function replaceDraftTabText() {
         const draftFileUpload = document.querySelector('.start-file-upload-dropzone');
@@ -3391,12 +3898,8 @@ function setupDraftTabFileUpload() {
                             node.textContent = node.textContent.replace('Drop File Here', 'Drop Word or Text File Here');
                         }
                     });
-                } else {
-                    console.log('❌ No "Drop File Here" found in wrap div', index);
                 }
             });
-        } else {
-            console.log('❌ No start-file-upload-dropzone found');
         }
     }
 
@@ -3419,101 +3922,46 @@ function setupDraftTabFileUpload() {
 
 // Function to remove a resource from the Start tab
 function removeStartResourceByIndex(index, resourceName) {
-    console.log('removeStartResourceByIndex called with index:', index, 'resourceName:', resourceName);
-    
-    // Prevent the card from collapsing
-    const expandableSection = document.getElementById('start-expandable-section');
-    const wasExpanded = expandableSection && expandableSection.classList.contains('expanded');
-    console.log('DEBUG: expandableSection found:', !!expandableSection, 'wasExpanded:', wasExpanded);
-
     // Find the hidden inputs for start tab resource removal
     const indexInput = document.getElementById('start-remove-resource-index');
     const nameInput = document.getElementById('start-remove-resource-name');
-    console.log('DEBUG: indexInput found:', !!indexInput, 'nameInput found:', !!nameInput);
 
     if (indexInput && nameInput) {
         // Find the actual input elements (Gradio wraps them)
         const indexTextarea = indexInput.querySelector('textarea') || indexInput.querySelector('input[type="text"]');
         const nameTextarea = nameInput.querySelector('textarea') || nameInput.querySelector('input[type="text"]');
-        console.log('DEBUG: indexTextarea found:', !!indexTextarea, 'nameTextarea found:', !!nameTextarea);
 
         if (indexTextarea && nameTextarea) {
             // Set the values
             indexTextarea.value = index.toString();
             nameTextarea.value = resourceName;
-            console.log('DEBUG: Set index value:', indexTextarea.value, 'name value:', nameTextarea.value);
 
             // Dispatch input events to trigger Gradio update
             indexTextarea.dispatchEvent(new Event('input', { bubbles: true }));
             nameTextarea.dispatchEvent(new Event('input', { bubbles: true }));
-            console.log('DEBUG: Dispatched input events');
 
             // Find and click the remove button
             const removeBtn = document.getElementById('start-remove-resource-btn');
-            console.log('DEBUG: removeBtn found:', !!removeBtn);
-            console.log('DEBUG: removeBtn element:', removeBtn);
-            
+
             if (removeBtn) {
-                console.log('DEBUG: About to click remove button');
                 removeBtn.click();
-                console.log('Clicked remove button');
-                
-                // Ensure the card stays expanded if it was expanded
-                if (wasExpanded) {
-                    setTimeout(() => {
-                        if (expandableSection && !expandableSection.classList.contains('expanded')) {
-                            expandableSection.classList.add('expanded');
-                            expandableSection.style.removeProperty('display');
-                            expandableSection.style.removeProperty('opacity');
-                            const card = document.querySelector('.start-input-card');
-                            if (card) card.classList.add('has-expanded');
-                        }
-                    }, 100);
-                }
             } else {
-                console.error('DEBUG: Remove button not found! Looking for alternatives...');
-                
+
                 // Try to find button by other methods
                 const allButtons = document.querySelectorAll('button');
-                console.log('DEBUG: Total buttons in DOM:', allButtons.length);
-                
+
                 let foundButton = null;
                 allButtons.forEach((btn, idx) => {
                     if (btn.id === 'start-remove-resource-btn') {
-                        console.log('DEBUG: Found button by ID at index:', idx);
                         foundButton = btn;
                     }
                 });
                 
                 if (foundButton) {
-                    console.log('DEBUG: Clicking found button');
                     foundButton.click();
-                    console.log('Clicked remove button (fallback method)');
-                } else {
-                    console.error('DEBUG: Could not find remove button by any method');
-                    
-                    // List all elements with IDs containing 'start-remove'
-                    const startRemoveElements = document.querySelectorAll('[id*="start-remove"]');
-                    console.log('DEBUG: Elements with start-remove in ID:', startRemoveElements.length);
-                    startRemoveElements.forEach((el, idx) => {
-                        console.log(`DEBUG: start-remove element ${idx}: ID=${el.id}, tag=${el.tagName}`);
-                    });
                 }
             }
-        } else {
-            console.error('DEBUG: Could not find input textareas');
-            console.error('DEBUG: indexInput content:', indexInput ? indexInput.innerHTML : 'null');
-            console.error('DEBUG: nameInput content:', nameInput ? nameInput.innerHTML : 'null');
         }
-    } else {
-        console.error('DEBUG: Could not find input containers');
-        
-        // List all elements with IDs containing 'start-remove'
-        const startRemoveElements = document.querySelectorAll('[id*="start-remove"]');
-        console.log('DEBUG: All start-remove elements:', startRemoveElements.length);
-        startRemoveElements.forEach((el, idx) => {
-            console.log(`DEBUG: Element ${idx}: ID=${el.id}, tag=${el.tagName}`);
-        });
     }
 }
 
@@ -3540,30 +3988,30 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // Delay initial drag and drop setup
     setTimeout(() => {
-        console.log('Starting delayed setup functions');
+        DragDropLogger.info('INIT', 'Starting delayed setup functions');
 
         setupDragAndDrop();
-        console.log('Called setupDragAndDrop()');
-
-        // Removed setupResourceDescriptions() - causes phantom Gradio events
-        // console.log('Called setupResourceDescriptions()');
+        DragDropLogger.info('INIT', 'Called setupDragAndDrop()');
 
         setupResourceTitleObservers();
-        console.log('Called setupResourceTitleObservers()');
+        DragDropLogger.info('INIT', 'Called setupResourceTitleObservers()');
 
         setupResourceUploadZones();
-        console.log('Called setupResourceUploadZones()');
+        DragDropLogger.info('INIT', 'Called setupResourceUploadZones()');
 
         setupResourceUploadText();
-        console.log('Called setupResourceUploadText()');
+        DragDropLogger.info('INIT', 'Called setupResourceUploadText()');
 
         preventResourceDrops();
-        console.log('Called preventResourceDrops()');
+        DragDropLogger.info('INIT', 'Called preventResourceDrops()');
 
         setupHowItWorksHover();
-        console.log('Called setupHowItWorksHover()');
+        DragDropLogger.info('INIT', 'Called setupHowItWorksHover()');
 
-        console.log('All initialization complete');
+        DragDropLogger.success('INIT', 'All initialization complete');
+        
+        // Start monitoring for drag-drop issues
+        startDragDropMonitoring();
     }, 100);
 });
 
@@ -3572,8 +4020,6 @@ function setupHowItWorksHover() {
     const steps = document.querySelectorAll('.start-process-step-vertical');
     
     if (steps.length === 3) {
-        console.log('Setting up How It Works hover effects');
-        
         // Set step 1 as active by default
         steps[0].classList.add('active');
         
@@ -3594,7 +4040,5 @@ function setupHowItWorksHover() {
                 steps[0].classList.add('active');
             });
         }
-    } else {
-        console.log('How It Works steps not found or incorrect count:', steps.length);
     }
 }

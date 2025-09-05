@@ -1,6 +1,7 @@
 import argparse
 import asyncio
 import json
+import logging
 import os
 import tempfile
 import time
@@ -13,6 +14,13 @@ import pypandoc
 from docx import Document
 from docpack_file import DocpackHandler
 from dotenv import load_dotenv
+
+# Configure logging for drag-drop debugging
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger('drag_drop')
 
 from .executor.runner import generate_docpack_from_prompt, generate_document
 from .models.outline import Outline, Resource, Section
@@ -705,45 +713,72 @@ def update_document_metadata(title, description, resources, blocks):
 def update_block_resources(blocks, block_id, resource_json, title, description, resources):
     """Update a block's resources when a resource is dropped on it."""
     import json
+    
+    logger.info(f"=== update_block_resources called ===")
+    logger.debug(f"block_id: {block_id}")
+    logger.debug(f"resource_json: {resource_json}")
+    logger.debug(f"Number of blocks: {len(blocks) if blocks else 0}")
 
     # Parse the resource data
-    resource_data = json.loads(resource_json)
+    try:
+        resource_data = json.loads(resource_json)
+        logger.debug(f"Parsed resource data: {resource_data}")
+    except Exception as e:
+        logger.error(f"Failed to parse resource JSON: {e}")
+        raise
 
     # Find the block and update its resources
-    for block in blocks:
+    block_found = False
+    for idx, block in enumerate(blocks):
         if block["id"] == block_id:
+            block_found = True
+            logger.info(f"Found block at index {idx} with id {block_id}")
+            
             if "resources" not in block:
                 block["resources"] = []
+                logger.debug(f"Initialized resources array for block {block_id}")
 
             # For text blocks, only allow one resource AND auto-load content
             if block["type"] == "text":
+                logger.info(f"Processing text block {block_id}")
                 # Replace any existing resource
+                old_resources = block.get("resources", [])
                 block["resources"] = [resource_data]
+                logger.debug(f"Replaced {len(old_resources)} resources with new resource")
 
                 # Auto-load the file content into the text block
                 try:
                     file_path = resource_data["path"]
+                    logger.debug(f"Loading file content from: {file_path}")
+                    
                     if file_path.lower().endswith(".docx"):
                         # Extract text from docx file
-                        block["content"] = docx_to_text(file_path)
+                        content = docx_to_text(file_path)
+                        block["content"] = content
+                        logger.info(f"Loaded DOCX content: {len(content)} characters")
                     else:
                         # Read as regular text file
                         with open(file_path, "r", encoding="utf-8") as f:
-                            block["content"] = f.read()
+                            content = f.read()
+                            block["content"] = content
+                            logger.info(f"Loaded text content: {len(content)} characters")
                 except Exception as e:
-                    print(f"Error loading file content: {e}")
+                    logger.error(f"Error loading file content from {file_path}: {e}")
                     # Keep existing content if file can't be read
             else:
+                logger.info(f"Processing AI block {block_id}")
                 # For AI blocks, allow multiple resources
                 # Check if resource already exists in the block
                 exists = False
                 for res in block["resources"]:
                     if res.get("path") == resource_data.get("path"):
                         exists = True
+                        logger.debug(f"Resource already exists in block: {resource_data.get('path')}")
                         break
 
                 # Add resource if it doesn't exist
                 if not exists:
+                    logger.debug(f"Adding new resource to block: {resource_data.get('path')}")
                     # Check if this resource already has a description in another block
                     existing_description = ""
                     for other_block in blocks:
@@ -761,10 +796,19 @@ def update_block_resources(blocks, block_id, resource_json, title, description, 
                         resource_to_add["description"] = existing_description
 
                     block["resources"].append(resource_to_add)
+                    logger.info(f"Added resource to block. Total resources: {len(block['resources'])}")
+                else:
+                    logger.info(f"Resource already in block, skipping")
             break
+    
+    if not block_found:
+        logger.error(f"Block {block_id} not found in blocks list!")
+        logger.debug(f"Available block IDs: {[b['id'] for b in blocks]}")
 
     # Regenerate outline
     outline, json_str = regenerate_outline_from_state(title, description, resources, blocks)
+    logger.info(f"=== update_block_resources completed successfully ===")
+    logger.debug(f"Returning {len(blocks)} blocks")
     return blocks, outline, json_str
 
 
@@ -886,6 +930,11 @@ def delete_resource_from_panel(resources, resource_path, title, description, blo
 
 def update_resource_title(resources, resource_path, new_title, doc_title, doc_description, blocks):
     """Update the title of a resource."""
+    logger.info(f"=== update_resource_title called ===")
+    logger.debug(f"resource_path: {resource_path}")
+    logger.debug(f"new_title: {new_title}")
+    logger.debug(f"Number of resources: {len(resources) if resources else 0}")
+    
     # Update the title in the resources list
     for resource in resources:
         if resource.get("path") == resource_path:
@@ -900,6 +949,11 @@ def update_resource_title(resources, resource_path, new_title, doc_title, doc_de
 
 def update_resource_panel_description(resources, resource_path, new_description, doc_title, doc_description, blocks):
     """Update the description of a resource from the panel."""
+    logger.info(f"=== update_resource_panel_description called ===")
+    logger.debug(f"resource_path: {resource_path}")
+    logger.debug(f"new_description: {new_description}")
+    logger.debug(f"Number of resources: {len(resources) if resources else 0}")
+    
     # Update the description in the resources list
     for resource in resources:
         if resource.get("path") == resource_path:
@@ -1480,11 +1534,15 @@ def render_blocks(blocks, focused_block_id=None):
 
     timestamp = int(time.time() * 1000)
 
-    print(f"render_blocks called with {len(blocks) if blocks else 0} blocks at {timestamp}")
+    logger.info(f"=== render_blocks called ===")
+    logger.debug(f"Number of blocks: {len(blocks) if blocks else 0}")
+    logger.debug(f"Focused block ID: {focused_block_id}")
+    logger.debug(f"Timestamp: {timestamp}")
+    
     if blocks:
         for i, block in enumerate(blocks):
             res_count = len(block.get("resources", []))
-            print(f"  Block {i} ({block['id']}): {res_count} resources")
+            logger.debug(f"  Block {i} ({block['id']}): type={block.get('type')}, resources={res_count}")
 
     if not blocks:
         return "<div class='empty-blocks-message'>Click '+ Add AI' to add an AI generated section.</div><div class='empty-blocks-message'>Click '+ Add Text' to add a traditional text section.</div>"
@@ -3163,7 +3221,7 @@ def create_app():
         toggle_trigger.click(
             fn=toggle_block_collapse, inputs=[blocks_state, toggle_block_id], outputs=blocks_state
         ).then(fn=set_focused_block, inputs=toggle_block_id, outputs=focused_block_state).then(
-            fn=render_blocks, inputs=[blocks_state, toggle_block_id], outputs=blocks_display
+            fn=render_blocks, inputs=[blocks_state, focused_block_state], outputs=blocks_display
         ).then(
             fn=update_collapse_button_state, inputs=[blocks_state], outputs=workspace_collapse_btn
         )
@@ -3193,7 +3251,7 @@ def create_app():
 
         # Focus handler
         focus_trigger.click(fn=set_focused_block, inputs=focus_block_id, outputs=focused_block_state).then(
-            fn=render_blocks, inputs=[blocks_state, focus_block_id], outputs=blocks_display
+            fn=render_blocks, inputs=[blocks_state, focused_block_state], outputs=blocks_display
         )
 
         # Add after handler - for + button on content blocks
