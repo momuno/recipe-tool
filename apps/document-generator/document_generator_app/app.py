@@ -252,34 +252,6 @@ def start_tab_check_prompt_before_submit(prompt):
 
 async def handle_start_draft_click(app_state, prompt):
     """Handle the Draft button click on the Start tab."""
-    if not prompt or not prompt.strip():
-        error_msg = "Please enter a description of what you'd like to create."
-        print(f"DEBUG: No prompt provided, returning error: {error_msg}")
-        # Return 15 values to match outputs (added loading message and button)
-        return (
-            app_state,
-            gr.update(),  # ui_doc_title
-            gr.update(),  # ui_doc_description
-            gr.update(),  # ui_json_outline
-            gr.update(),  # generated_content_html
-            gr.update(),  # generated_content
-            gr.update(),  # save_doc_btn
-            gr.update(),  # ui_switch_tab_trigger
-            gr.update(
-                value=f"""<div id="prompt_error" style="position: relative; color: #dc2626; padding: 8px 30px 8px 12px; background: #fee2e2; border-radius: 4px; margin-top: 8px; font-size: 14px;">
-                    <button onclick="document.getElementById('prompt_error').style.display='none'" 
-                            style="position: absolute; top: 4px; right: 5px; background: none; border: none; color: #dc2626; font-size: 18px; cursor: pointer; padding: 0 5px; opacity: 0.6;" 
-                            onmouseover="this.style.opacity='1'" 
-                            onmouseout="this.style.opacity='0.6'"
-                            title="Close">×</button>
-                    {error_msg}
-                </div>""",
-                visible=True,
-            ),  # ui_start_tab_error_message
-            gr.update(),  # ui_start_tab_prompt_input - no change
-            gr.update(interactive=True),  # ui_start_tab_draft_btn
-        )
-
     try:
         # Get or create session ID
         if not app_state["session_id"]:
@@ -1491,13 +1463,10 @@ def load_example(app_state, example_id):
         # If docpack doesn't exist, show error message
         error_msg = f"Example file not found: {file_path.name if file_path else 'Unknown'}"
         return (
+            app_state,
             gr.update(),  # title
             gr.update(),  # description
-            gr.update(),  # resources
-            gr.update(),  # blocks
-            gr.update(),  # outline
             json.dumps({"error": error_msg}, indent=2),  # ui_json_outline
-            session_id,  # session_id
         )
 
     # Use the import_outline function to load the example
@@ -2936,7 +2905,7 @@ def create_app():
                     # Workspace panel for stacking content blocks
                     with gr.Column(elem_classes="workspace-display"):
                         ui_blocks_display = gr.HTML(
-                            value=render_blocks(initial_blocks), elem_classes="blocks-container"
+                            value=render_blocks(app_state), elem_classes="blocks-container"
                         )
 
                         # Hidden components for JS communication
