@@ -3093,43 +3093,20 @@ def create_app():
 
                                         ui_reference_name.change(
                                             fn=update_reference_name,
-                                            inputs=[
-                                                app_state,
-                                                reference_path,
-                                                ui_reference_name,
-                                            ],
-                                            outputs=[
-                                                app_state,
-                                                ui_json_outline,
-                                            ],
+                                            inputs=[app_state, reference_path, ui_reference_name],
+                                            outputs=[app_state, ui_json_outline],
                                             trigger_mode="always_last",  # Only trigger after user stops typing
                                         )
-
                                         ui_reference_desc.change(
                                             fn=update_reference_description,
-                                            inputs=[
-                                                app_state,
-                                                reference_path,
-                                                ui_reference_desc,
-                                            ],
-                                            outputs=[
-                                                app_state,
-                                                ui_json_outline,
-                                            ],
+                                            inputs=[app_state, reference_path, ui_reference_desc],
+                                            outputs=[app_state, ui_json_outline],     
                                             trigger_mode="always_last",  # Only trigger after user stops typing
                                         )
-
                                         ui_reference_delete_btn.click(
                                             fn=delete_reference,
-                                            inputs=[
-                                                app_state,
-                                                reference_path,
-                                            ],
-                                            outputs=[
-                                                app_state,
-                                                ui_json_outline,
-                                                ui_blocks_display,
-                                            ],
+                                            inputs=[app_state, reference_path],
+                                            outputs=[app_state, ui_json_outline, ui_blocks_display]
                                         )
 
                                         # File replacement
