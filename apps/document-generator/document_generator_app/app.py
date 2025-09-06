@@ -88,6 +88,638 @@ SUPPORTED_FILE_TYPES = [
     ".docx",
 ]
 
+def start_tab_load_code_readme_example(app_state):
+    """Load the code README example prompt and resources."""
+    # Get or create session
+    if not app_state["session_id"]:
+        app_state["session_id"] = str(uuid.uuid4())
+
+    prompt = "Generate a comprehensive production-ready README for the target codebase. Include key features, installation instructions, usage examples, API documentation, an architecture overview, and contribution guidelines. IMPORTANT to use ONLY the facts available in the referenced documents (code, configs, docs, tests, etc.). Keep prose short, use bullet lists when helpful, and prefer plan language over marketing fluff.  Assumer the audience is a developer seeing the project for the first time."
+
+    # Extract resources from the README docpack
+    examples_dir = Path(__file__).parent.parent / "examples"
+    docpack_path = examples_dir / "readme-generation" / "readme.docpack"
+    references = extract_resources_from_docpack(docpack_path, app_state["session_id"])
+    app_state["start_tab"]["attached_references"] = references
+
+    # Render the references HTML
+    references_html = render_start_tab_attached_references(references)
+
+    return app_state, prompt, references_html
+
+def start_tab_load_product_launch_example(app_state):
+    """Load the product launch example prompt and resources."""
+    # Get or create session
+    if not app_state["session_id"]:
+        app_state["session_id"] = str(uuid.uuid4())
+
+    prompt = "Create a comprehensive product launch documentation package for a new B2B SaaS analytics product.  Include the value proposition, implementation details and customer benefits.  There should be a product over section, one on technical architecture, an implementation guide, pricing and packaging, and go-to market strategy.  Other areas to consider include an announcement blog post, press release, internal team briefing, and customer FAQ.  Be sure to use clear, professional language appropriate for both technical and business stakeholders."
+
+    # Extract resources from the product launch docpack
+    examples_dir = Path(__file__).parent.parent / "examples"
+    docpack_path = examples_dir / "launch-documentation" / "launch-documentation.docpack"
+    references = extract_resources_from_docpack(docpack_path, app_state["session_id"])
+    app_state["start_tab"]["attached_references"] = references
+
+    # Render the resources HTML
+    references_html = render_start_tab_attached_references(references)
+
+    return app_state, prompt, references_html
+
+def start_tab_load_performance_review_example(app_state):
+    """Load the performance review example prompt and resources."""
+    # Get or create session
+    if not app_state["session_id"]:
+        app_state["session_id"] = str(uuid.uuid4())
+
+    prompt = "Generate an annual performance review for an employee. It will be used by both the manager and the employee to discuss the employee's progress.  Include key achievements, areas for growth, training and development and next years goals.  Make sure there is an employee overview as well.  Make it constructive and motivating, but also concise.  Folks are busy."
+
+    # Extract resources from the performance review docpack
+    examples_dir = Path(__file__).parent.parent / "examples"
+    docpack_path = (
+        examples_dir
+        / "scenario-4-annual-performance-review"
+        / "Annual Employee Performance Review_20250709_153352.docpack"
+    )
+    references = extract_resources_from_docpack(docpack_path, app_state["session_id"])
+    app_state["start_tab"]["attached_references"] = references
+
+    # Render the resources HTML
+    references_html = render_start_tab_attached_references(references)
+
+    return app_state, prompt, references_html
+
+def start_tab_reference_upload(app_state, new_files):
+    """Handle file uploads on the Start tab."""
+    # Add new files to current attached references
+    new_references = app_state["start_tab"]["attached_references"].copy() if app_state["start_tab"]["attached_references"] else []
+    warnings = []
+
+    for file_path in new_files:
+        if file_path:
+            file_name = os.path.basename(file_path)
+            file_size = os.path.getsize(file_path)
+
+            # Check if it's a docx file and if it's protected
+            if file_path.lower().endswith(".docx"):
+                is_protected, error_msg = check_docx_protected(file_path)
+                if is_protected:
+                    warnings.append(error_msg)
+                    continue  # Skip adding this file to resources
+
+            # Format file size
+            if file_size < 1024:
+                size_str = f"{file_size} B"
+            elif file_size < 1024 * 1024:
+                size_str = f"{file_size / 1024:.1f} KB"
+            else:
+                size_str = f"{file_size / (1024 * 1024):.1f} MB"
+
+            # Check if already in references (by name)
+            if not any(r["name"] == file_name for r in new_references):
+                new_references.append({
+                    "path": file_path,
+                    "name": file_name,
+                    "size": size_str,
+                })
+
+    app_state["start_tab"]["attached_references"] = new_references
+
+    # Create warning message if there were any protected files
+    if warnings:
+        import random
+
+        warning_id = f"warning_{random.randint(1000, 9999)}"
+        warning_html = f"""
+        <div id="{warning_id}" style='position: relative; color: #dc2626; background: #fee2e2; padding: 8px 30px 8px 12px; border-radius: 4px; margin-top: 8px; font-size: 14px;'>
+            <button onclick="document.getElementById('{warning_id}').style.display='none'" 
+                    style='position: absolute; top: 4px; right: 5px; background: none; border: none; color: #dc2626; font-size: 18px; cursor: pointer; padding: 0 5px; opacity: 0.6;' 
+                    onmouseover="this.style.opacity='1'" 
+                    onmouseout="this.style.opacity='0.6'"
+                    title='Close'>×</button>
+            {"<br>".join(warnings)}
+        </div>
+        """
+
+        references_html = start_tab_render_attached_references(new_references)
+        return app_state, None, references_html, gr.update(value=warning_html, visible=True)
+
+    references_html = start_tab_render_attached_references(new_references)
+    return app_state, None, references_html, gr.update(visible=False)
+
+def start_tab_render_attached_references(references):
+    if references and len(references) > 0:
+        # Create a flex container for resources
+        html_content = '<div class="start-resources-list">'
+        for idx, reference in enumerate(references):
+            print(f"  Rendering resource: {reference['name']}")
+            html_content += f"""
+                <div class="dropped-resource">
+                    <span>{reference["name"]}</span>
+                    <button class="remove-resource" onclick="event.stopPropagation(); removeStartResourceByIndex({idx}, '{resource["name"]}'); return false;">🗑</button>
+                </div>
+            """
+        html_content += "</div>"
+        return html_content
+    else:
+        # Return empty div when no resources
+        return '<div class="start-resources-list"></div>'
+
+def start_tab_check_prompt_before_submit(prompt):
+    """Check if prompt exists and show error if not."""
+    if not prompt or not prompt.strip():
+        # Show error message, hide loading, enable button
+        return (
+            gr.update(
+                value="""<div id="prompt_error" style="position: relative; color: #dc2626; padding: 8px 30px 8px 12px; background: #fee2e2; border-radius: 4px; margin-top: 8px; font-size: 14px;">
+                    <button onclick="document.getElementById('prompt_error').style.display='none'" 
+                            style="position: absolute; top: 4px; right: 5px; background: none; border: none; color: #dc2626; font-size: 18px; cursor: pointer; padding: 0 5px; opacity: 0.6;" 
+                            onmouseover="this.style.opacity='1'" 
+                            onmouseout="this.style.opacity='0.6'"
+                            title="Close">×</button>
+                    Please enter a description of what you'd like to create.
+                </div>""",
+                visible=True,
+            ),
+            gr.update(interactive=True),  # Enable button
+        )
+    else:
+        # Hide error message, show loading, disable button
+        return (
+            gr.update(visible=False),
+            gr.update(interactive=True),  # Keep button enabled
+        )
+
+async def handle_start_draft_click(app_state, prompt):
+    """Handle the Draft button click on the Start tab."""
+    if not prompt or not prompt.strip():
+        error_msg = "Please enter a description of what you'd like to create."
+        print(f"DEBUG: No prompt provided, returning error: {error_msg}")
+        # Return 15 values to match outputs (added loading message and button)
+        return (
+            app_state,
+            gr.update(),  # ui_doc_title
+            gr.update(),  # ui_doc_description
+            gr.update(),  # ui_json_outline
+            gr.update(),  # generated_content_html
+            gr.update(),  # generated_content
+            gr.update(),  # save_doc_btn
+            gr.update(),  # ui_switch_tab_trigger
+            gr.update(
+                value=f"""<div id="prompt_error" style="position: relative; color: #dc2626; padding: 8px 30px 8px 12px; background: #fee2e2; border-radius: 4px; margin-top: 8px; font-size: 14px;">
+                    <button onclick="document.getElementById('prompt_error').style.display='none'" 
+                            style="position: absolute; top: 4px; right: 5px; background: none; border: none; color: #dc2626; font-size: 18px; cursor: pointer; padding: 0 5px; opacity: 0.6;" 
+                            onmouseover="this.style.opacity='1'" 
+                            onmouseout="this.style.opacity='0.6'"
+                            title="Close">×</button>
+                    {error_msg}
+                </div>""",
+                visible=True,
+            ),  # ui_start_tab_error_message
+            gr.update(),  # ui_start_tab_prompt_input - no change
+            gr.update(interactive=True),  # ui_start_tab_draft_btn
+        )
+
+    try:
+        # Get or create session ID
+        if not app_state["session_id"]:
+            app_state["session_id"] = str(uuid.uuid4())
+
+        # Call the docpack generation function
+        docpack_path, outline_json = await generate_docpack_from_prompt(
+            prompt=prompt.strip(), resources=app_state["start_tab"]["attached_references"] or [], session_id=app_state["session_id"], dev_mode=IS_DEV_MODE
+        )
+
+        # Parse the outline JSON
+        if outline_json:
+            outline_data = json.loads(outline_json)
+
+            # Process the outline data similar to import_outline function
+            title = outline_data["title"]
+            description = outline_data["general_instruction"]
+
+            # Process resources
+            references = []
+            session_files_dir = session_manager.get_files_dir(app_state["session_id"])
+
+            for res_data in outline_data.get("resources", []):
+                resource_path = res_data.get("path", "")
+                if resource_path:
+                    # Copy resource to session files directory if it exists
+                    source_path = Path(resource_path)
+                    if source_path.exists():
+                        target_path = session_files_dir / source_path.name
+                        if source_path != target_path:
+                            import shutil
+
+                            shutil.copy2(source_path, target_path)
+
+                        references.append({
+                            "key": res_data.get("key", ""),
+                            "name": source_path.name,
+                            "path": str(target_path),
+                            "description": res_data.get("description", ""),
+                        })
+
+            # Convert sections to blocks
+            blocks = []
+
+            def sections_to_blocks(sections, parent_indent=-1):
+                """Recursively convert sections to blocks."""
+                for section in sections:
+                    block = {
+                        "id": str(uuid.uuid4()),
+                        "heading": section.get("title", ""),
+                        "content": "",
+                        "resources": [],
+                        "collapsed": True,
+                        "indent_level": parent_indent + 1,
+                    }
+
+                    if "prompt" in section:
+                        # AI block
+                        block["type"] = "ai"
+                        block["content"] = section.get("prompt", "")
+                        block["ai_content"] = section.get("prompt", "")
+
+                        # Handle refs
+                        refs = section.get("refs", [])
+                        if refs and references:
+                            for ref in refs:
+                                for resource in references:
+                                    if resource.get("key") == ref:
+                                        block["resources"].append(resource)
+                                        break
+                    else:
+                        # Text block
+                        block["type"] = "text"
+                        block["content"] = ""
+
+                    blocks.append(block)
+
+                    # Process nested sections
+                    if "sections" in section and section["sections"]:
+                        sections_to_blocks(section["sections"], parent_indent=block["indent_level"])
+
+            # Convert top-level sections
+            sections_to_blocks(outline_data.get("sections", []))
+
+            # Ensure the first block is expanded (consistent with import behavior)
+            if blocks and len(blocks) > 0:
+                blocks[0]["collapsed"] = False
+
+            # Generate the JSON for the outline
+            json_str = json.dumps(outline_data, indent=2)
+
+            # Return all the values needed to populate the Draft+Generate tab
+            # This matches what import_outline returns
+            # DO NOT switch to the draft tab yet - that will happen in the next step
+            return (
+                app_state,
+                title,  # ui_doc_title
+                description,  # ui_doc_description
+                json_str,  # ui_json_outline
+                gr.update(visible=False),  # generated_content_html
+                gr.update(visible=False),  # generated_content
+                gr.update(interactive=False),  # save_doc_btn
+                gr.update(visible=True, value=f"SWITCH_TO_DRAFT_TAB_{int(time.time() * 1000)}"),  # ui_switch_tab_trigger
+                gr.update(visible=False),  # ui_start_tab_error_message - hide on success
+                gr.update(
+                    lines=4, max_lines=10, interactive=True, elem_classes="start-prompt-input"
+                ),  # ui_start_tab_prompt_input - preserve value but reset display properties
+                gr.update(interactive=True),  # ui_start_tab_draft_btn
+            )
+        else:
+            error_msg = "Failed to generate outline. Please try again."
+            print(f"DEBUG: No outline generated, returning error: {error_msg}")
+            # Return 15 values to match outputs
+            return (
+                app_state,
+                gr.update(),  # ui_doc_title
+                gr.update(),  # ui_doc_description
+                gr.update(),  # ui_json_outline
+                gr.update(),  # generated_content_html
+                gr.update(),  # generated_content
+                gr.update(),  # save_doc_btn
+                gr.update(),  # ui_switch_tab_trigger
+                gr.update(
+                    value=f"""<div id="outline_error" style="position: relative; color: #dc2626; padding: 8px 30px 8px 12px; background: #fee2e2; border-radius: 4px; margin-top: 8px; font-size: 14px;">
+                        <button onclick="document.getElementById('outline_error').style.display='none'" 
+                                style="position: absolute; top: 4px; right: 5px; background: none; border: none; color: #dc2626; font-size: 18px; cursor: pointer; padding: 0 5px; opacity: 0.6;" 
+                                onmouseover="this.style.opacity='1'" 
+                                onmouseout="this.style.opacity='0.6'"
+                                title="Close">×</button>
+                        {error_msg}
+                    </div>""",
+                    visible=True,
+                ),  # ui_start_tab_error_message
+                gr.update(lines=4, max_lines=10),  # ui_start_tab_prompt_input - preserve lines
+                gr.update(interactive=True),  # ui_start_tab_draft_btn
+            )
+
+    except Exception as e:
+        import traceback
+
+        error_msg = f"Error: {str(e)}"
+        print(f"ERROR in handle_start_draft_click: {error_msg}")
+        print(f"Traceback: {traceback.format_exc()}")
+        # Return 15 values to match outputs
+        return (
+            app_state,
+            gr.update(),  # ui_doc_title
+            gr.update(),  # ui_doc_description
+            gr.update(),  # ui_json_outline
+            gr.update(),  # generated_content_html
+            gr.update(),  # generated_content
+            gr.update(),  # save_doc_btn
+            gr.update(),  # ui_switch_tab_trigger
+            gr.update(
+                value=f"""<div id="exception_error" style="position: relative; color: #dc2626; padding: 8px 30px 8px 12px; background: #fee2e2; border-radius: 4px; margin-top: 8px; font-size: 14px;">
+                    <button onclick="document.getElementById('exception_error').style.display='none'" 
+                            style="position: absolute; top: 4px; right: 5px; background: none; border: none; color: #dc2626; font-size: 18px; cursor: pointer; padding: 0 5px; opacity: 0.6;" 
+                            onmouseover="this.style.opacity='1'" 
+                            onmouseout="this.style.opacity='0.6'"
+                            title="Close">×</button>
+                    {error_msg}
+                </div>""",
+                visible=True,
+            ),  # ui_start_tab_error_message
+            gr.update(),  # ui_start_tab_prompt_input
+            gr.update(interactive=True),  # ui_start_tab_draft_btn
+        )
+
+#####################################################
+
+def reset_template(app_state):
+    """Reset the document to initial empty state."""
+    # Create new session ID
+    app_state = gr.State({
+        "session_id": None,
+        "start_tab": {
+            "attached_references": []
+        },
+        "generate_tab":{
+            "document_title": "", # ui_doc_title = gr.Textbox(...)
+            "document_description": "",  # ui_doc_description = gr.Textbox(...)
+            "references": [],  # resources_state = gr.State([])
+            "blocks": [{
+                "id": str(uuid.uuid4()),
+                "type": "ai",
+                "heading": "",
+                "content": "",
+                "attached_references": [],
+                "collapsed": False,  # AI block starts expanded
+                "indent_level": 0,
+            },
+            {
+                "id": str(uuid.uuid4()),
+                "type": "text",
+                "heading": "",
+                "content": "",
+                "attached_references": [],
+                "collapsed": True,  # Text block starts collapsed
+                "indent_level": 0,
+            }],
+        }
+    })
+
+    # Generate initial outline
+    json_str = generate_outline_json_from_state(app_state)
+
+    # Return empty title, description, empty resources, initial blocks
+    return (
+        app_state,
+        gr.update(value=""),  # title - use gr.update to ensure proper clearing
+        gr.update(value=""),  # description - use gr.update to ensure proper clearing
+        json_str,  # ui_json_outline
+        gr.update(
+            value="<em>Click '▷ Generate' to see the generated content here.</em><br><br><br>", visible=True
+        ),  # generated_content_html
+        gr.update(visible=False),  # generated_content
+        gr.update(interactive=False),  # save_doc_btn
+    )
+
+def import_template(app_state, file_path):
+    """Import an outline from a .docpack file and convert to blocks format."""
+    # Get or create session ID
+    if not app_state["session_id"]:
+        app_state["session_id"] = str(uuid.uuid4())
+
+    try:
+        file_path = Path(file_path)
+
+        # Only accept .docpack files
+        if file_path.suffix.lower() != ".docpack":
+            error_msg = "Import failed: Only .docpack files are supported. Please use a .docpack file created by the Save function."
+            return (
+                app_state, 
+                gr.update(),  # title
+                gr.update(),  # description
+                json.dumps({"error": error_msg}, indent=2),  # ui_json_outline
+                None,  # ui_import_template
+                gr.update(),  # generated_content_html
+                gr.update(),  # generated_content
+                gr.update(),  # save_doc_btn
+            )
+
+        # Use session directory for extraction
+        session_dir = session_manager.get_session_dir(app_state["session_id"])
+
+        # Extract the docpack to session directory
+        json_data, extracted_files = DocpackHandler.extract_package(file_path, session_dir)
+
+        # Extract title and description
+        title = json_data.get("title", "")
+        description = json_data.get("general_instruction", "")
+
+        # Extract and validate resources
+        resources = []
+        invalid_resources = []
+        inline_resources = {}  # Store inline resources by key
+
+        for res_data in json_data.get("resources", []):
+            resource_path = res_data.get("path", "")
+            resource_name = Path(resource_path).name
+            file_ext = Path(resource_name).suffix.lower()
+
+            # Check if this is an inline resource
+            if res_data.get("is_inline", False) or res_data.get("key", "").startswith("inline_resource_"):
+                # Store inline resource content for later use
+                inline_resources[res_data["key"]] = resource_path
+                continue  # Don't add to regular resources
+
+            # Check if file extension is allowed
+            if file_ext not in SUPPORTED_FILE_TYPES:
+                invalid_resources.append(f"{resource_name} ({file_ext})")
+                continue
+
+            resources.append({
+                "key": res_data.get("key", ""),  # Preserve original key
+                "path": resource_path,
+                "name": resource_name,
+                "title": res_data.get("title", resource_name),  # Preserve title or default to filename
+                "type": "text",  # All are text files now
+                "description": res_data.get("description", ""),
+            })
+
+        # If there are invalid resources, show error and return
+        if invalid_resources:
+            error_msg = "Import failed: The following resources have unsupported file types:\n" + "\n".join(
+                invalid_resources
+            )
+            error_msg += f"\n\nOnly text files are allowed: {', '.join(sorted(SUPPORTED_FILE_TYPES))}"
+            # Return error in the JSON output field
+            return (
+                app_state,
+                gr.update(),  # title
+                gr.update(),  # description
+                json.dumps({"error": error_msg}, indent=2),  # ui_json_outline
+                None,  # ui_import_template
+                gr.update(),  # generated_content_html
+                gr.update(),  # generated_content
+                gr.update(),  # save_doc_btn
+            )
+
+        # Convert sections to blocks
+        blocks = []
+
+        def sections_to_blocks(sections, parent_indent=-1):
+            """Recursively convert sections to blocks."""
+            for section in sections:
+                # Create a block from the section
+                block = {
+                    "id": str(uuid.uuid4()),
+                    "heading": section.get("title", ""),
+                    "content": "",
+                    "resources": [],
+                    "collapsed": True,
+                    "indent_level": parent_indent + 1,
+                }
+
+                # Determine block type and content
+                if "prompt" in section:
+                    # AI block
+                    block["type"] = "ai"
+                    block["content"] = section.get("prompt", "")
+                    block["ai_content"] = section.get("prompt", "")
+
+                    # Handle refs
+                    refs = section.get("refs", [])
+                    if refs and resources:
+                        # Map refs back to resources by matching keys
+                        for ref in refs:
+                            # Find resource with matching key
+                            for resource in resources:
+                                if resource.get("key") == ref:
+                                    block["resources"].append(resource)
+                                    break
+
+                elif "resource_key" in section:
+                    # Text block
+                    block["type"] = "text"
+                    block["text_content"] = ""
+
+                    # Handle resource_key
+                    resource_key = section.get("resource_key", "")
+
+                    # Check if this is an inline resource
+                    if resource_key in inline_resources:
+                        # Load content from inline resource file
+                        try:
+                            inline_path = inline_resources[resource_key]
+                            # If it's a relative path in a save directory, construct full path
+                            if not Path(inline_path).is_absolute():
+                                # Look for the file in the same directory as the imported JSON
+                                import_dir = Path(file_path).parent
+                                inline_path = import_dir / inline_path
+
+                            with open(inline_path, "r", encoding="utf-8") as f:
+                                block["content"] = f.read()
+                                block["text_content"] = block["content"]
+                                block["edited"] = True  # Mark as edited
+                        except Exception as e:
+                            print(f"Error loading inline resource: {e}")
+                    elif resource_key and resources:
+                        # Regular resource reference - find by key
+                        for resource in resources:
+                            if resource.get("key") == resource_key:
+                                block["resources"].append(resource)
+                                # Auto-load content from the resource file
+                                try:
+                                    with open(resource["path"], "r", encoding="utf-8") as f:
+                                        block["content"] = f.read()
+                                        block["text_content"] = block["content"]
+                                except Exception as e:
+                                    print(f"Error loading resource content: {e}")
+                                break
+                else:
+                    # Default to AI block if no specific type indicators
+                    block["type"] = "ai"
+
+                blocks.append(block)
+
+                # Process nested sections
+                if "sections" in section:
+                    sections_to_blocks(section["sections"], block["indent_level"])
+
+        # Convert top-level sections
+        sections_to_blocks(json_data.get("sections", []))
+
+        # If no blocks were created, add default ones
+        if not blocks:
+            blocks = [
+                {
+                    "id": str(uuid.uuid4()),
+                    "type": "ai",
+                    "heading": "",
+                    "content": "",
+                    "resources": [],
+                    "collapsed": False,
+                    "indent_level": 0,
+                }
+            ]
+        else:
+            # Ensure the first block is expanded
+            if blocks and len(blocks) > 0:
+                blocks[0]["collapsed"] = False
+
+        # Regenerate outline and JSON
+        json_str = generate_outline_json_from_state(app_state)
+
+        # Generate resources HTML using the proper function
+        generate_resource_html(resources)
+
+        # Return values matching what ui_import_template.change expects
+        return (
+            app_state,
+            title,
+            description,
+            json_str,
+            None,  # ui_import_template (clear it)
+            gr.update(
+                value="<em>Click '▷ Generate' to see the generated content here.</em><br><br><br>", visible=True
+            ),  # generated_content_html
+            gr.update(visible=False),  # generated_content
+            gr.update(interactive=False),  # save_doc_btn
+        )
+
+    except Exception as e:
+        error_msg = f"Error importing file: {str(e)}"
+        print(error_msg)
+        # Return current values on error matching expected outputs
+        return (
+            app_state,
+            gr.update(),  # title
+            gr.update(),  # description
+            gr.update(),  # ui_json_outline
+            None,  # ui_import_template
+            gr.update(),  # generated_content_html
+            gr.update(),  # generated_content
+            gr.update(),  # save_doc_btn
+        )
+
+
+#####################################################
 def json_to_outline(json_data: Dict[str, Any]) -> Outline:
     """Convert JSON structure to Outline dataclasses."""
     # Create outline with basic metadata
@@ -141,34 +773,6 @@ def json_to_outline(json_data: Dict[str, Any]) -> Outline:
     return outline
 
 
-def add_ai_block(blocks, focused_block_id=None):
-    """Add an AI content block."""
-    new_block = {
-        "id": str(uuid.uuid4()),
-        "type": "ai",
-        "heading": "",
-        "content": "",
-        "resources": [],
-        "collapsed": True,  # Start collapsed
-        "indent_level": 0,
-    }
-
-    # If no focused block or focused block not found, add at the end
-    if not focused_block_id:
-        return blocks + [new_block]
-
-    # Find the focused block and insert after it
-    for i, block in enumerate(blocks):
-        if block["id"] == focused_block_id:
-            # Inherit the indent level from the focused block
-            new_block["indent_level"] = block.get("indent_level", 0)
-            # Insert after the focused block
-            return blocks[: i + 1] + [new_block] + blocks[i + 1 :]
-
-    # If focused block not found, add at the end
-    return blocks + [new_block]
-
-
 def add_heading_block(blocks):
     """Add a heading block."""
     new_block = {"id": str(uuid.uuid4()), "type": "heading", "content": "Heading"}
@@ -202,8 +806,25 @@ def add_text_block(blocks, focused_block_id=None):
     # If focused block not found, add at the end
     return blocks + [new_block]
 
+def add_section(app_state):
+    """Add an AI content section block."""
+    new_block = {
+        "id": str(uuid.uuid4()),
+        "type": "ai",
+        "heading": "",
+        "content": "",
+        "resources": [],
+        "collapsed": True,  # Start collapsed
+        "indent_level": 0,
+    }
 
-def delete_block(blocks, block_id, title, description, resources):
+    app_state["generate_tab"]["blocks"].append(new_block)
+
+    json_str = generate_outline_json_from_state(app_state)
+
+    return app_state, json_str
+
+def delete_section(blocks, block_id, title, description, resources):
     """Delete a block by its ID and regenerate outline."""
     blocks = [block for block in blocks if block["id"] != block_id]
 
@@ -247,53 +868,6 @@ def update_block_heading(blocks, block_id, heading, title, description, resource
     outline, json_str = generate_outline_json_from_state(title, description, resources, blocks)
     return blocks, outline, json_str
 
-
-def reset_document(session_id=None):
-    """Reset the document to initial empty state."""
-    # Create new session ID
-    new_session_id = str(uuid.uuid4())
-
-    # Reset to initial blocks
-    initial_blocks = [
-        {
-            "id": str(uuid.uuid4()),
-            "type": "ai",
-            "heading": "",
-            "content": "",
-            "resources": [],
-            "collapsed": False,  # AI block starts expanded
-            "indent_level": 0,
-        },
-        {
-            "id": str(uuid.uuid4()),
-            "type": "text",
-            "heading": "",
-            "content": "",
-            "resources": [],
-            "collapsed": True,  # Text block starts collapsed
-            "indent_level": 0,
-        },
-    ]
-
-    # Generate initial outline
-    outline, json_str = generate_outline_json_from_state("", "", [], initial_blocks)
-
-    # Return empty title, description, empty resources, initial blocks
-    return (
-        gr.update(value=""),  # title - use gr.update to ensure proper clearing
-        gr.update(value=""),  # description - use gr.update to ensure proper clearing
-        [],  # resources
-        initial_blocks,  # blocks
-        outline,  # outline
-        json_str,  # ui_json_outline
-        None,  # import_file
-        new_session_id,  # session_id
-        gr.update(
-            value="<em>Click '▷ Generate' to see the generated content here.</em><br><br><br>", visible=True
-        ),  # generated_content_html
-        gr.update(visible=False),  # generated_content
-        gr.update(interactive=False),  # save_doc_btn
-    )
 
 
 def convert_block_type(blocks, block_id, to_type, title, description, resources):
@@ -606,7 +1180,7 @@ def generate_document_json(title, description, resources, blocks, save_inline=Fa
     return json.dumps(doc_json, indent=2)
 
 
-def generate_outline_json_from_state(app_state): #title, description, resources, blocks
+def generate_outline_json_from_state(app_state): 
     """Regenerate the outline whenever any component changes."""
 
     title = app_state["generate_tab"]["document_title"]
@@ -885,7 +1459,7 @@ def replace_resource_file(
     return resources, blocks, gr.update(value=resources_html), outline, json_str, "Resource replaced successfully!"
 
 
-def load_example(example_id, session_id=None):
+def load_example(app_state, example_id):
     """Load a predefined example based on the example ID."""
     if not example_id:
         return (
@@ -927,11 +1501,11 @@ def load_example(example_id, session_id=None):
         )
 
     # Use the import_outline function to load the example
-    result = import_outline(str(file_path), session_id)
-    # import_outline now returns 11 values matching import_file.change outputs
-    # import_outline returns: title, desc, resources, blocks, outline, json, import_file, session_id, gen_html, gen_content, save_btn
+    result = import_template(app_state, str(file_path))
+    # import_outline now returns 11 values matching ui_import_template.change outputs
+    # import_outline returns: title, desc, resources, blocks, outline, json, ui_import_template, session_id, gen_html, gen_content, save_btn
     # load_example needs: title, desc, resources, blocks, outline, json, session_id, gen_html, gen_content, save_btn
-    # We need to skip import_file (at index 6) from the result
+    # We need to skip ui_import_template (at index 6) from the result
     return (
         result[0],  # title
         result[1],  # description
@@ -939,321 +1513,12 @@ def load_example(example_id, session_id=None):
         result[3],  # blocks
         result[4],  # outline
         result[5],  # json_str
-        result[7],  # session_id (skip import_file at 6)
+        result[7],  # session_id (skip ui_import_template at 6)
         result[8],  # generated_content_html
         result[9],  # generated_content
         result[10],  # save_doc_btn
     )
 
-
-def import_outline(file_path, session_id=None):
-    """Import an outline from a .docpack file and convert to blocks format."""
-    if not file_path:
-        # Return 11 values matching import_file.change outputs
-        return (
-            gr.update(),  # title
-            gr.update(),  # description
-            gr.update(),  # resources
-            gr.update(),  # blocks
-            gr.update(),  # outline
-            gr.update(),  # ui_json_outline
-            None,  # import_file
-            session_id,  # session_state
-            gr.update(),  # generated_content_html
-            gr.update(),  # generated_content
-            gr.update(),  # save_doc_btn
-        )
-
-    # Get or create session ID
-    if not session_id:
-        session_id = str(uuid.uuid4())
-
-    # Define allowed text file extensions
-    ALLOWED_EXTENSIONS = {
-        ".txt",
-        ".md",
-        ".py",
-        ".c",
-        ".cpp",
-        ".h",
-        ".java",
-        ".js",
-        ".ts",
-        ".jsx",
-        ".tsx",
-        ".json",
-        ".xml",
-        ".yaml",
-        ".yml",
-        ".toml",
-        ".ini",
-        ".cfg",
-        ".conf",
-        ".sh",
-        ".bash",
-        ".zsh",
-        ".fish",
-        ".ps1",
-        ".bat",
-        ".cmd",
-        ".rs",
-        ".go",
-        ".rb",
-        ".php",
-        ".pl",
-        ".lua",
-        ".r",
-        ".m",
-        ".swift",
-        ".kt",
-        ".scala",
-        ".clj",
-        ".ex",
-        ".exs",
-        ".elm",
-        ".fs",
-        ".ml",
-        ".sql",
-        ".html",
-        ".htm",
-        ".css",
-        ".scss",
-        ".sass",
-        ".less",
-        ".vue",
-        ".svelte",
-        ".astro",
-        ".tex",
-        ".rst",
-        ".adoc",
-        ".org",
-        ".csv",
-    }
-
-    try:
-        file_path = Path(file_path)
-
-        # Only accept .docpack files
-        if file_path.suffix.lower() != ".docpack":
-            error_msg = "Import failed: Only .docpack files are supported. Please use a .docpack file created by the Save function."
-            return (
-                gr.update(),  # title
-                gr.update(),  # description
-                gr.update(),  # resources
-                gr.update(),  # blocks
-                gr.update(),  # outline
-                json.dumps({"error": error_msg}, indent=2),  # ui_json_outline
-                None,  # import_file
-                session_id,  # session_id
-                gr.update(),  # generated_content_html
-                gr.update(),  # generated_content
-                gr.update(),  # save_doc_btn
-            )
-
-        # Use session directory for extraction
-        session_dir = session_manager.get_session_dir(session_id)
-
-        # Extract the docpack to session directory
-        json_data, extracted_files = DocpackHandler.extract_package(file_path, session_dir)
-
-        # Extract title and description
-        title = json_data.get("title", "")
-        description = json_data.get("general_instruction", "")
-
-        # Extract and validate resources
-        resources = []
-        invalid_resources = []
-        inline_resources = {}  # Store inline resources by key
-
-        for res_data in json_data.get("resources", []):
-            resource_path = res_data.get("path", "")
-            resource_name = Path(resource_path).name
-            file_ext = Path(resource_name).suffix.lower()
-
-            # Check if this is an inline resource
-            if res_data.get("is_inline", False) or res_data.get("key", "").startswith("inline_resource_"):
-                # Store inline resource content for later use
-                inline_resources[res_data["key"]] = resource_path
-                continue  # Don't add to regular resources
-
-            # Check if file extension is allowed
-            if file_ext not in ALLOWED_EXTENSIONS:
-                invalid_resources.append(f"{resource_name} ({file_ext})")
-                continue
-
-            resources.append({
-                "key": res_data.get("key", ""),  # Preserve original key
-                "path": resource_path,
-                "name": resource_name,
-                "title": res_data.get("title", resource_name),  # Preserve title or default to filename
-                "type": "text",  # All are text files now
-                "description": res_data.get("description", ""),
-            })
-
-        # If there are invalid resources, show error and return
-        if invalid_resources:
-            error_msg = "Import failed: The following resources have unsupported file types:\n" + "\n".join(
-                invalid_resources
-            )
-            error_msg += f"\n\nOnly text files are allowed: {', '.join(sorted(ALLOWED_EXTENSIONS))}"
-            # Return error in the JSON output field
-            return (
-                gr.update(),  # title
-                gr.update(),  # description
-                gr.update(),  # resources
-                gr.update(),  # blocks
-                gr.update(),  # outline
-                json.dumps({"error": error_msg}, indent=2),  # ui_json_outline
-                None,  # import_file
-                session_id,  # session_id
-                gr.update(),  # generated_content_html
-                gr.update(),  # generated_content
-                gr.update(),  # save_doc_btn
-            )
-
-        # Convert sections to blocks
-        blocks = []
-
-        def sections_to_blocks(sections, parent_indent=-1):
-            """Recursively convert sections to blocks."""
-            for section in sections:
-                # Create a block from the section
-                block = {
-                    "id": str(uuid.uuid4()),
-                    "heading": section.get("title", ""),
-                    "content": "",
-                    "resources": [],
-                    "collapsed": True,
-                    "indent_level": parent_indent + 1,
-                }
-
-                # Determine block type and content
-                if "prompt" in section:
-                    # AI block
-                    block["type"] = "ai"
-                    block["content"] = section.get("prompt", "")
-                    block["ai_content"] = section.get("prompt", "")
-
-                    # Handle refs
-                    refs = section.get("refs", [])
-                    if refs and resources:
-                        # Map refs back to resources by matching keys
-                        for ref in refs:
-                            # Find resource with matching key
-                            for resource in resources:
-                                if resource.get("key") == ref:
-                                    block["resources"].append(resource)
-                                    break
-
-                elif "resource_key" in section:
-                    # Text block
-                    block["type"] = "text"
-                    block["text_content"] = ""
-
-                    # Handle resource_key
-                    resource_key = section.get("resource_key", "")
-
-                    # Check if this is an inline resource
-                    if resource_key in inline_resources:
-                        # Load content from inline resource file
-                        try:
-                            inline_path = inline_resources[resource_key]
-                            # If it's a relative path in a save directory, construct full path
-                            if not Path(inline_path).is_absolute():
-                                # Look for the file in the same directory as the imported JSON
-                                import_dir = Path(file_path).parent
-                                inline_path = import_dir / inline_path
-
-                            with open(inline_path, "r", encoding="utf-8") as f:
-                                block["content"] = f.read()
-                                block["text_content"] = block["content"]
-                                block["edited"] = True  # Mark as edited
-                        except Exception as e:
-                            print(f"Error loading inline resource: {e}")
-                    elif resource_key and resources:
-                        # Regular resource reference - find by key
-                        for resource in resources:
-                            if resource.get("key") == resource_key:
-                                block["resources"].append(resource)
-                                # Auto-load content from the resource file
-                                try:
-                                    with open(resource["path"], "r", encoding="utf-8") as f:
-                                        block["content"] = f.read()
-                                        block["text_content"] = block["content"]
-                                except Exception as e:
-                                    print(f"Error loading resource content: {e}")
-                                break
-                else:
-                    # Default to AI block if no specific type indicators
-                    block["type"] = "ai"
-
-                blocks.append(block)
-
-                # Process nested sections
-                if "sections" in section:
-                    sections_to_blocks(section["sections"], block["indent_level"])
-
-        # Convert top-level sections
-        sections_to_blocks(json_data.get("sections", []))
-
-        # If no blocks were created, add default ones
-        if not blocks:
-            blocks = [
-                {
-                    "id": str(uuid.uuid4()),
-                    "type": "ai",
-                    "heading": "",
-                    "content": "",
-                    "resources": [],
-                    "collapsed": False,
-                    "indent_level": 0,
-                }
-            ]
-        else:
-            # Ensure the first block is expanded
-            if blocks and len(blocks) > 0:
-                blocks[0]["collapsed"] = False
-
-        # Regenerate outline and JSON
-        outline, json_str = generate_outline_json_from_state(title, description, resources, blocks)
-
-        # Generate resources HTML using the proper function
-        generate_resource_html(resources)
-
-        # Return values matching what import_file.change expects
-        return (
-            title,
-            description,
-            resources,
-            blocks,
-            outline,
-            json_str,
-            None,  # import_file (clear it)
-            session_id,
-            gr.update(
-                value="<em>Click '▷ Generate' to see the generated content here.</em><br><br><br>", visible=True
-            ),  # generated_content_html
-            gr.update(visible=False),  # generated_content
-            gr.update(interactive=False),  # save_doc_btn
-        )
-
-    except Exception as e:
-        error_msg = f"Error importing file: {str(e)}"
-        print(error_msg)
-        # Return current values on error matching expected outputs
-        return (
-            gr.update(),  # title
-            gr.update(),  # description
-            gr.update(),  # resources
-            gr.update(),  # blocks
-            gr.update(),  # outline
-            gr.update(),  # ui_json_outline
-            None,  # import_file
-            session_id,  # session_state
-            gr.update(),  # generated_content_html
-            gr.update(),  # generated_content
-            gr.update(),  # save_doc_btn
-        )
 
 
 def save_outline(title, outline_json, blocks):
@@ -1401,11 +1666,13 @@ def render_block_resources(block_resources, block_type, block_id):
     return html
 
 
-def render_blocks(blocks):
+def render_blocks(app_state):
     """Render blocks as HTML."""
     import time
 
     timestamp = int(time.time() * 1000)
+
+    blocks = app_state["blocks"]
 
     print(f"render_blocks called with {len(blocks) if blocks else 0} blocks at {timestamp}")
     if blocks:
@@ -1548,296 +1815,6 @@ def render_blocks(blocks):
     return html
 
 
-def handle_start_file_upload(files, current_resources):
-    """Handle file uploads on the Start tab."""
-    if not files:
-        return current_resources, None, gr.update(visible=False)
-
-    # Add new files to resources
-    new_resources = current_resources.copy() if current_resources else []
-    warnings = []
-
-    for file_path in files:
-        if file_path:
-            file_name = os.path.basename(file_path)
-            file_size = os.path.getsize(file_path)
-
-            # Check if it's a docx file and if it's protected
-            if file_path.lower().endswith(".docx"):
-                is_protected, error_msg = check_docx_protected(file_path)
-                if is_protected:
-                    warnings.append(error_msg)
-                    continue  # Skip adding this file to resources
-
-            # Format file size
-            if file_size < 1024:
-                size_str = f"{file_size} B"
-            elif file_size < 1024 * 1024:
-                size_str = f"{file_size / 1024:.1f} KB"
-            else:
-                size_str = f"{file_size / (1024 * 1024):.1f} MB"
-
-            # Check if already in resources (by name)
-            if not any(r["name"] == file_name for r in new_resources):
-                new_resources.append({
-                    "path": file_path,
-                    "name": file_name,
-                    "size": size_str,
-                })
-
-    # Create warning message if there were any protected files
-    if warnings:
-        import random
-
-        warning_id = f"warning_{random.randint(1000, 9999)}"
-        warning_html = f"""
-        <div id="{warning_id}" style='position: relative; color: #dc2626; background: #fee2e2; padding: 8px 30px 8px 12px; border-radius: 4px; margin-top: 8px; font-size: 14px;'>
-            <button onclick="document.getElementById('{warning_id}').style.display='none'" 
-                    style='position: absolute; top: 4px; right: 5px; background: none; border: none; color: #dc2626; font-size: 18px; cursor: pointer; padding: 0 5px; opacity: 0.6;' 
-                    onmouseover="this.style.opacity='1'" 
-                    onmouseout="this.style.opacity='0.6'"
-                    title='Close'>×</button>
-            {"<br>".join(warnings)}
-        </div>
-        """
-        return new_resources, None, gr.update(value=warning_html, visible=True)
-
-    return new_resources, None, gr.update(visible=False)
-
-
-def handle_start_draft_click_wrapper(prompt, resources, session_id=None):
-    """Wrapper to handle the Draft button click synchronously."""
-    print("DEBUG: handle_start_draft_click_wrapper called")
-    print(f"DEBUG: prompt type: {type(prompt)}, value: '{prompt}'")
-    print(f"DEBUG: resources type: {type(resources)}, value: {resources}")
-    print(f"DEBUG: session_id: {session_id}")
-
-    # Run the async function synchronously
-
-    return asyncio.run(handle_start_draft_click(prompt, resources, session_id))
-
-
-async def handle_start_draft_click(prompt, resources, session_id=None):
-    """Handle the Draft button click on the Start tab."""
-    print("DEBUG: In async handle_start_draft_click")
-    print(f"DEBUG: prompt value in async: '{prompt}'")
-
-    if not prompt or not prompt.strip():
-        error_msg = "Please enter a description of what you'd like to create."
-        print(f"DEBUG: No prompt provided, returning error: {error_msg}")
-        # Return 15 values to match outputs (added loading message and button)
-        return (
-            gr.update(),  # ui_doc_title
-            gr.update(),  # ui_doc_description
-            gr.update(),  # resources_state
-            gr.update(),  # blocks_state
-            gr.update(),  # outline_state
-            gr.update(),  # ui_json_outline
-            session_id,  # session_state
-            gr.update(),  # generated_content_html
-            gr.update(),  # generated_content
-            gr.update(),  # save_doc_btn
-            gr.update(),  # switch_tab_trigger
-            gr.update(
-                value=f"""<div id="prompt_error" style="position: relative; color: #dc2626; padding: 8px 30px 8px 12px; background: #fee2e2; border-radius: 4px; margin-top: 8px; font-size: 14px;">
-                    <button onclick="document.getElementById('prompt_error').style.display='none'" 
-                            style="position: absolute; top: 4px; right: 5px; background: none; border: none; color: #dc2626; font-size: 18px; cursor: pointer; padding: 0 5px; opacity: 0.6;" 
-                            onmouseover="this.style.opacity='1'" 
-                            onmouseout="this.style.opacity='0.6'"
-                            title="Close">×</button>
-                    {error_msg}
-                </div>""",
-                visible=True,
-            ),  # start_tab_error_message
-            gr.update(),  # start_tab_prompt_input - no change
-            gr.update(interactive=True),  # get_started_btn
-        )
-
-    try:
-        # Get or create session ID
-        if not session_id:
-            session_id = str(uuid.uuid4())
-            print(f"DEBUG: Created new session_id: {session_id}")
-
-        print(f"DEBUG: Calling generate_docpack_from_prompt with {len(resources) if resources else 0} resources")
-
-        # Call the docpack generation function
-        docpack_path, outline_json = await generate_docpack_from_prompt(
-            prompt=prompt.strip(), resources=resources or [], session_id=session_id, dev_mode=IS_DEV_MODE
-        )
-
-        print(f"DEBUG: Received docpack_path: {docpack_path}")
-        print(f"DEBUG: Received outline_json length: {len(outline_json) if outline_json else 0}")
-
-        # Parse the outline JSON
-        if outline_json:
-            outline_data = json.loads(outline_json)
-            print(f"DEBUG: Successfully parsed outline with title: {outline_data.get('title', 'No title')}")
-
-            # Process the outline data similar to import_outline function
-            title = outline_data.get("title", "Untitled Document")
-            description = outline_data.get("general_instruction", "")
-
-            # Process resources
-            resources = []
-            session_files_dir = session_manager.get_files_dir(session_id)
-
-            for res_data in outline_data.get("resources", []):
-                resource_path = res_data.get("path", "")
-                if resource_path:
-                    # Copy resource to session files directory if it exists
-                    source_path = Path(resource_path)
-                    if source_path.exists():
-                        target_path = session_files_dir / source_path.name
-                        if source_path != target_path:
-                            import shutil
-
-                            shutil.copy2(source_path, target_path)
-
-                        resources.append({
-                            "key": res_data.get("key", ""),
-                            "name": source_path.name,
-                            "path": str(target_path),
-                            "description": res_data.get("description", ""),
-                        })
-
-            # Convert sections to blocks
-            blocks = []
-
-            def sections_to_blocks(sections, parent_indent=-1):
-                """Recursively convert sections to blocks."""
-                for section in sections:
-                    block = {
-                        "id": str(uuid.uuid4()),
-                        "heading": section.get("title", ""),
-                        "content": "",
-                        "resources": [],
-                        "collapsed": True,
-                        "indent_level": parent_indent + 1,
-                    }
-
-                    if "prompt" in section:
-                        # AI block
-                        block["type"] = "ai"
-                        block["content"] = section.get("prompt", "")
-                        block["ai_content"] = section.get("prompt", "")
-
-                        # Handle refs
-                        refs = section.get("refs", [])
-                        if refs and resources:
-                            for ref in refs:
-                                for resource in resources:
-                                    if resource.get("key") == ref:
-                                        block["resources"].append(resource)
-                                        break
-                    else:
-                        # Text block
-                        block["type"] = "text"
-                        block["content"] = ""
-
-                    blocks.append(block)
-
-                    # Process nested sections
-                    if "sections" in section and section["sections"]:
-                        sections_to_blocks(section["sections"], parent_indent=block["indent_level"])
-
-            # Convert top-level sections
-            sections_to_blocks(outline_data.get("sections", []))
-
-            # Ensure the first block is expanded (consistent with import behavior)
-            if blocks and len(blocks) > 0:
-                blocks[0]["collapsed"] = False
-
-            # Generate the JSON for the outline
-            outline = json_to_outline(outline_data)
-            json_str = json.dumps(outline_data, indent=2)
-
-            # Return all the values needed to populate the Draft+Generate tab
-            # This matches what import_outline returns
-            # DO NOT switch to the draft tab yet - that will happen in the next step
-            return (
-                title,  # ui_doc_title
-                description,  # ui_doc_description
-                resources,  # resources_state
-                blocks,  # blocks_state
-                outline,  # outline_state
-                json_str,  # ui_json_outline
-                session_id,  # session_state
-                gr.update(visible=False),  # generated_content_html
-                gr.update(visible=False),  # generated_content
-                gr.update(interactive=False),  # save_doc_btn
-                gr.update(visible=True, value=f"SWITCH_TO_DRAFT_TAB_{int(time.time() * 1000)}"),  # switch_tab_trigger
-                gr.update(visible=False),  # start_tab_error_message - hide on success
-                gr.update(
-                    lines=4, max_lines=10, interactive=True, elem_classes="start-prompt-input"
-                ),  # start_tab_prompt_input - preserve value but reset display properties
-                gr.update(interactive=True),  # get_started_btn
-            )
-        else:
-            error_msg = "Failed to generate outline. Please try again."
-            print(f"DEBUG: No outline generated, returning error: {error_msg}")
-            # Return 15 values to match outputs
-            return (
-                gr.update(),  # ui_doc_title
-                gr.update(),  # ui_doc_description
-                gr.update(),  # resources_state
-                gr.update(),  # blocks_state
-                gr.update(),  # outline_state
-                gr.update(),  # ui_json_outline
-                session_id,  # session_state
-                gr.update(),  # generated_content_html
-                gr.update(),  # generated_content
-                gr.update(),  # save_doc_btn
-                gr.update(),  # switch_tab_trigger
-                gr.update(
-                    value=f"""<div id="outline_error" style="position: relative; color: #dc2626; padding: 8px 30px 8px 12px; background: #fee2e2; border-radius: 4px; margin-top: 8px; font-size: 14px;">
-                        <button onclick="document.getElementById('outline_error').style.display='none'" 
-                                style="position: absolute; top: 4px; right: 5px; background: none; border: none; color: #dc2626; font-size: 18px; cursor: pointer; padding: 0 5px; opacity: 0.6;" 
-                                onmouseover="this.style.opacity='1'" 
-                                onmouseout="this.style.opacity='0.6'"
-                                title="Close">×</button>
-                        {error_msg}
-                    </div>""",
-                    visible=True,
-                ),  # start_tab_error_message
-                gr.update(lines=4, max_lines=10),  # start_tab_prompt_input - preserve lines
-                gr.update(interactive=True),  # get_started_btn
-            )
-
-    except Exception as e:
-        import traceback
-
-        error_msg = f"Error: {str(e)}"
-        print(f"ERROR in handle_start_draft_click: {error_msg}")
-        print(f"Traceback: {traceback.format_exc()}")
-        # Return 15 values to match outputs
-        return (
-            gr.update(),  # ui_doc_title
-            gr.update(),  # ui_doc_description
-            gr.update(),  # resources_state
-            gr.update(),  # blocks_state
-            gr.update(),  # outline_state
-            gr.update(),  # ui_json_outline
-            session_id,  # session_state
-            gr.update(),  # generated_content_html
-            gr.update(),  # generated_content
-            gr.update(),  # save_doc_btn
-            gr.update(),  # switch_tab_trigger
-            gr.update(
-                value=f"""<div id="exception_error" style="position: relative; color: #dc2626; padding: 8px 30px 8px 12px; background: #fee2e2; border-radius: 4px; margin-top: 8px; font-size: 14px;">
-                    <button onclick="document.getElementById('exception_error').style.display='none'" 
-                            style="position: absolute; top: 4px; right: 5px; background: none; border: none; color: #dc2626; font-size: 18px; cursor: pointer; padding: 0 5px; opacity: 0.6;" 
-                            onmouseover="this.style.opacity='1'" 
-                            onmouseout="this.style.opacity='0.6'"
-                            title="Close">×</button>
-                    {error_msg}
-                </div>""",
-                visible=True,
-            ),  # start_tab_error_message
-            gr.update(),  # start_tab_prompt_input
-            gr.update(interactive=True),  # get_started_btn
-        )
-
 
 def handle_file_upload(files, current_resources, title, description, blocks, session_id=None):
     """Handle uploaded files and return HTML display of file names."""
@@ -1971,7 +1948,7 @@ def update_reference_description(app_state, reference_path, new_description):
 
 
 def delete_reference(app_state, reference_path):
-    """Delete resource via Gradio button and render blocks."""
+    """Delete reference file via Gradio button and render blocks."""
     # Update app state and prep html update
     app_state["generate_tab"]["references"] = [res for res in app_state["generate_tab"]["references"] if res.get("path") != reference_path]
     for block in app_state["generate_tab"]["blocks"]:
@@ -1989,11 +1966,8 @@ def delete_reference(app_state, reference_path):
 
     return app_state, json_str, blocks_html
 
-def replace_resource_file_gradio(resources, old_resource_path, new_file, title, description, blocks, session_id=None):
-    """Replace a resource file from Gradio component."""
-    if not new_file:
-        return resources, None, "{}", None, gr.update(visible=False)
-
+def replace_reference(app_state, old_reference_path, json_outline, new_file):
+    """Replace a reference file from Gradio component."""
     try:
         # Check if the new file is a protected docx
         if new_file.name.lower().endswith(".docx"):
@@ -2012,22 +1986,22 @@ def replace_resource_file_gradio(resources, old_resource_path, new_file, title, 
                     <strong>⚠️ Cannot Replace:</strong><br>{error_msg}
                 </div>
                 """
-                return resources, None, "{}", None, gr.update(value=warning_html, visible=True)
+                return app_state, json_outline, gr.update(value=warning_html, visible=True)
 
         # Get or create session
-        if not session_id:
-            session_id = str(uuid.uuid4())
+        if not app_state["session_id"]:
+            app_state["session_id"] = str(uuid.uuid4())
 
-        session_dir = session_manager.get_session_dir(session_id)
+        session_dir = session_manager.get_session_dir(app_state["session_id"])
 
         # Copy new file to session directory
         new_file_path = Path(new_file.name)
-        new_filename = new_file_path.name
-        dest_path = session_dir / new_filename
+        new_file_name = new_file_path.name
+        dest_path = session_dir / new_file_name
 
         # If the new file has the same name as an existing file, add a suffix
         counter = 1
-        while dest_path.exists() and str(dest_path) != old_resource_path:
+        while dest_path.exists() and str(dest_path) != old_reference_path:
             stem = new_file_path.stem
             suffix = new_file_path.suffix
             new_filename = f"{stem}_{counter}{suffix}"
@@ -2039,29 +2013,29 @@ def replace_resource_file_gradio(resources, old_resource_path, new_file, title, 
 
         shutil.copy2(new_file.name, dest_path)
 
-        # Update resources list
-        for i, resource in enumerate(resources):
-            if resource["path"] == old_resource_path:
+        # Update app_state references
+        for i, reference in enumerate(app_state["generate_tab"]["references"]):
+            if reference["path"] == old_reference_path:
                 # Keep the same title and description
-                old_title = resource.get("title", "")
-                old_description = resource.get("description", "")
+                old_filename = reference["filename"]
+                old_description = reference["description"]
 
-                # Update the resource
-                resources[i] = {
-                    "name": new_filename,
+                # Update the reference
+                app_state["generate_tab"]["references"][i] = {
+                    "name": new_file_name,
                     "path": str(dest_path),
-                    "title": old_title if old_title else new_filename,
+                    "filename": old_filename if old_filename else new_file_name,
                     "description": old_description,
                 }
 
                 # Update in all blocks
-                for block in blocks:
-                    if "resources" in block:
-                        for j, res in enumerate(block["resources"]):
-                            if res.get("path") == old_resource_path:
-                                block["resources"][j] = {
+                for block in app_state["generate_tab"]["blocks"]:
+                    if "attached_references" in block:
+                        for j, ref in enumerate(block["attached_references"]):
+                            if ref["path"] == old_reference_path:
+                                block["attached_references"][j] = {
                                     "path": str(dest_path),
-                                    "title": old_title if old_title else new_filename,
+                                    "filename": old_filename if old_filename else new_file_name,
                                     "description": old_description,
                                 }
 
@@ -2077,14 +2051,13 @@ def replace_resource_file_gradio(resources, old_resource_path, new_file, title, 
                                                 block["content"] = f.read()
                                     except Exception as e:
                                         print(f"Error loading new file content: {e}")
-
                 break
 
         # Regenerate outline
-        outline, json_str = generate_outline_json_from_state(title, description, resources, blocks)
+        json_str = generate_outline_json_from_state(app_state)
 
         # Return with cleared file input and no warning
-        return resources, outline, json_str, None, gr.update(visible=False)
+        return app_state, json_str, gr.update(visible=False)
 
     except Exception as e:
         print(f"Error replacing resource file: {e}")
@@ -2117,31 +2090,7 @@ def replace_resource_file_gradio(resources, old_resource_path, new_file, title, 
         """
         return resources, None, "{}", None, gr.update(value=warning_html, visible=True)
 
-def render_start_tab_attached_references(resources):
-    print(
-        f"DEBUG render_start_tab_attached_references called with {len(resources) if resources else 0} resources"
-    )
-    if resources and len(resources) > 0:
-        # Create a flex container for resources
-        html_content = '<div class="start-resources-list">'
-        for idx, resource in enumerate(resources):
-            print(f"  Rendering resource: {resource['name']}")
-            html_content += f"""
-                <div class="dropped-resource">
-                    <span>{resource["name"]}</span>
-                    <button class="remove-resource" onclick="event.stopPropagation(); removeStartResourceByIndex({idx}, '{resource["name"]}'); return false;">🗑</button>
-                </div>
-            """
-        html_content += "</div>"
-        return html_content
-    else:
-        # Return empty div when no resources
-        return '<div class="start-resources-list"></div>'
 
-def handle_add_ai_block_top(blocks, title, description, resources):
-    blocks = add_ai_block(blocks, None)
-    outline, json_str = generate_outline_json_from_state(title, description, resources, blocks)
-    return blocks, outline, json_str
 
 def update_collapse_button_state(blocks):
     """Update the collapse/expand button to reflect current block states."""
@@ -2155,9 +2104,11 @@ def update_collapse_button_state(blocks):
         # All sections closed - show down pointing (rotated 90deg)
         return gr.update(value="»", elem_classes="workspace-collapse-btn")
 
-def toggle_all_blocks(blocks):
+def toggle_all_blocks(app_state):
     """Toggle between expand all and collapse all based on current state.
     If ANY block is expanded, collapse all. If ALL are collapsed, expand all."""
+
+    blocks = app_state["generate_tab"]["blocks"]
     # Check if any block is expanded (collapsed = False)
     any_expanded = any(not block.get("collapsed", False) for block in blocks if block)
 
@@ -2178,7 +2129,7 @@ def toggle_all_blocks(blocks):
         elem_classes = "workspace-collapse-btn collapse-mode"
 
     # Always use double angle quote, rotation is handled by CSS
-    return blocks, gr.update(value="»", elem_classes=elem_classes)
+    return app_state, gr.update(value="»", elem_classes=elem_classes)
 
 def delete_and_render(resources, resource_path, title, description, blocks):
     """Delete resource and return both the state updates and rendered HTML."""
@@ -2200,74 +2151,8 @@ def delete_and_render(resources, resource_path, title, description, blocks):
 
     return new_resources, updated_blocks, outline, json_str, blocks_html
 
-def reset_document():
-    """Reset document to initial state with new session."""
-    # Create fresh initial blocks with new IDs
-    new_blocks = [
-        {
-            "id": str(uuid.uuid4()),
-            "type": "ai",
-            "heading": "",
-            "content": "",
-            "resources": [],
-            "collapsed": False,
-            "indent_level": 0,
-        },
-        {
-            "id": str(uuid.uuid4()),
-            "type": "text",
-            "heading": "",
-            "content": "",
-            "resources": [],
-            "collapsed": True,
-            "indent_level": 0,
-        },
-    ]
 
-    # Generate initial outline
-    initial_outline, initial_json = generate_outline_json_from_state("", "", [], new_blocks)
 
-    # New session ID
-    new_session_id = str(uuid.uuid4())
-
-    # Return updates for all relevant components
-    return (
-        "",  # ui_doc_title
-        "",  # ui_doc_description
-        [],  # resources_state
-        new_blocks,  # blocks_state
-        initial_outline,  # outline_state
-        initial_json,  # ui_json_outline
-        new_session_id,  # session_state
-        gr.update(value="", visible=False),  # generated_content_html
-        gr.update(value="", visible=False),  # generated_content
-        gr.update(interactive=False),  # save_doc_btn
-    )
-
-def check_prompt_before_submit(prompt):
-    """Check if prompt exists and show error if not."""
-    if not prompt or not prompt.strip():
-        # Show error message, hide loading, enable button
-        return (
-            gr.update(
-                value="""<div id="prompt_error" style="position: relative; color: #dc2626; padding: 8px 30px 8px 12px; background: #fee2e2; border-radius: 4px; margin-top: 8px; font-size: 14px;">
-                    <button onclick="document.getElementById('prompt_error').style.display='none'" 
-                            style="position: absolute; top: 4px; right: 5px; background: none; border: none; color: #dc2626; font-size: 18px; cursor: pointer; padding: 0 5px; opacity: 0.6;" 
-                            onmouseover="this.style.opacity='1'" 
-                            onmouseout="this.style.opacity='0.6'"
-                            title="Close">×</button>
-                    Please enter a description of what you'd like to create.
-                </div>""",
-                visible=True,
-            ),
-            gr.update(interactive=True),  # Enable button
-        )
-    else:
-        # Hide error message, show loading, disable button
-        return (
-            gr.update(visible=False),
-            gr.update(interactive=True),  # Keep button enabled
-        )
 
 def extract_resources_from_docpack(docpack_path, session_id=None):
     """Extract resources from a docpack file."""
@@ -2402,7 +2287,7 @@ def extract_resources_from_docpack(docpack_path, session_id=None):
                             else:
                                 size_str = f"{file_size / (1024 * 1024):.1f} MB"
 
-                            # Use the same format as handle_start_file_upload
+                            # Use the same format as handle_ui_start_tab_reference_upload
                             resources.append({
                                 "path": target_path,
                                 "name": resource_filename,
@@ -2417,67 +2302,6 @@ def extract_resources_from_docpack(docpack_path, session_id=None):
         print(f"  Resource: {r}")
     return resources
 
-def load_code_readme_example(session_id):
-    """Load the code README example prompt and resources."""
-    # Get or create session
-    if not session_id:
-        session_id = str(uuid.uuid4())
-
-    prompt = "Generate a comprehensive production-ready README for the target codebase. Include key features, installation instructions, usage examples, API documentation, an architecture overview, and contribution guidelines. IMPORTANT to use ONLY the facts available in the referenced documents (code, configs, docs, tests, etc.). Keep prose short, use bullet lists when helpful, and prefer plan language over marketing fluff.  Assumer the audience is a developer seeing the project for the first time."
-
-    # Extract resources from the README docpack
-    examples_dir = Path(__file__).parent.parent / "examples"
-    docpack_path = examples_dir / "readme-generation" / "readme.docpack"
-    resources = extract_resources_from_docpack(docpack_path, session_id)
-
-    print(f"DEBUG: Loaded {len(resources)} resources for README example")
-    for r in resources:
-        print(f"  - {r['name']} ({r['size']})")
-
-    # Render the resources HTML
-    resources_html = render_start_tab_attached_references(resources)
-
-    return prompt, resources, session_id, resources_html
-
-def load_product_launch_example(session_id):
-    """Load the product launch example prompt and resources."""
-    # Get or create session
-    if not session_id:
-        session_id = str(uuid.uuid4())
-
-    prompt = "Create a comprehensive product launch documentation package for a new B2B SaaS analytics product.  Include the value proposition, implementation details and customer benefits.  There should be a product over section, one on technical architecture, an implementation guide, pricing and packaging, and go-to market strategy.  Other areas to consider include an announcement blog post, press release, internal team briefing, and customer FAQ.  Be sure to use clear, professional language appropriate for both technical and business stakeholders."
-
-    # Extract resources from the product launch docpack
-    examples_dir = Path(__file__).parent.parent / "examples"
-    docpack_path = examples_dir / "launch-documentation" / "launch-documentation.docpack"
-    resources = extract_resources_from_docpack(docpack_path, session_id)
-
-    # Render the resources HTML
-    resources_html = render_start_tab_attached_references(resources)
-
-    return prompt, resources, session_id, resources_html
-
-def load_performance_review_example(session_id):
-    """Load the performance review example prompt and resources."""
-    # Get or create session
-    if not session_id:
-        session_id = str(uuid.uuid4())
-
-    prompt = "Generate an annual performance review for an employee. It will be used by both the manager and the employee to discuss the employee's progress.  Include key achievements, areas for growth, training and development and next years goals.  Make sure there is an employee overview as well.  Make it constructive and motivating, but also concise.  Folks are busy."
-
-    # Extract resources from the performance review docpack
-    examples_dir = Path(__file__).parent.parent / "examples"
-    docpack_path = (
-        examples_dir
-        / "scenario-4-annual-performance-review"
-        / "Annual Employee Performance Review_20250709_153352.docpack"
-    )
-    resources = extract_resources_from_docpack(docpack_path, session_id)
-
-    # Render the resources HTML
-    resources_html = render_start_tab_attached_references(resources)
-
-    return prompt, resources, session_id, resources_html
 
 def remove_start_resource(resources, index_str, name):
     """Remove a resource from the Start tab by index."""
@@ -2519,7 +2343,7 @@ def remove_start_resource(resources, index_str, name):
 
 def handle_add_after(blocks, block_id, block_type, title, description, resources):
     if block_type == "ai":
-        blocks = add_ai_block(blocks, block_id)
+        blocks = add_section(blocks, block_id)
     else:
         blocks = add_text_block(blocks, block_id)
 
@@ -2601,13 +2425,6 @@ def handle_resource_replacement(resources, old_path, new_file, ui_doc_title, ui_
     # Return only the values that match the outputs list
     return updated_resources, updated_blocks, outline, json_str, success_msg
 
-def handle_start_file_upload_with_render(files, current_resources):
-    """Handle file uploads and render the resources."""
-    new_resources, clear_upload, warning_update = handle_start_file_upload(files, current_resources)
-    resources_html = render_start_tab_attached_references(new_resources)
-    return new_resources, clear_upload, resources_html, warning_update
-
-
 
 def create_app():
     """Create and return the Document Builder Gradio app."""
@@ -2666,11 +2483,14 @@ def create_app():
         #references[i] = {
         #            "name": new_filename,
         #            "path": str(dest_path),
-        #            "title": old_title if old_title else new_filename,
+        #            "filename": old_title if old_title else new_filename,
         #            "description": old_description,
         #        }
         
         # Main app layout
+        # Create a hidden HTML component for tab switching trigger
+        ui_switch_tab_trigger = gr.HTML("", visible=True, elem_id="switch-tab-trigger", elem_classes="hidden-component")
+
         with gr.Tab("Draft", id="start_tab"):
             with gr.Column(elem_classes="start-tab-container"):
                 # Big centered welcome message
@@ -2687,16 +2507,16 @@ def create_app():
                         # Example buttons container - always visible at the top
                         with gr.Column(elem_classes="start-examples-container"):
                             with gr.Row(elem_classes="start-examples-buttons"):
-                                start_tab_example_code_readme_btn = gr.Button(
+                                ui_start_tab_example_code_readme_btn = gr.Button(
                                     "📝 Code README", variant="secondary", size="sm", elem_classes="start-example-btn"
                                 )
-                                start_tab_example_product_launch_btn = gr.Button(
+                                ui_start_tab_example_product_launch_btn = gr.Button(
                                     "🚀 Product Launch",
                                     variant="secondary",
                                     size="sm",
                                     elem_classes="start-example-btn",
                                 )
-                                start_tab_example_performance_review_btn = gr.Button(
+                                ui_start_tab_example_performance_review_btn = gr.Button(
                                     "📈 Performance Review",
                                     variant="secondary",
                                     size="sm",
@@ -2704,7 +2524,7 @@ def create_app():
                                 )
 
                         # User prompt input
-                        start_tab_prompt_input = gr.TextArea(
+                        ui_start_tab_prompt_input = gr.TextArea(
                             placeholder="Describe your structured document here...\n",
                             show_label=False,
                             elem_classes="start-prompt-input",
@@ -2715,14 +2535,14 @@ def create_app():
                         )
 
                         # Error message component (hidden by default)
-                        start_tab_error_message = gr.HTML(value="", visible=False, elem_classes="start-error-message")
+                        ui_start_tab_error_message = gr.HTML(value="", visible=False, elem_classes="start-error-message")
 
                         # Expandable content within the same card
                         with gr.Column(elem_classes="start-expandable-content", elem_id="start-expandable-section"):
                             # Display attached references (above dropzone and button)
                             with gr.Column(elem_classes="start-resources-display-container"):
                                 # Create a placeholder for the attached references display
-                                start_tab_attached_references_display = gr.HTML(
+                                ui_start_tab_attached_references_display = gr.HTML(
                                     value='<div class="start-resources-list"></div>',
                                     elem_classes="start-resources-display",
                                 )
@@ -2733,7 +2553,7 @@ def create_app():
                                 elem_classes="resource-drop-label",
                             )
                             # File upload dropzone
-                            start_file_upload = gr.File(
+                            ui_start_tab_reference_upload = gr.File(
                                 label="Drop files here or click to upload",
                                 file_count="multiple",
                                 file_types=SUPPORTED_FILE_TYPES,
@@ -2743,10 +2563,10 @@ def create_app():
                             )
 
                             # Warning message for protected files
-                            start_upload_warning = gr.HTML(visible=False)
+                            ui_start_tab_upload_warning = gr.HTML(visible=False)
 
                             # Draft button - full width below dropzone
-                            get_started_btn = gr.Button(
+                            ui_start_tab_draft_btn = gr.Button(
                                 "Draft",
                                 variant="primary",
                                 size="sm",
@@ -2903,7 +2723,6 @@ def create_app():
                                 elem_classes="start-process-visual-content",
                             )
 
-        # Second tab - Existing Document Builder content
         with gr.Tab("Update + Generate", id="document_builder_tab"):
 
             # App name and explanation
@@ -2943,7 +2762,7 @@ def create_app():
                                     </div>
                                 """)
                         # New button (for resetting document)
-                        new_doc_btn = gr.Button(
+                        ui_new_template_btn = gr.Button(
                             "New",
                             elem_id="new-builder-btn-id",
                             variant="secondary",
@@ -2957,7 +2776,7 @@ def create_app():
                             size="sm",
                             elem_classes="import-builder-btn",
                         )
-                        save_outline_btn = gr.DownloadButton(
+                        ui_save_template_btn = gr.DownloadButton(
                             "Save",
                             elem_id="save-builder-btn-id",
                             variant="secondary",
@@ -2967,7 +2786,7 @@ def create_app():
                             value=create_docpack_from_current_state,
                         )
 
-                    import_file = gr.File(
+                    ui_import_template = gr.File(
                         label="Import Docpack",
                         file_types=[".docpack"],
                         visible=True,
@@ -3027,8 +2846,7 @@ def create_app():
 
                     # Container for dynamic resource components
                     with gr.Column(elem_classes="resources-display-area"):
-
-                        @gr.render(inputs=app_state["generate_tab"]["resources"])
+                        @gr.render(inputs=app_state["generate_tab"]["references"])
                         def render_references(references):
                             if not references:
                                 gr.HTML(
@@ -3038,14 +2856,11 @@ def create_app():
                             else:
                                 for idx, reference in enumerate(references):
                                     with gr.Group(elem_classes="resource-item-gradio"):
-                                        # Hidden element containing resource path for drag and drop
                                         gr.HTML(
                                             f'<div class="resource-path-hidden" style="display:none;" data-path="{reference["path"]}">{reference["path"]}</div>'
                                         )
-
                                         with gr.Row(elem_classes="resource-row-gradio"):
                                             with gr.Column(scale=1, elem_classes="resource-info-col"):
-                                                # Resource name (editable)
                                                 ui_reference_name = gr.Textbox(
                                                     value=reference["name"],
                                                     placeholder="Name",
@@ -3054,12 +2869,9 @@ def create_app():
                                                     elem_classes="resource-title-gradio",
                                                     scale=1,
                                                 )
-
                                                 ui_reference_delete_btn = gr.Button(
                                                     "🗑", elem_classes="resource-delete-btn", size="sm"
                                                 )
-
-                                                # Resource description
                                                 ui_reference_desc = gr.Textbox(
                                                     value=reference["description"],
                                                     placeholder="Add a description for this reference...",
@@ -3069,15 +2881,13 @@ def create_app():
                                                     lines=2,
                                                     scale=1,
                                                 )
-
-                                                # Filename display
                                                 gr.HTML(
                                                     elem_classes="resource-filename",
                                                     value=f"<div>  {reference['name']}</div>",
                                                 )
 
                                         # File replacement upload area
-                                        replace_file = gr.File(
+                                        ui_replace_reference = gr.File(
                                             label="Drop file here to replace",
                                             file_types=SUPPORTED_FILE_TYPES,
                                             elem_classes="resource-upload-gradio",
@@ -3086,66 +2896,37 @@ def create_app():
                                         )
 
                                         # Warning message for protected files
-                                        replace_warning = gr.HTML(visible=False)
-
-                                        # Connect events for this resource
-                                        reference_path = reference["path"]
+                                        ui_replace_warning = gr.HTML(visible=False)
 
                                         ui_reference_name.change(
                                             fn=update_reference_name,
-                                            inputs=[app_state, reference_path, ui_reference_name],
+                                            inputs=[app_state, reference["path"], ui_reference_name],
                                             outputs=[app_state, ui_json_outline],
                                             trigger_mode="always_last",  # Only trigger after user stops typing
                                         )
                                         ui_reference_desc.change(
                                             fn=update_reference_description,
-                                            inputs=[app_state, reference_path, ui_reference_desc],
+                                            inputs=[app_state, reference["path"], ui_reference_desc],
                                             outputs=[app_state, ui_json_outline],     
                                             trigger_mode="always_last",  # Only trigger after user stops typing
                                         )
                                         ui_reference_delete_btn.click(
                                             fn=delete_reference,
-                                            inputs=[app_state, reference_path],
+                                            inputs=[app_state, reference["path"]],
                                             outputs=[app_state, ui_json_outline, ui_blocks_display]
                                         )
-
-                                        # File replacement
-                                        replace_file.upload(
-                                            fn=replace_resource_file_gradio,
-                                            inputs=[
-                                                app_state["generate_tab"]["resources"],
-                                                gr.State(resource_path),
-                                                replace_file,
-                                                ui_doc_title,
-                                                ui_doc_description,
-                                                blocks_state,
-                                                app_state["session_id"],
-                                            ],
-                                            outputs=[
-                                                app_state["generate_tab"]["resources"],
-                                                outline_state,
-                                                ui_json_outline,
-                                                replace_file,
-                                                replace_warning,
-                                            ],
-                                        ).then(
-                                            # Force JSON update after resources render
-                                            fn=lambda title, desc, res, blocks: generate_outline_json_from_state(
-                                                title, desc, res, blocks
-                                            )[1],
-                                            inputs=[ui_doc_title, ui_doc_description, app_state["generate_tab"]["resources"], blocks_state],
-                                            outputs=[ui_json_outline],
+                                        ui_replace_reference.upload(
+                                            fn=replace_reference,
+                                            inputs=[app_state, reference["path"], ui_json_outline, ui_replace_reference],
+                                            outputs=[app_state, ui_json_outline, ui_replace_warning],
                                         )
 
                 # Workspace column: AI, H, T buttons (aligned left)
                 with gr.Column(scale=1, elem_classes="workspace-col"):
                     with gr.Row(elem_classes="square-btn-row"):
-                        ai_btn = gr.Button("+ Add Section", elem_classes="add-section-btn", size="sm")
-                        # Add spacer to push collapse/expand button to the right
+                        ui_add_section_btn = gr.Button("+ Add Section", elem_classes="add-section-btn", size="sm")
                         gr.HTML("<div style='flex: 1;'></div>")
-                        # Single toggle button that reflects current state
-                        # Shows double angle quote rotated to point down or up
-                        workspace_collapse_btn = gr.Button(
+                        ui_workspace_collapse_btn = gr.Button(
                             "»",  # Double angle quote, rotation handled by CSS
                             elem_classes="workspace-collapse-btn collapse-mode",  # Start in collapse mode (pointing up)
                             elem_id="workspace-collapse-btn",
@@ -3162,7 +2943,7 @@ def create_app():
                         delete_block_id = gr.Textbox(
                             visible=True, elem_id="delete-block-id", elem_classes="hidden-component"
                         )
-                        delete_trigger = gr.Button(
+                        ui_delete_section_btn = gr.Button(
                             "Delete", visible=True, elem_id="delete-trigger", elem_classes="hidden-component"
                         )
 
@@ -3399,166 +3180,202 @@ def create_app():
                                 lines=20,
                             )
 
-        # Connect button click to add AI block
-        ai_btn.click(
-            fn=handle_add_ai_block_top,
-            inputs=[
-                blocks_state,
+
+
+        ui_start_tab_example_code_readme_btn.click(
+            fn=start_tab_load_code_readme_example,
+            inputs=app_state,
+            outputs=[app_state, ui_start_tab_prompt_input, ui_start_tab_attached_references_display],
+            queue=False,
+        )
+
+        ui_start_tab_example_product_launch_btn.click(
+            fn=start_tab_load_product_launch_example,
+            inputs=app_state,
+            outputs=[app_state, ui_start_tab_prompt_input, ui_start_tab_attached_references_display],
+            queue=False,
+        )
+
+        ui_start_tab_example_performance_review_btn.click(
+            fn=start_tab_load_performance_review_example,
+            inputs=app_state,
+            outputs=[app_state, ui_start_tab_prompt_input, ui_start_tab_attached_references_display],
+            queue=False,
+        )
+
+        ui_start_tab_prompt_input.input(fn=lambda: gr.update(visible=False), outputs=[ui_start_tab_error_message], queue=False)
+
+        ui_start_tab_reference_upload.upload(
+            fn=start_tab_reference_upload,
+            inputs=[app_state, ui_start_tab_reference_upload],
+            outputs=[app_state, ui_start_tab_reference_upload, ui_start_tab_attached_references_display, ui_start_tab_upload_warning],
+        )
+
+        ui_start_tab_draft_btn.click(
+            fn=start_tab_check_prompt_before_submit,
+            inputs=ui_start_tab_prompt_input,
+            outputs=[ui_start_tab_error_message, ui_start_tab_draft_btn],
+            queue=False,  # Run immediately
+        ).success(
+            fn=handle_start_draft_click,
+            inputs=[app_state, ui_start_tab_prompt_input],
+            outputs=[
+                app_state,
                 ui_doc_title,
                 ui_doc_description,
-                app_state["generate_tab"]["resources"],
-            ],  # Always pass None for focused_block_id
-            outputs=[blocks_state, outline_state, ui_json_outline],
-        ).then(fn=render_blocks, inputs=[blocks_state], outputs=ui_blocks_display)
+                ui_json_outline,
+                generated_content_html,
+                generated_content,
+                save_doc_btn,
+                ui_switch_tab_trigger,
+                ui_start_tab_error_message,
+                ui_start_tab_prompt_input,
+                ui_start_tab_draft_btn,
+            ],
+        ).then(fn=render_blocks, inputs=app_state, outputs=ui_blocks_display).then(
+            fn=generate_outline_json_from_state, inputs=app_state, outputs=ui_json_outline,
+        )
 
-        # Connect workspace collapse/expand toggle button
-        workspace_collapse_btn.click(
-            fn=toggle_all_blocks, inputs=[blocks_state], outputs=[blocks_state, workspace_collapse_btn]
-        ).then(fn=render_blocks, inputs=[blocks_state], outputs=ui_blocks_display)
+        ui_add_section_btn.click(
+            fn=add_section, inputs=app_state, outputs=[app_state, ui_json_outline],
+        ).then(fn=render_blocks, inputs=app_state, outputs=ui_blocks_display)
 
-        # Connect button click to add Text block
+        ui_workspace_collapse_btn.click(
+            fn=toggle_all_blocks, inputs=app_state, outputs=[app_state, ui_workspace_collapse_btn]
+        ).then(fn=render_blocks, inputs=app_state, outputs=ui_blocks_display)
 
-        # Delete block handler
-        delete_trigger.click(
-            fn=delete_block,
-            inputs=[blocks_state, delete_block_id, ui_doc_title, ui_doc_description, app_state["generate_tab"]["resources"]],
-            outputs=[blocks_state, outline_state, ui_json_outline],
-        ).then(fn=render_blocks, inputs=[blocks_state], outputs=ui_blocks_display)
+        ui_delete_section_btn.click(
+            fn=delete_section, inputs=[app_state, delete_block_id], outputs=[app_state, ui_json_outline],
+        ).then(fn=render_blocks, inputs=app_state, outputs=ui_blocks_display)
 
-        # Delete resource handler
         delete_resource_trigger.click(
             fn=delete_resource_gradio,
-            inputs=[app_state["generate_tab"]["resources"], delete_resource_path, ui_doc_title, ui_doc_description, blocks_state],
-            outputs=[app_state["generate_tab"]["resources"], blocks_state, outline_state, ui_json_outline],
-        ).then(fn=render_blocks, inputs=[blocks_state], outputs=ui_blocks_display)
+            inputs=[app_state, delete_resource_path, ui_doc_title, ui_doc_description],
+            outputs=[app_state,ui_json_outline],
+        ).then(fn=render_blocks, inputs=app_state, outputs=ui_blocks_display)
 
         # Update block content handler
         update_trigger.click(
             fn=update_block_content,
-            inputs=[blocks_state, update_block_id, update_content_input, ui_doc_title, ui_doc_description, app_state["generate_tab"]["resources"]],
-            outputs=[blocks_state, outline_state, ui_json_outline],
+            inputs=[app_state, update_block_id, update_content_input, ui_doc_title, ui_doc_description],
+            outputs=[app_state, ui_json_outline],
         )
 
         # Toggle collapse handler - also update the collapse/expand all button
         toggle_trigger.click(
-            fn=toggle_block_collapse, inputs=[blocks_state, toggle_block_id], outputs=blocks_state
-        ).then(fn=render_blocks, inputs=[blocks_state], outputs=ui_blocks_display
-        ).then(fn=update_collapse_button_state, inputs=[blocks_state], outputs=workspace_collapse_btn)
+            fn=toggle_block_collapse, inputs=[app_state, toggle_block_id], outputs=app_state
+        ).then(fn=render_blocks, inputs=app_state, outputs=ui_blocks_display
+        ).then(fn=update_collapse_button_state, inputs=app_state, outputs=ui_workspace_collapse_btn)
 
         # Update heading handler
         update_heading_trigger.click(
             fn=update_block_heading,
             inputs=[
-                blocks_state,
+                app_state,
                 update_heading_block_id,
                 update_heading_input,
                 ui_doc_title,
                 ui_doc_description,
-                app_state["generate_tab"]["resources"],
             ],
-            outputs=[blocks_state, outline_state, ui_json_outline],
+            outputs=[app_state, ui_json_outline],
         )
 
         # Update indent handler
         indent_trigger.click(
             fn=update_block_indent,
-            inputs=[blocks_state, indent_block_id, indent_direction, ui_doc_title, ui_doc_description, app_state["generate_tab"]["resources"]],
-            outputs=[blocks_state, outline_state, ui_json_outline],
-        ).then(fn=render_blocks, inputs=[blocks_state], outputs=ui_blocks_display)
+            inputs=[app_state, indent_block_id, indent_direction, ui_doc_title, ui_doc_description],
+            outputs=[app_state, ui_json_outline],
+        ).then(fn=render_blocks, inputs=app_state, outputs=ui_blocks_display)
 
         # Focus handler
-        focus_trigger.click(fn=render_blocks, inputs=[blocks_state], outputs=ui_blocks_display)
+        focus_trigger.click(fn=render_blocks, inputs=app_state, outputs=ui_blocks_display)
 
         add_after_trigger.click(
             fn=handle_add_after,
-            inputs=[blocks_state, add_after_block_id, add_after_type, ui_doc_title, ui_doc_description, app_state["generate_tab"]["resources"]],
-            outputs=[blocks_state, outline_state, ui_json_outline],
-        ).then(fn=render_blocks, inputs=[blocks_state], outputs=ui_blocks_display)
+            inputs=[app_state, add_after_block_id, add_after_type, ui_doc_title, ui_doc_description],
+            outputs=[app_state, ui_json_outline],
+        ).then(fn=render_blocks, inputs=app_state, outputs=ui_blocks_display)
 
         # Convert block type handler
         convert_trigger.click(
             fn=convert_block_type,
-            inputs=[blocks_state, convert_block_id, convert_type, ui_doc_title, ui_doc_description, app_state["generate_tab"]["resources"]],
-            outputs=[blocks_state, outline_state, ui_json_outline],
-        ).then(fn=render_blocks, inputs=[blocks_state], outputs=ui_blocks_display)
+            inputs=[app_state, convert_block_id, convert_type, ui_doc_title, ui_doc_description],
+            outputs=[app_state, ui_json_outline],
+        ).then(fn=render_blocks, inputs=app_state, outputs=ui_blocks_display)
 
         # Update block resources handler
         update_resources_trigger.click(
             fn=update_block_resources,
             inputs=[
-                blocks_state,
+                app_state,
                 update_resources_block_id,
                 update_resources_input,
                 ui_doc_title,
                 ui_doc_description,
-                app_state["generate_tab"]["resources"],
             ],
-            outputs=[blocks_state, outline_state, ui_json_outline],
-        ).then(fn=render_blocks, inputs=[blocks_state], outputs=ui_blocks_display)
+            outputs=[app_state, ui_json_outline],
+        ).then(fn=render_blocks, inputs=app_state, outputs=ui_blocks_display)
 
         # Remove block resource handler
         remove_resource_trigger.click(
             fn=remove_block_resource,
             inputs=[
-                blocks_state,
+                app_state,
                 remove_resource_block_id,
                 remove_resource_path,
                 ui_doc_title,
-                ui_doc_description,
-                app_state["generate_tab"]["resources"],
+                ui_doc_description
             ],
-            outputs=[blocks_state, outline_state, ui_json_outline],
-        ).then(fn=render_blocks, inputs=[blocks_state], outputs=ui_blocks_display)
+            outputs=[app_state, ui_json_outline],
+        ).then(fn=render_blocks, inputs=app_state, outputs=ui_blocks_display)
 
         delete_panel_resource_trigger.click(
             fn=delete_and_render,
             inputs=[
-                app_state["generate_tab"]["resources"],
+                app_state,
                 delete_panel_resource_path,
                 ui_doc_title,
                 ui_doc_description,
-                blocks_state,
             ],
-            outputs=[app_state["generate_tab"]["resources"], blocks_state, outline_state, ui_json_outline, ui_blocks_display],
+            outputs=[app_state, ui_json_outline, ui_blocks_display],
         )
 
         # Update resource description handler - don't re-render blocks to avoid interrupting typing
         update_desc_trigger.click(
             fn=update_resource_description,
             inputs=[
-                blocks_state,
+                app_state,
                 update_desc_block_id,
                 update_desc_resource_path,
                 update_desc_text,
                 ui_doc_title,
                 ui_doc_description,
-                app_state["generate_tab"]["resources"],
             ],
-            outputs=[blocks_state, outline_state, ui_json_outline],
+            outputs=[app_state, ui_json_outline],
         )
 
         # Title and description change handlers
         ui_doc_title.change(
             fn=update_document_metadata,
-            inputs=[ui_doc_title, ui_doc_description, app_state["generate_tab"]["resources"], blocks_state],
-            outputs=[outline_state, ui_json_outline],
+            inputs=[app_state, ui_doc_title, ui_doc_description],
+            outputs=[ui_json_outline],
         )
 
         ui_doc_description.change(
             fn=update_document_metadata,
-            inputs=[ui_doc_title, ui_doc_description, app_state["generate_tab"]["resources"], blocks_state],
-            outputs=[outline_state, ui_json_outline],
+            inputs=[app_state, ui_doc_title, ui_doc_description],
+            outputs=[ui_json_outline],
         )
 
         # Handle file uploads (defined after ui_json_outline is created)
         file_upload.upload(
             fn=handle_file_upload,
-            inputs=[file_upload, app_state["generate_tab"]["resources"], ui_doc_title, ui_doc_description, blocks_state, app_state["session_id"]],
-            outputs=[app_state["generate_tab"]["resources"], file_upload, outline_state, ui_json_outline, app_state["session_id"], file_upload_warning],
+            inputs=[app_state, file_upload, ui_doc_title, ui_doc_description],
+            outputs=[app_state, file_upload, ui_json_outline, file_upload_warning],
         ).then(
             # Force JSON update after resources render
             fn=lambda title, desc, res, blocks: generate_outline_json_from_state(title, desc, res, blocks)[1],
-            inputs=[ui_doc_title, ui_doc_description, app_state["generate_tab"]["resources"], blocks_state],
+            inputs=[app_state, ui_doc_title, ui_doc_description],
             outputs=[ui_json_outline],
         )
 
@@ -3574,7 +3391,7 @@ def create_app():
             outputs=[generate_doc_btn, generated_content, generated_content_html, download_btn_display],
         ).then(
             fn=handle_generate_and_update_download,
-            inputs=[ui_doc_title, ui_doc_description, app_state["generate_tab"]["resources"], blocks_state, app_state["session_id"]],
+            inputs=[app_state, ui_doc_title, ui_doc_description],
             outputs=[
                 ui_json_outline,
                 generated_content,
@@ -3595,178 +3412,101 @@ def create_app():
         )
 
         # Import file handler
-        import_file.change(
-            fn=import_outline,
-            inputs=[import_file, app_state["session_id"]],
+        ui_import_template.change(
+            fn=import_template,
+            inputs=[app_state, ui_import_template],
             outputs=[
+                app_state,
                 ui_doc_title,
                 ui_doc_description,
-                app_state["generate_tab"]["resources"],
-                blocks_state,
-                outline_state,
                 ui_json_outline,
-                import_file,  # Add import_file to outputs to clear it
-                app_state["session_id"],
+                ui_import_template,  # Add ui_import_template to outputs to clear it
                 generated_content_html,
                 generated_content,
                 save_doc_btn,
             ],
-        ).then(fn=render_blocks, inputs=[blocks_state], outputs=ui_blocks_display)
+        ).then(fn=render_blocks, inputs=app_state, outputs=ui_blocks_display)
 
-        # Update save button value whenever outline changes
-        outline_state.change(fn=lambda: gr.update(value=create_docpack_from_current_state()), outputs=save_outline_btn)
+        # Update save button value whenever ui_json_outline changes
+        ui_json_outline.change(fn=lambda: gr.update(value=create_docpack_from_current_state()), outputs=ui_save_template_btn)
 
         # Load example handler
         load_example_trigger.click(
             fn=load_example,
             inputs=[example_id_input, app_state["session_id"]],
             outputs=[
+                app_state,
                 ui_doc_title,
                 ui_doc_description,
-                app_state["generate_tab"]["resources"],
-                blocks_state,
-                outline_state,
                 ui_json_outline,
-                app_state["session_id"],
                 generated_content_html,
                 generated_content,
                 save_doc_btn,
             ],
-        ).then(fn=render_blocks, inputs=[blocks_state], outputs=ui_blocks_display)
+        ).then(fn=render_blocks, inputs=app_state, outputs=ui_blocks_display)
 
         # Update resource title handler - don't re-render resources to avoid interrupting typing
         update_title_trigger.click(
             fn=update_resource_title,
             inputs=[
-                app_state["generate_tab"]["resources"],
+                app_state,
                 update_title_resource_path,
                 update_title_text,
                 ui_doc_title,
                 ui_doc_description,
-                blocks_state,
             ],
-            outputs=[app_state["generate_tab"]["resources"], outline_state, ui_json_outline],
+            outputs=[app_state, ui_json_outline],
         )
 
         # Update resource panel description handler - reuse the same inputs
         update_panel_desc_trigger.click(
             fn=update_resource_panel_description,
             inputs=[
-                app_state["generate_tab"]["resources"],
+                app_state,
                 update_title_resource_path,
                 update_title_text,
                 ui_doc_title,
                 ui_doc_description,
-                blocks_state,
             ],
-            outputs=[app_state["generate_tab"]["resources"], outline_state, ui_json_outline],
+            outputs=[app_state, ui_json_outline],
         )
 
         # Replace resource file handler
         replace_resource_trigger.click(
             fn=handle_resource_replacement,
             inputs=[
-                app_state["generate_tab"]["resources"],
+                app_state,
                 replace_resource_path,
                 replace_resource_file_input,
                 ui_doc_title,
                 ui_doc_description,
-                blocks_state,
-                app_state["session_id"],
             ],
             outputs=[
-                app_state["generate_tab"]["resources"],
-                blocks_state,
-                outline_state,
+                app_state,
                 ui_json_outline,
                 replace_success_msg,
             ],
-        ).then(fn=render_blocks, inputs=[blocks_state], outputs=ui_blocks_display).then(
+        ).then(fn=render_blocks, inputs=app_state, outputs=ui_blocks_display).then(
             # Clear the file input after processing
             fn=lambda: None,
             outputs=replace_resource_file_input,
         )
 
-        new_doc_btn.click(
-            fn=reset_document,
+        ui_new_template_btn.click(
+            fn=reset_template,
+            inputs=app_state,
             outputs=[
+                app_state,
                 ui_doc_title,
                 ui_doc_description,
-                app_state["generate_tab"]["resources"],
-                blocks_state,
-                outline_state,
                 ui_json_outline,
-                app_state["session_id"],
                 generated_content_html,
                 generated_content,
                 save_doc_btn,
             ],
-        ).then(fn=render_blocks, inputs=[blocks_state], outputs=ui_blocks_display)
+        ).then(fn=render_blocks, inputs=app_state, outputs=ui_blocks_display)
 
-        # Create a hidden HTML component for tab switching trigger
-        switch_tab_trigger = gr.HTML("", visible=True, elem_id="switch-tab-trigger", elem_classes="hidden-component")
 
-        # Get Started button - generate docpack and switch to Draft + Generate tab
-        get_started_btn.click(
-            fn=check_prompt_before_submit,
-            inputs=[start_tab_prompt_input],
-            outputs=[start_tab_error_message, get_started_btn],
-            queue=False,  # Run immediately
-        ).success(
-            fn=handle_start_draft_click,
-            inputs=[start_tab_prompt_input, app_state["start_tab"]["attached_references"], app_state["session_id"]],
-            outputs=[
-                ui_doc_title,
-                ui_doc_description,
-                app_state["generate_tab"]["resources"],
-                blocks_state,
-                outline_state,
-                ui_json_outline,
-                app_state["session_id"],
-                generated_content_html,
-                generated_content,
-                save_doc_btn,
-                switch_tab_trigger,
-                start_tab_error_message,
-                start_tab_prompt_input,
-                get_started_btn,
-            ],
-        ).then(fn=render_blocks, inputs=[blocks_state], outputs=ui_blocks_display).then(
-            fn=generate_outline_json_from_state,
-            inputs=[ui_doc_title, ui_doc_description, app_state["generate_tab"]["resources"], blocks_state],
-            outputs=[outline_state, ui_json_outline],
-        )
-
-        # Start tab file upload handler
-        start_file_upload.upload(
-            fn=handle_start_file_upload_with_render,
-            inputs=[start_file_upload, app_state["start_tab"]["attached_references"]],
-            outputs=[app_state["start_tab"]["attached_references"], start_file_upload, start_tab_attached_references_display, start_upload_warning],
-        )
-
-        # Clear error message when user starts typing
-        start_tab_prompt_input.input(fn=lambda: gr.update(visible=False), outputs=[start_tab_error_message], queue=False)
-
-        start_tab_example_code_readme_btn.click(
-            fn=load_code_readme_example,
-            inputs=[app_state["session_id"]],
-            outputs=[start_tab_prompt_input, app_state["start_tab"]["attached_references"], app_state["session_id"], start_tab_attached_references_display],
-            queue=False,
-        )
-
-        start_tab_example_product_launch_btn.click(
-            fn=load_product_launch_example,
-            inputs=[app_state["session_id"]],
-            outputs=[start_tab_prompt_input, app_state["start_tab"]["attached_references"], app_state["session_id"], start_tab_attached_references_display],
-            queue=False,
-        )
-
-        start_tab_example_performance_review_btn.click(
-            fn=load_performance_review_example,
-            inputs=[app_state["session_id"]],
-            outputs=[start_tab_prompt_input, app_state["start_tab"]["attached_references"], app_state["session_id"], start_tab_attached_references_display],
-            queue=False,
-        )
 
         # Hidden inputs for Start tab resource removal
         start_remove_resource_index = gr.Textbox(
@@ -3783,7 +3523,7 @@ def create_app():
         start_remove_resource_btn.click(
             fn=remove_start_resource,
             inputs=[app_state["start_tab"]["attached_references"], start_remove_resource_index, start_remove_resource_name],
-            outputs=[app_state["start_tab"]["attached_references"], start_tab_attached_references_display],
+            outputs=[app_state["start_tab"]["attached_references"], ui_start_tab_attached_references_display],
         )
 
     return app
