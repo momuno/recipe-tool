@@ -10,6 +10,8 @@ from typing import Any, Dict, List
 
 import gradio as gr
 import pypandoc
+import requests
+from bs4 import BeautifulSoup
 from docx import Document
 from docpack_file import DocpackHandler
 from dotenv import load_dotenv
@@ -146,6 +148,211 @@ def docx_to_text(docx_path: str) -> str:
             raise Exception(f"Document '{filename}' may be protected or encrypted and cannot be processed.")
         else:
             raise Exception(f"Failed to extract text from '{filename}': {str(e)}")
+
+
+def convert_github_url_to_raw(url: str) -> str:
+    """Convert GitHub blob URLs to raw URLs for direct file access."""
+    if "github.com" in url and "/blob/" in url:
+        # Convert github.com/user/repo/blob/branch/file to raw.githubusercontent.com/user/repo/branch/file
+        raw_url = url.replace("github.com", "raw.githubusercontent.com").replace("/blob/", "/")
+        return raw_url
+    return url
+
+
+def extract_text_from_url(url: str) -> str:
+    """Extract readable text content from a web URL."""
+    try:
+        # Convert GitHub URLs to raw format for direct access
+        original_url = url
+        url = convert_github_url_to_raw(url)
+
+        # Enhanced headers to avoid bot detection
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.5",
+            "Connection": "keep-alive",
+        }
+
+        # Retry logic with exponential backoff
+        import time
+
+        max_retries = 3
+        response = None
+        for attempt in range(max_retries):
+            try:
+                # Add delay between requests to avoid rate limiting
+                if attempt > 0:
+                    delay = 2**attempt  # Exponential backoff: 2s, 4s, 8s
+                    print(f"Retrying URL {url} in {delay} seconds...")
+                    time.sleep(delay)
+
+                response = requests.get(url, headers=headers, timeout=30)
+                response.raise_for_status()
+                break
+
+            except requests.exceptions.HTTPError as e:
+                if e.response.status_code == 429 and attempt < max_retries - 1:
+                    # Rate limited, wait and retry
+                    print(f"Rate limited (429) for {url}, retrying...")
+                    continue
+                elif e.response.status_code == 403 and "github" in url and attempt == 0:
+                    # GitHub might block, try original URL
+                    print(f"GitHub blocked raw URL, trying original URL...")
+                    url = original_url
+                    continue
+                else:
+                    raise e
+            except requests.exceptions.RequestException as e:
+                if attempt < max_retries - 1:
+                    print(f"Request failed for {url}, retrying...")
+                    continue
+                else:
+                    raise e
+
+        if not response:
+            raise Exception("Failed to get response after all retries")
+
+        # Check if this is a raw text file (like .md, .txt, etc.)
+        content_type = response.headers.get("content-type", "").lower()
+        if any(t in content_type for t in ["text/plain", "text/markdown", "text/x-markdown"]):
+            return response.text.strip()
+
+        # Check for common text file extensions in URL
+        url_lower = url.lower()
+        if any(url_lower.endswith(ext) for ext in [".md", ".txt", ".rst", ".py", ".js", ".json", ".yaml", ".yml"]):
+            return response.text.strip()
+
+        # Parse HTML content
+        soup = BeautifulSoup(response.content, "html.parser")
+
+        # Remove script and style elements
+        for script in soup(["script", "style", "nav", "header", "footer", "aside"]):
+            script.decompose()
+
+        # Try to find main content areas first
+        content = None
+        main_selectors = [
+            "main",
+            "article",
+            ".content",
+            "#content",
+            ".main",
+            "#main",
+            ".post",
+            ".entry",
+            ".article-content",
+            ".page-content",
+        ]
+
+        for selector in main_selectors:
+            main_content = soup.select_one(selector)
+            if main_content:
+                content = main_content.get_text()
+                break
+
+        # If no main content found, use body
+        if not content:
+            content = soup.get_text()
+
+        # Clean up the text
+        lines = (line.strip() for line in content.splitlines())
+        chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
+        text = " ".join(chunk for chunk in chunks if chunk)
+
+        # Remove excessive whitespace
+        import re
+
+        text = re.sub(r"\s+", " ", text).strip()
+
+        if not text:
+            raise Exception("No readable content found on the page")
+
+        return text
+
+    except requests.exceptions.RequestException as e:
+        raise Exception(f"Failed to fetch URL: {str(e)}")
+    except Exception as e:
+        raise Exception(f"Failed to extract content from URL: {str(e)}")
+
+
+def download_urls_to_temp(urls: str, temp_dir: str) -> List[Dict[str, str]]:
+    """Download content from comma-separated URLs to temp directory.
+
+    Args:
+        urls: Comma-separated string of URLs
+        temp_dir: Directory to save downloaded files
+
+    Returns:
+        List of resource dictionaries with path, name, and size info
+    """
+    if not urls.strip():
+        return []
+
+    url_list = [url.strip() for url in urls.split(",") if url.strip()]
+    resources = []
+    errors = []
+
+    for url in url_list:
+        try:
+            # Validate URL format
+            if not url.startswith(("http://", "https://")):
+                url = "https://" + url
+
+            # Extract content
+            content = extract_text_from_url(url)
+
+            # Create filename from URL
+            from urllib.parse import urlparse
+
+            parsed = urlparse(url)
+            domain = parsed.netloc.replace("www.", "")
+            path_part = parsed.path.strip("/").replace("/", "_")
+
+            if path_part:
+                filename = f"{domain}_{path_part}.txt"
+            else:
+                filename = f"{domain}.txt"
+
+            # Ensure filename is valid
+            import re
+
+            filename = re.sub(r"[^\w\-_.]", "_", filename)
+
+            # Write content to temp file
+            file_path = os.path.join(temp_dir, filename)
+            with open(file_path, "w", encoding="utf-8") as f:
+                f.write(content)
+
+            # Calculate file size
+            file_size = os.path.getsize(file_path)
+            if file_size < 1024:
+                size_str = f"{file_size} B"
+            elif file_size < 1024 * 1024:
+                size_str = f"{file_size / 1024:.1f} KB"
+            else:
+                size_str = f"{file_size / (1024 * 1024):.1f} MB"
+
+            resources.append({
+                "path": file_path,
+                "name": filename,
+                "size": size_str,
+                "url": url,  # Keep original URL for reference
+            })
+
+        except Exception as e:
+            errors.append(f"{url}: {str(e)}")
+
+    if errors:
+        error_msg = "Some URLs failed to download:\n" + "\n".join(errors)
+        if not resources:
+            # If all URLs failed
+            raise Exception(error_msg)
+        else:
+            # If some succeeded, log the errors but continue
+            print(f"URL download warnings: {error_msg}")
+
+    return resources
 
 
 def json_to_outline(json_data: Dict[str, Any]) -> Outline:
@@ -2195,9 +2402,23 @@ def render_start_resources(resources):
         html_content = '<div class="start-resources-list">'
         for idx, resource in enumerate(resources):
             print(f"  Rendering resource: {resource['name']}")
+
+            # Check if this is a URL resource
+            is_url_resource = "url" in resource
+            resource_icon = "🌐" if is_url_resource else "📄"
+            resource_class = "url-resource" if is_url_resource else "file-resource"
+
+            # Create tooltip text
+            if is_url_resource:
+                tooltip_text = f"Downloaded from: {resource['url']}"
+            else:
+                tooltip_text = f"File: {resource['name']}"
+
             html_content += f"""
-                <div class="dropped-resource">
-                    <span>{resource["name"]}</span>
+                <div class="dropped-resource {resource_class}" title="{tooltip_text}">
+                    <span class="resource-icon">{resource_icon}</span>
+                    <span class="resource-name">{resource["name"]}</span>
+                    <span class="resource-size">{resource.get("size", "")}</span>
                     <button class="remove-resource" onclick="event.stopPropagation(); removeStartResourceByIndex({idx}, '{resource["name"]}'); return false;">🗑</button>
                 </div>
             """
@@ -2391,6 +2612,52 @@ def handle_ui_start_tab_file_upload_with_render(files, current_resources):
     new_resources, clear_upload, warning_update = handle_ui_start_tab_file_upload(files, current_resources)
     resources_html = render_start_resources(new_resources)
     return new_resources, clear_upload, resources_html, warning_update
+
+
+def handle_ui_start_tab_url_submit(urls_input, current_resources):
+    """Handle URL submissions on the Start tab."""
+    if not urls_input or not urls_input.strip():
+        return current_resources, "", gr.update(visible=False)
+
+    # Create temp directory for downloads
+    import tempfile
+
+    temp_dir = tempfile.mkdtemp()
+
+    try:
+        # Download URLs to temp directory
+        url_resources = download_urls_to_temp(urls_input, temp_dir)
+
+        # Add URL resources to current resources
+        new_resources = current_resources.copy() if current_resources else []
+        new_resources.extend(url_resources)
+
+        # Clear the URL input and return success
+        return new_resources, "", gr.update(visible=False)
+
+    except Exception as e:
+        # Return error message
+        import random
+
+        warning_id = f"warning_{random.randint(1000, 9999)}"
+        error_html = f"""
+        <div id="{warning_id}" style='position: relative; color: #dc2626; background: #fee2e2; padding: 8px 30px 8px 12px; border-radius: 4px; margin-top: 8px; font-size: 14px;'>
+            <button onclick="document.getElementById('{warning_id}').style.display='none'" 
+                    style='position: absolute; top: 4px; right: 5px; background: none; border: none; color: #dc2626; font-size: 18px; cursor: pointer; padding: 0 5px; opacity: 0.6;' 
+                    onmouseover="this.style.opacity='1'" 
+                    onmouseout="this.style.opacity='0.6'"
+                    title='Close'>×</button>
+            <strong>URL Download Error:</strong><br>{str(e)}
+        </div>
+        """
+        return current_resources, urls_input, gr.update(value=error_html, visible=True)
+
+
+def handle_ui_start_tab_url_submit_with_render(urls_input, current_resources):
+    """Handle URL submissions and render the resources."""
+    new_resources, cleared_input, warning_update = handle_ui_start_tab_url_submit(urls_input, current_resources)
+    resources_html = render_start_resources(new_resources)
+    return new_resources, cleared_input, resources_html, warning_update
 
 
 def extract_resources_from_docpack(docpack_path, session_id=None):
@@ -2772,6 +3039,26 @@ def create_app():
 
                             # Warning message for protected files
                             ui_start_tab_upload_warning = gr.HTML(visible=False)
+
+                            # URL input section
+                            with gr.Row(elem_classes="start-url-input-row"):
+                                ui_start_tab_url_input = gr.Textbox(
+                                    placeholder="Enter web URLs (comma separated): https://example.com, https://docs.example.com",
+                                    show_label=False,
+                                    elem_classes="start-url-input",
+                                    scale=4,
+                                    lines=1,
+                                )
+                                ui_start_tab_url_submit_btn = gr.Button(
+                                    "Add URLs",
+                                    variant="secondary",
+                                    size="sm",
+                                    elem_classes="start-url-submit-btn",
+                                    scale=1,
+                                )
+
+                            # URL warning message
+                            ui_start_tab_url_warning = gr.HTML(visible=False)
 
                             # Draft button - full width below dropzone
                             ui_start_tab_draft_btn = gr.Button(
@@ -3846,6 +4133,18 @@ def create_app():
                 ui_start_tab_file_upload,
                 ui_start_tab_attached_references_display,
                 ui_start_tab_upload_warning,
+            ],
+        )
+
+        # URL submit handler
+        ui_start_tab_url_submit_btn.click(
+            fn=handle_ui_start_tab_url_submit_with_render,
+            inputs=[ui_start_tab_url_input, gr_start_attached_references_state],
+            outputs=[
+                gr_start_attached_references_state,
+                ui_start_tab_url_input,
+                ui_start_tab_attached_references_display,
+                ui_start_tab_url_warning,
             ],
         )
 
