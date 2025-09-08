@@ -3598,3 +3598,80 @@ function setupHowItWorksHover() {
         console.log('How It Works steps not found or incorrect count:', steps.length);
     }
 }
+
+// Function to refresh URL resource from the Start tab
+function refreshStartUrlResource(index, resourceName) {
+    console.log('refreshStartUrlResource called with index:', index, 'resourceName:', resourceName);
+    
+    // Prevent the card from collapsing
+    const expandableSection = document.getElementById('start-expandable-section');
+    const wasExpanded = expandableSection && expandableSection.classList.contains('expanded');
+    console.log('DEBUG: expandableSection found:', !!expandableSection, 'wasExpanded:', wasExpanded);
+
+    // Find the hidden inputs for start tab URL resource refresh
+    const indexInput = document.getElementById('start-refresh-url-index');
+    const nameInput = document.getElementById('start-refresh-url-name');
+    console.log('DEBUG: indexInput found:', !!indexInput, 'nameInput found:', !!nameInput);
+
+    if (!indexInput || !nameInput) {
+        console.error('Required input elements not found for URL refresh');
+        return;
+    }
+
+    // Set the values and trigger the refresh
+    indexInput.value = index;
+    nameInput.value = resourceName;
+    console.log('DEBUG: Set values - index:', index, 'name:', resourceName);
+
+    // Find and click the refresh button
+    const refreshButton = document.getElementById('start-refresh-url-btn');
+    console.log('DEBUG: refreshButton found:', !!refreshButton);
+
+    if (refreshButton) {
+        refreshButton.click();
+        console.log('DEBUG: Refresh button clicked');
+
+        // Ensure the section stays expanded after refresh
+        if (wasExpanded) {
+            setTimeout(() => {
+                console.log('DEBUG: Re-expanding section after refresh');
+                if (expandableSection) {
+                    expandableSection.classList.add('expanded');
+                }
+            }, 100);
+        }
+    } else {
+        console.error('Refresh button not found');
+    }
+}
+
+// Function to refresh URL resource from the resource panel
+function refreshResourceFromPanel(resourcePath, resourceIndex) {
+    console.log('refreshResourceFromPanel called with path:', resourcePath, 'index:', resourceIndex);
+    
+    // Find the hidden inputs for resource panel URL refresh
+    const pathInput = document.getElementById('refresh-panel-resource-path');
+    const indexInput = document.getElementById('refresh-panel-resource-index');
+    console.log('DEBUG: pathInput found:', !!pathInput, 'indexInput found:', !!indexInput);
+
+    if (!pathInput || !indexInput) {
+        console.error('Required input elements not found for panel URL refresh');
+        return;
+    }
+
+    // Set the values and trigger the refresh
+    pathInput.value = resourcePath;
+    indexInput.value = resourceIndex;
+    console.log('DEBUG: Set values - path:', resourcePath, 'index:', resourceIndex);
+
+    // Find and click the refresh button
+    const refreshButton = document.getElementById('refresh-panel-resource-btn');
+    console.log('DEBUG: refresh panel button found:', !!refreshButton);
+
+    if (refreshButton) {
+        refreshButton.click();
+        console.log('DEBUG: Panel refresh button clicked');
+    } else {
+        console.error('Panel refresh button not found');
+    }
+}

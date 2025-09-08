@@ -1835,13 +1835,33 @@
     flex-shrink: 0;
 }
 
+/* Refresh button for URL resources in panel */
+.resource-refresh {
+    cursor: pointer;
+    padding: 0 4px;
+    margin-right: 4px;
+    font-weight: bold;
+    color: #999;
+    font-size: 16px;
+    transition: all 0.2s ease;
+    opacity: 0;
+    flex-shrink: 0;
+}
+
 .resource-item:hover .resource-delete,
-.resource-item-gradio:hover .resource-delete {
+.resource-item-gradio:hover .resource-delete,
+.resource-item:hover .resource-refresh,
+.resource-item-gradio:hover .resource-refresh {
     opacity: 1;
 }
 
 .resource-delete:hover {
     color: #ff5252;
+}
+
+.resource-refresh:hover {
+    color: var(--secondary-tangerine);
+    transform: rotate(90deg);
 }
 
 /* Gradio resource delete button styling */
@@ -2103,6 +2123,34 @@
 .dropped-resource.url-resource:hover {
     background-color: var(--secondary-tangerine);
     border-color: var(--secondary-tangerine);
+}
+
+/* Refresh button styling */
+.refresh-resource {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    margin-left: 4px;
+    margin-right: 2px;
+    background-color: white;
+    border: 1px solid #ddd;
+    border-radius: 3px;
+    color: #666;
+    font-size: 14px;
+    font-weight: normal;
+    font-style: normal;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.refresh-resource:hover {
+    background-color: var(--secondary-tangerine-light);
+    border-color: var(--secondary-tangerine);
+    color: var(--secondary-tangerine-dark);
+    transform: rotate(90deg);
 }
 
 .dropped-resource .resource-icon {

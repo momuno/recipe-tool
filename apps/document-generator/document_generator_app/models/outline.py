@@ -16,6 +16,8 @@ class Resource:
     description: str
     merge_mode: str
     txt_path: Optional[str] = None  # Path to converted text file (for docx files)
+    resource_type: Optional[str] = None  # "file" or "url"
+    source_url: Optional[str] = None  # Original URL for URL resources
 
 
 @dataclass
@@ -91,6 +93,8 @@ class Outline:
                     description=r.get("description", ""),
                     merge_mode=r.get("merge_mode", "concat"),
                     txt_path=r.get("txt_path"),
+                    resource_type=r.get("resource_type"),
+                    source_url=r.get("source_url"),
                 )
             )
         sec_list: List[Section] = [section_from_dict(s) for s in data.get("sections", [])]
@@ -121,6 +125,8 @@ OUTLINE_SCHEMA = {
                     "description": {"type": "string"},
                     "merge_mode": {"type": "string", "enum": ["concat", "dict"]},
                     "txt_path": {"type": "string"},
+                    "resource_type": {"type": "string", "enum": ["file", "url"]},
+                    "source_url": {"type": "string"},
                 },
                 "required": ["key", "path", "title", "description"],
                 "additionalProperties": False,

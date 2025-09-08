@@ -338,6 +338,8 @@ def download_urls_to_temp(urls: str, temp_dir: str) -> List[Dict[str, str]]:
                 "name": filename,
                 "size": size_str,
                 "url": url,  # Keep original URL for reference
+                "resource_type": "url",  # Mark as URL resource
+                "source_url": url,  # Store source URL
             })
 
         except Exception as e:
@@ -1012,35 +1014,132 @@ def generate_resource_html(resources):
         description = resource.get("description", "")
         resource_id = f"resource-{idx}"  # Unique ID for each resource
 
-        html_items.append(
-            f'<div class="{css_class}" id="{resource_id}" draggable="true" data-resource-name="{resource["name"]}" '
-            f'data-resource-title="{title}" data-resource-type="text" data-resource-path="{resource["path"]}">'
-            f'<div class="resource-content">'
-            f'<div class="resource-header">'
-            f'<input type="text" class="resource-title-input" value="{title}" '
-            f'placeholder="Title" '
-            f"oninput=\"updateResourceTitle('{path}', this.value)\" "
-            f'onclick="event.stopPropagation()" />'
-            f'<span class="resource-delete" onclick="deleteResourceFromPanel(\'{path}\')">🗑</span>'
-            f"</div>"
-            f'<div class="resource-description-container">'
-            f'<textarea class="resource-panel-description" '
-            f'placeholder="Add a description for this resource..." '
-            f"oninput=\"updateResourcePanelDescription('{path}', this.value)\" "
-            f'onclick="event.stopPropagation()">{description}</textarea>'
-            f'<button class="desc-expand-btn" onclick="toggleResourceDescription(\'{resource_id}\')">⌵</button>'
-            f"</div>"
-            f'<div class="resource-filename">{resource["name"]}</div>'
-            f'<div class="resource-upload-zone" data-resource-path="{path}">'
-            f'<span class="upload-text">Drop file here to replace</span>'
-            f'<input type="file" class="resource-file-input" accept=".txt,.md,.py,.c,.cpp,.h,.java,.js,.ts,.jsx,.tsx,.json,.xml,.yaml,.yml,.toml,.ini,.cfg,.conf,.sh,.bash,.zsh,.fish,.ps1,.bat,.cmd,.rs,.go,.rb,.php,.pl,.lua,.r,.m,.swift,.kt,.scala,.clj,.ex,.exs,.elm,.fs,.ml,.sql,.html,.htm,.css,.scss,.sass,.less,.vue,.svelte,.astro,.tex,.rst,.adoc,.org,.csv,.docx" '
-            f"onchange=\"handleResourceFileUpload('{path}', this)\" />"
-            f"</div>"
-            f"</div>"
-            f"</div>"
-        )
+        # Check if this is a URL resource based on resource_type or legacy url field
+        is_url_resource = resource.get("resource_type") == "url" or "url" in resource
+        source_url = resource.get("source_url") or resource.get("url", "")
+
+        # Create different templates for URL vs file resources
+        if is_url_resource:
+            # URL resource template - no upload zone, has refresh button
+            html_items.append(
+                f'<div class="{css_class}" id="{resource_id}" draggable="true" data-resource-name="{resource["name"]}" '
+                f'data-resource-title="{title}" data-resource-type="url" data-resource-path="{resource["path"]}" data-source-url="{source_url}">'
+                f'<div class="resource-content">'
+                f'<div class="resource-header">'
+                f'<input type="text" class="resource-title-input" value="{title}" '
+                f'placeholder="Title" '
+                f"oninput=\"updateResourceTitle('{path}', this.value)\" "
+                f'onclick="event.stopPropagation()" />'
+                f'<span class="resource-refresh" onclick="refreshResourceFromPanel(\'{path}\', {idx})" title="Refresh content from URL">🔄</span>'
+                f'<span class="resource-delete" onclick="deleteResourceFromPanel(\'{path}\')">🗑</span>'
+                f"</div>"
+                f'<div class="resource-description-container">'
+                f'<textarea class="resource-panel-description" '
+                f'placeholder="Add a description for this resource..." '
+                f"oninput=\"updateResourcePanelDescription('{path}', this.value)\" "
+                f'onclick="event.stopPropagation()">{description}</textarea>'
+                f'<button class="desc-expand-btn" onclick="toggleResourceDescription(\'{resource_id}\')">⌵</button>'
+                f"</div>"
+                f'<div class="resource-filename" title="{source_url}">🌐 {resource["name"]} (from URL)</div>'
+                f"</div>"
+                f"</div>"
+            )
+        else:
+            # File resource template - has upload zone, no refresh button
+            html_items.append(
+                f'<div class="{css_class}" id="{resource_id}" draggable="true" data-resource-name="{resource["name"]}" '
+                f'data-resource-title="{title}" data-resource-type="file" data-resource-path="{resource["path"]}">'
+                f'<div class="resource-content">'
+                f'<div class="resource-header">'
+                f'<input type="text" class="resource-title-input" value="{title}" '
+                f'placeholder="Title" '
+                f"oninput=\"updateResourceTitle('{path}', this.value)\" "
+                f'onclick="event.stopPropagation()" />'
+                f'<span class="resource-delete" onclick="deleteResourceFromPanel(\'{path}\')">🗑</span>'
+                f"</div>"
+                f'<div class="resource-description-container">'
+                f'<textarea class="resource-panel-description" '
+                f'placeholder="Add a description for this resource..." '
+                f"oninput=\"updateResourcePanelDescription('{path}', this.value)\" "
+                f'onclick="event.stopPropagation()">{description}</textarea>'
+                f'<button class="desc-expand-btn" onclick="toggleResourceDescription(\'{resource_id}\')">⌵</button>'
+                f"</div>"
+                f'<div class="resource-filename">📄 {resource["name"]}</div>'
+                f'<div class="resource-upload-zone" data-resource-path="{path}">'
+                f'<span class="upload-text">Drop file here to replace</span>'
+                f'<input type="file" class="resource-file-input" accept=".txt,.md,.py,.c,.cpp,.h,.java,.js,.ts,.jsx,.tsx,.json,.xml,.yaml,.yml,.toml,.ini,.cfg,.conf,.sh,.bash,.zsh,.fish,.ps1,.bat,.cmd,.rs,.go,.rb,.php,.pl,.lua,.r,.m,.swift,.kt,.scala,.clj,.ex,.exs,.elm,.fs,.ml,.sql,.html,.htm,.css,.scss,.sass,.less,.vue,.svelte,.astro,.tex,.rst,.adoc,.org,.csv,.docx" '
+                f"onchange=\"handleResourceFileUpload('{path}', this)\" />"
+                f"</div>"
+                f"</div>"
+                f"</div>"
+            )
 
     return "\n".join(html_items)
+
+
+def refresh_resource_from_panel(resources, resource_path, resource_index, title, description, blocks):
+    """Refresh a URL resource from the resource panel."""
+    print(f"DEBUG: Refreshing resource from panel: {resource_path} at index {resource_index}")
+
+    # Find the resource by path
+    resource = None
+    for res in resources:
+        if res.get("path") == resource_path:
+            resource = res
+            break
+
+    if not resource:
+        error_msg = "Resource not found"
+        # Re-generate HTML for resources display
+        resources_html = generate_resource_html(resources)
+        json_str = generate_outline_json_from_state(title, description, resources, blocks)
+        return resources, blocks, json_str, resources_html, error_msg
+
+    # Only refresh URL resources
+    if resource.get("resource_type") != "url" or not resource.get("source_url"):
+        error_msg = "This is not a URL resource"
+        resources_html = generate_resource_html(resources)
+        json_str = generate_outline_json_from_state(title, description, resources, blocks)
+        return resources, blocks, json_str, resources_html, error_msg
+
+    try:
+        # Re-download content from the URL
+        url = resource["source_url"]
+        content = extract_text_from_url(url)
+
+        # Write updated content to the same file path
+        with open(resource["path"], "w", encoding="utf-8") as f:
+            f.write(content)
+
+        # Update file size in resource
+        file_size = os.path.getsize(resource["path"])
+        if file_size < 1024:
+            size_str = f"{file_size} B"
+        elif file_size < 1024 * 1024:
+            size_str = f"{file_size / 1024:.1f} KB"
+        else:
+            size_str = f"{file_size / (1024 * 1024):.1f} MB"
+
+        # Update the resource info
+        resource["size"] = size_str
+
+        # Re-generate HTML for resources display
+        resources_html = generate_resource_html(resources)
+
+        # Regenerate outline with updated resources
+        json_str = generate_outline_json_from_state(title, description, resources, blocks)
+
+        print(f"DEBUG: Successfully refreshed URL resource: {resource['name']}")
+        return resources, blocks, json_str, resources_html, None  # No error
+
+    except Exception as e:
+        error_msg = f"Failed to refresh URL content: {str(e)}"
+        print(f"ERROR: {error_msg}")
+
+        # Still regenerate the display
+        resources_html = generate_resource_html(resources)
+        json_str = generate_outline_json_from_state(title, description, resources, blocks)
+        return resources, blocks, json_str, resources_html, error_msg
 
 
 def delete_resource_from_panel(resources, resource_path, title, description, blocks):
@@ -1850,6 +1949,7 @@ def handle_ui_start_tab_file_upload(files, current_resources):
                     "path": file_path,
                     "name": file_name,
                     "size": size_str,
+                    "resource_type": "file",  # Mark as file resource
                 })
 
     # Create warning message if there were any protected files
@@ -2150,6 +2250,7 @@ def handle_file_upload(files, current_resources, title, description, blocks, ses
                     "title": file_name,  # Default title is the filename
                     "type": "text",
                     "description": "",  # Initialize with empty description
+                    "resource_type": "file",  # Mark as file resource
                 })
 
     # Regenerate outline with new resources
@@ -2395,6 +2496,74 @@ def replace_resource_file_gradio(resources, old_resource_path, new_file, title, 
         return resources, None, "{}", None, gr.update(value=warning_html, visible=True)
 
 
+def handle_refresh_start_url_resource(resource_index, resources):
+    """Handle refresh URL resource request from Start tab and re-render."""
+    print(f"DEBUG: Refreshing URL resource at index {resource_index}")
+
+    # Call the refresh function
+    updated_resources, error_msg = refresh_url_resource(resource_index, resources)
+
+    # Re-render the resources display
+    resources_html = render_start_resources(updated_resources)
+
+    if error_msg:
+        # Show error message if refresh failed
+        import random
+
+        warning_id = f"warning_{random.randint(1000, 9999)}"
+        warning_html = f"""
+        <div id="{warning_id}" style='position: relative; color: #dc2626; background: #fee2e2; padding: 8px 30px 8px 12px; border-radius: 4px; margin-top: 8px; font-size: 14px;'>
+            <button onclick="document.getElementById('{warning_id}').style.display='none'" 
+                    style='position: absolute; top: 4px; right: 5px; background: none; border: none; color: #dc2626; font-size: 18px; cursor: pointer; padding: 0 5px; opacity: 0.6;' 
+                    onmouseover='this.style.opacity="1"' onmouseout='this.style.opacity="0.6"'>×</button>
+            {error_msg}
+        </div>
+        """
+        return updated_resources, resources_html, gr.update(value=warning_html, visible=True)
+    else:
+        # Clear any existing error messages
+        return updated_resources, resources_html, gr.update(visible=False)
+
+
+def refresh_url_resource(resource_index, resources):
+    """Refresh a URL resource by re-downloading its content."""
+    if not resources or resource_index >= len(resources):
+        return resources, None
+
+    resource = resources[resource_index]
+
+    # Only refresh URL resources
+    if resource.get("resource_type") != "url" or not resource.get("source_url"):
+        return resources, "Error: This is not a URL resource"
+
+    try:
+        # Re-download content from the URL
+        url = resource["source_url"]
+        content = extract_text_from_url(url)
+
+        # Write updated content to the same file path
+        with open(resource["path"], "w", encoding="utf-8") as f:
+            f.write(content)
+
+        # Update file size
+        file_size = os.path.getsize(resource["path"])
+        if file_size < 1024:
+            size_str = f"{file_size} B"
+        elif file_size < 1024 * 1024:
+            size_str = f"{file_size / 1024:.1f} KB"
+        else:
+            size_str = f"{file_size / (1024 * 1024):.1f} MB"
+
+        # Update the resource info
+        resources[resource_index]["size"] = size_str
+
+        return resources, None  # Success, no error
+
+    except Exception as e:
+        error_msg = f"Failed to refresh URL content: {str(e)}"
+        return resources, error_msg
+
+
 def render_start_resources(resources):
     print(f"DEBUG render_start_resources called with {len(resources) if resources else 0} resources")
     if resources and len(resources) > 0:
@@ -2403,17 +2572,20 @@ def render_start_resources(resources):
         for idx, resource in enumerate(resources):
             print(f"  Rendering resource: {resource['name']}")
 
-            # Check if this is a URL resource
-            is_url_resource = "url" in resource
+            # Check if this is a URL resource based on resource_type or legacy url field
+            is_url_resource = resource.get("resource_type") == "url" or "url" in resource
             resource_icon = "🌐" if is_url_resource else "📄"
             resource_class = "url-resource" if is_url_resource else "file-resource"
 
             # Create tooltip text
             if is_url_resource:
-                tooltip_text = f"Downloaded from: {resource['url']}"
+                source_url = resource.get("source_url") or resource.get("url", "")
+                tooltip_text = f"Downloaded from: {source_url}"
             else:
                 tooltip_text = f"File: {resource['name']}"
 
+            # Create different templates for URL vs file resources
+            # File resource template with delete button only
             html_content += f"""
                 <div class="dropped-resource {resource_class}" title="{tooltip_text}">
                     <span class="resource-icon">{resource_icon}</span>
@@ -3635,6 +3807,13 @@ def create_app():
                             "Delete Panel Resource", visible=False, elem_id="delete-panel-resource-trigger"
                         )
 
+                        # Hidden components for refreshing URL resources from panel
+                        refresh_panel_resource_path = gr.Textbox(visible=False, elem_id="refresh-panel-resource-path")
+                        refresh_panel_resource_index = gr.Textbox(visible=False, elem_id="refresh-panel-resource-index")
+                        refresh_panel_resource_btn = gr.Button(
+                            "Refresh Panel Resource", visible=False, elem_id="refresh-panel-resource-btn"
+                        )
+
                         # Hidden components for updating resource descriptions
                         update_desc_block_id = gr.Textbox(visible=False, elem_id="update-desc-block-id")
                         update_desc_resource_path = gr.Textbox(visible=False, elem_id="update-desc-resource-path")
@@ -3908,6 +4087,20 @@ def create_app():
                 gr_focused_block_state,
             ],
             outputs=[gr_references_state, gr_blocks_state, json_output, blocks_display],
+        )
+
+        # Resource panel refresh handler
+        refresh_panel_resource_btn.click(
+            fn=refresh_resource_from_panel,
+            inputs=[
+                gr_references_state,
+                refresh_panel_resource_path,
+                refresh_panel_resource_index,
+                doc_title,
+                doc_description,
+                gr_blocks_state,
+            ],
+            outputs=[gr_references_state, gr_blocks_state, json_output, resources_display],
         )
 
         # Update resource description handler - don't re-render blocks to avoid interrupting typing
@@ -4200,11 +4393,33 @@ def create_app():
             "Remove", elem_id="start-remove-resource-btn", visible=True, elem_classes="hidden-component"
         )
 
+        # Hidden inputs for Start tab URL resource refresh
+        start_refresh_url_index = gr.Textbox(
+            elem_id="start-refresh-url-index", visible=True, elem_classes="hidden-component"
+        )
+        start_refresh_url_name = gr.Textbox(
+            elem_id="start-refresh-url-name", visible=True, elem_classes="hidden-component"
+        )
+        start_refresh_url_btn = gr.Button(
+            "Refresh URL", elem_id="start-refresh-url-btn", visible=True, elem_classes="hidden-component"
+        )
+
         # Start tab resource removal handler
         start_remove_resource_btn.click(
             fn=remove_start_resource,
             inputs=[gr_start_attached_references_state, start_remove_resource_index, start_remove_resource_name],
             outputs=[gr_start_attached_references_state, ui_start_tab_attached_references_display],
+        )
+
+        # Start tab URL resource refresh handler
+        start_refresh_url_btn.click(
+            fn=handle_refresh_start_url_resource,
+            inputs=[start_refresh_url_index, gr_start_attached_references_state],
+            outputs=[
+                gr_start_attached_references_state,
+                ui_start_tab_attached_references_display,
+                ui_start_tab_url_warning,
+            ],
         )
 
     return app
