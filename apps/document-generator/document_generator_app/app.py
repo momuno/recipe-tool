@@ -750,6 +750,8 @@ def generate_document_json(title, description, resources, blocks, save_inline=Fa
             "path": resource["path"],
             "title": title,
             "description": description,
+            "resource_type": resource.get("resource_type", "file"),  # Include resource type
+            "source_url": resource.get("source_url"),  # Include source URL if present
         })
 
     # Helper function to build nested sections based on indentation
@@ -1093,14 +1095,14 @@ def refresh_resource_from_panel(resources, resource_path, resource_index, title,
         # Re-generate HTML for resources display
         resources_html = generate_resource_html(resources)
         json_str = generate_outline_json_from_state(title, description, resources, blocks)
-        return resources, blocks, json_str, resources_html, error_msg
+        return resources, blocks, json_str
 
     # Only refresh URL resources
     if resource.get("resource_type") != "url" or not resource.get("source_url"):
         error_msg = "This is not a URL resource"
         resources_html = generate_resource_html(resources)
         json_str = generate_outline_json_from_state(title, description, resources, blocks)
-        return resources, blocks, json_str, resources_html, error_msg
+        return resources, blocks, json_str
 
     try:
         # Re-download content from the URL
@@ -1139,7 +1141,7 @@ def refresh_resource_from_panel(resources, resource_path, resource_index, title,
         # Still regenerate the display
         resources_html = generate_resource_html(resources)
         json_str = generate_outline_json_from_state(title, description, resources, blocks)
-        return resources, blocks, json_str, resources_html, error_msg
+        return resources, blocks, json_str
 
 
 def delete_resource_from_panel(resources, resource_path, title, description, blocks):
@@ -2044,9 +2046,14 @@ async def handle_start_draft_click(prompt, resources, session_id=None):
             title = outline_data.get("title", "Untitled Document")
             description = outline_data.get("general_instruction", "")
 
-            # Process resources
-            resources = []
+            # Process resources - preserve metadata from original resources
+            processed_resources = []
             session_files_dir = session_manager.get_files_dir(session_id)
+
+            # Create a lookup for original resource metadata by path
+            original_resources_by_path = {}
+            for orig_res in resources or []:
+                original_resources_by_path[orig_res.get("path", "")] = orig_res
 
             for res_data in outline_data.get("resources", []):
                 resource_path = res_data.get("path", "")
@@ -2060,11 +2067,19 @@ async def handle_start_draft_click(prompt, resources, session_id=None):
 
                             shutil.copy2(source_path, target_path)
 
-                        resources.append({
+                        # Find original resource metadata
+                        original_resource = original_resources_by_path.get(resource_path, {})
+
+                        processed_resources.append({
                             "key": res_data.get("key", ""),
                             "name": source_path.name,
                             "path": str(target_path),
                             "description": res_data.get("description", ""),
+                            # Preserve original metadata, fallback to outline data, then defaults
+                            "resource_type": (
+                                original_resource.get("resource_type") or res_data.get("resource_type", "file")
+                            ),
+                            "source_url": (original_resource.get("source_url") or res_data.get("source_url")),
                         })
 
             # Convert sections to blocks
@@ -2123,7 +2138,7 @@ async def handle_start_draft_click(prompt, resources, session_id=None):
             return (
                 title,  # doc_title
                 description,  # doc_description
-                resources,  # gr_references_state
+                processed_resources,  # gr_references_state
                 blocks,  # gr_blocks_state
                 json_str,  # json_output
                 session_id,  # gr_session_id
@@ -3201,7 +3216,6 @@ def create_app():
                             )
                             # File upload dropzone
                             ui_start_tab_file_upload = gr.File(
-                                label="Drop files here or click to upload",
                                 file_count="multiple",
                                 file_types=SUPPORTED_FILE_TYPES,
                                 elem_classes="start-file-upload-dropzone",
@@ -3499,7 +3513,6 @@ def create_app():
                 with gr.Column(scale=1, elem_classes="resources-col"):
                     # Drag and drop file upload component
                     file_upload = gr.File(
-                        label="Drop Text File Here",
                         file_count="multiple",
                         file_types=SUPPORTED_FILE_TYPES,
                         elem_classes="file-upload-dropzone",
@@ -3523,6 +3536,11 @@ def create_app():
                                 )
                             else:
                                 for idx, resource in enumerate(resources):
+                                    # Check if this is a URL resource
+                                    is_url_resource = resource.get("resource_type") == "url" or "url" in resource
+                                    print("resource type: ", resource.get("resource_type"))
+                                    source_url = resource.get("source_url") or resource.get("url", "")
+
                                     with gr.Group(elem_classes="resource-item-gradio"):
                                         # Hidden element containing resource path for drag and drop
                                         gr.HTML(
@@ -3541,9 +3559,18 @@ def create_app():
                                                     scale=1,
                                                 )
 
-                                                delete_btn = gr.Button(
-                                                    "🗑", elem_classes="resource-delete-btn", size="sm"
-                                                )
+                                                # Show different button combinations based on resource type
+                                                with gr.Row():
+                                                    if is_url_resource:
+                                                        # URL resource: refresh button + delete button
+                                                        refresh_btn = gr.Button(
+                                                            "🔄",
+                                                            elem_classes="resource-refresh-btn",
+                                                            size="sm",
+                                                        )
+                                                    delete_btn = gr.Button(
+                                                        "🗑", elem_classes="resource-delete-btn", size="sm"
+                                                    )
 
                                                 # Resource description
                                                 resource_desc = gr.Textbox(
@@ -3556,26 +3583,65 @@ def create_app():
                                                     scale=1,
                                                 )
 
-                                                # Filename display
+                                                # Filename display with different icons and tooltips
+                                                if is_url_resource:
+                                                    filename_html = f'<div title="{source_url}">🌐 {resource["name"]} (from URL)</div>'
+                                                else:
+                                                    filename_html = f"<div>📄 {resource['name']}</div>"
+
                                                 gr.HTML(
                                                     elem_classes="resource-filename",
-                                                    value=f"<div>  {resource['name']}</div>",
+                                                    value=filename_html,
                                                 )
-
-                                        # File replacement upload area
-                                        replace_file = gr.File(
-                                            label="Drop file here to replace",
-                                            file_types=SUPPORTED_FILE_TYPES,
-                                            elem_classes="resource-upload-gradio",
-                                            scale=1,
-                                            show_label=False,
-                                        )
-
-                                        # Warning message for protected files
-                                        replace_warning = gr.HTML(visible=False)
 
                                         # Connect events for this resource
                                         resource_path = resource["path"]
+
+                                        # Show different replacement areas based on resource type
+                                        if not is_url_resource:
+                                            # File resource: show file upload area
+                                            replace_file = gr.File(
+                                                label="Drop file here to replace",
+                                                file_types=SUPPORTED_FILE_TYPES,
+                                                elem_classes="resource-upload-gradio",
+                                                scale=1,
+                                                show_label=False,
+                                            )
+
+                                            # File replacement event handler
+                                            replace_file.upload(
+                                                fn=replace_resource_file_gradio,
+                                                inputs=[
+                                                    gr_references_state,
+                                                    gr.State(resource_path),
+                                                    replace_file,
+                                                    doc_title,
+                                                    doc_description,
+                                                    gr_blocks_state,
+                                                    gr_session_id,
+                                                ],
+                                                outputs=[
+                                                    gr_references_state,
+                                                    json_output,
+                                                    replace_file,
+                                                    replace_warning,
+                                                ],
+                                            ).then(
+                                                # Force JSON update after resources render
+                                                fn=lambda title, desc, res, blocks: generate_outline_json_from_state(
+                                                    title, desc, res, blocks
+                                                ),
+                                                inputs=[
+                                                    doc_title,
+                                                    doc_description,
+                                                    gr_references_state,
+                                                    gr_blocks_state,
+                                                ],
+                                                outputs=[json_output],
+                                            )
+
+                                        # Warning message for protected files
+                                        replace_warning = gr.HTML(visible=False)
 
                                         # Title update - don't update gr_references_state to avoid re-render
                                         resource_title.change(
@@ -3631,32 +3697,24 @@ def create_app():
                                             ],
                                         )
 
-                                        # File replacement
-                                        replace_file.upload(
-                                            fn=replace_resource_file_gradio,
-                                            inputs=[
-                                                gr_references_state,
-                                                gr.State(resource_path),
-                                                replace_file,
-                                                doc_title,
-                                                doc_description,
-                                                gr_blocks_state,
-                                                gr_session_id,
-                                            ],
-                                            outputs=[
-                                                gr_references_state,
-                                                json_output,
-                                                replace_file,
-                                                replace_warning,
-                                            ],
-                                        ).then(
-                                            # Force JSON update after resources render
-                                            fn=lambda title, desc, res, blocks: generate_outline_json_from_state(
-                                                title, desc, res, blocks
-                                            ),
-                                            inputs=[doc_title, doc_description, gr_references_state, gr_blocks_state],
-                                            outputs=[json_output],
-                                        )
+                                        # Add refresh button handler for URL resources
+                                        if is_url_resource:
+                                            refresh_btn.click(
+                                                fn=refresh_resource_from_panel,
+                                                inputs=[
+                                                    gr_references_state,
+                                                    gr.State(resource_path),
+                                                    gr.State(idx),  # resource index
+                                                    doc_title,
+                                                    doc_description,
+                                                    gr_blocks_state,
+                                                ],
+                                                outputs=[
+                                                    gr_references_state,
+                                                    gr_blocks_state,
+                                                    json_output,
+                                                ],
+                                            )
 
                 # Workspace column: AI, H, T buttons (aligned left)
                 with gr.Column(scale=1, elem_classes="workspace-col"):
@@ -4100,7 +4158,7 @@ def create_app():
                 doc_description,
                 gr_blocks_state,
             ],
-            outputs=[gr_references_state, gr_blocks_state, json_output, resources_display],
+            outputs=[gr_references_state, gr_blocks_state, json_output],
         )
 
         # Update resource description handler - don't re-render blocks to avoid interrupting typing
