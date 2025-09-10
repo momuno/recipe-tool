@@ -1081,7 +1081,7 @@ def generate_resource_html(resources):
 
 def refresh_resource_from_panel(resources, resource_path, resource_index, title, description, blocks):
     """Refresh a URL resource from the resource panel."""
-    # print(f"DEBUG: Refreshing resource from panel: {resource_path} at index {resource_index}")
+    print(f"DEBUG: Refreshing resource from panel: {resource_path} at index {resource_index}")
 
     # Find the resource by path
     resource = None
@@ -1107,7 +1107,9 @@ def refresh_resource_from_panel(resources, resource_path, resource_index, title,
     try:
         # Re-download content from the URL
         url = resource["source_url"]
+        print(f"DEBUG: Re-downloading resource from {url}")
         content = extract_text_from_url(url)
+        
 
         # Write updated content to the same file path
         with open(resource["path"], "w", encoding="utf-8") as f:
@@ -1126,7 +1128,7 @@ def refresh_resource_from_panel(resources, resource_path, resource_index, title,
         resource["size"] = size_str
 
         # Re-generate HTML for resources display
-        resources_html = generate_resource_html(resources)
+        #resources_html = generate_resource_html(resources)
 
         # Regenerate outline with updated resources
         json_str = generate_outline_json_from_state(title, description, resources, blocks)
@@ -1139,7 +1141,7 @@ def refresh_resource_from_panel(resources, resource_path, resource_index, title,
         print(f"ERROR: {error_msg}")
 
         # Still regenerate the display
-        resources_html = generate_resource_html(resources)
+        #resources_html = generate_resource_html(resources)
         json_str = generate_outline_json_from_state(title, description, resources, blocks)
         return resources, blocks, json_str
 
@@ -3516,6 +3518,7 @@ def create_app():
 
                         @gr.render(inputs=gr_references_state)
                         def render_resource_components(resources):
+                            print("re-rendering resource components")
                             if not resources:
                                 gr.HTML(
                                     value="<p style='color: #666; font-size: 12px'>(.docx, .md, .csv, .py, .json, .txt, etc.)</p>"
