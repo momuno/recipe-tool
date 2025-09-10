@@ -3033,3 +3033,45 @@ input.no-drop,
         transform: translateY(0);
     }
 }
+
+/* Build+Generate Tab URL Input Styles */
+.build-url-input-row {
+    margin-top: 8px;
+    gap: 8px;
+    align-items: center; /* Center items vertically */
+}
+
+.build-url-input input {
+    font-size: 13px !important;
+    padding: 8px !important;
+}
+
+.build-url-submit-btn {
+    background: var(--secondary-tangerine-light) !important;
+    border: 1px solid #ffcbb8 !important;
+    padding: 4px 12px !important;
+    font-size: 13px !important;
+    font-weight: 500 !important;
+    transition: all 0.2s ease !important;
+    min-height: 32px !important;
+    height: 32px !important;
+    box-shadow: 0 1px 3px rgba(255, 153, 102, 0.15);
+    margin-right: 12px !important;
+    white-space: nowrap;
+}
+
+.build-url-submit-btn:hover {
+    background: #ffcbb8 !important;
+    border-color: var(--secondary-tangerine) !important;
+    transform: translateY(-1px);
+    box-shadow: 0 3px 8px rgba(255, 153, 102, 0.2);
+}
+
+.build-url-warning {
+    margin-top: 8px;
+    animation: slideDown 0.3s ease-out;
+}
+
+.build-url-warning .html-container {
+    padding: 0px;
+}

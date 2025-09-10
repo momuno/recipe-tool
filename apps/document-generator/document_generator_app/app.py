@@ -1109,7 +1109,6 @@ def refresh_resource_from_panel(resources, resource_path, resource_index, title,
         url = resource["source_url"]
         print(f"DEBUG: Re-downloading resource from {url}")
         content = extract_text_from_url(url)
-        
 
         # Write updated content to the same file path
         with open(resource["path"], "w", encoding="utf-8") as f:
@@ -1128,7 +1127,7 @@ def refresh_resource_from_panel(resources, resource_path, resource_index, title,
         resource["size"] = size_str
 
         # Re-generate HTML for resources display
-        #resources_html = generate_resource_html(resources)
+        # resources_html = generate_resource_html(resources)
 
         # Regenerate outline with updated resources
         json_str = generate_outline_json_from_state(title, description, resources, blocks)
@@ -1141,7 +1140,7 @@ def refresh_resource_from_panel(resources, resource_path, resource_index, title,
         print(f"ERROR: {error_msg}")
 
         # Still regenerate the display
-        #resources_html = generate_resource_html(resources)
+        # resources_html = generate_resource_html(resources)
         json_str = generate_outline_json_from_state(title, description, resources, blocks)
         return resources, blocks, json_str
 
@@ -2836,6 +2835,48 @@ def handle_ui_start_tab_url_submit_with_render(urls_input, current_resources):
     return new_resources, cleared_input, resources_html, warning_update
 
 
+def handle_build_tab_url_submit(urls_input, current_resources, title, description, blocks, session_id=None):
+    """Handle URL submissions for the Build+Generate tab."""
+    if not urls_input or not urls_input.strip():
+        return current_resources, "", gr.update(visible=False), gr.update()
+
+    # Get or create session ID
+    if not session_id:
+        session_id = str(uuid.uuid4())
+
+    # Get session temp directory
+    files_dir = session_manager.get_files_dir(session_id)
+
+    try:
+        # Download URLs using existing function
+        url_resources = download_urls_to_temp(urls_input, files_dir)
+
+        # Add URL resources to current resources
+        updated_resources = (current_resources or []).copy()
+        updated_resources.extend(url_resources)
+
+        # Regenerate outline JSON
+        json_str = generate_outline_json_from_state(title, description, updated_resources, blocks)
+
+        # Clear input and return success
+        return updated_resources, "", gr.update(visible=False), json_str
+
+    except Exception as e:
+        error_msg = f"Failed to process URLs: {str(e)}"
+        import random
+
+        warning_id = f"warning_{random.randint(1000, 9999)}"
+        error_html = f"""
+        <div id="{warning_id}" style='position: relative; color: #dc2626; background: #fee2e2; padding: 8px 30px 8px 12px; border-radius: 4px; margin-top: 8px; font-size: 14px;'>
+            <button onclick="document.getElementById('{warning_id}').style.display='none'" 
+                    style='position: absolute; top: 4px; right: 5px; background: none; border: none; color: #dc2626; font-size: 18px; cursor: pointer; padding: 0 5px; opacity: 0.6;' 
+                    onmouseover='this.style.opacity="1"' onmouseout='this.style.opacity="0.6"'>×</button>
+            {error_msg}
+        </div>
+        """
+        return current_resources, urls_input, gr.update(value=error_html, visible=True), gr.update()
+
+
 def extract_resources_from_docpack(docpack_path, session_id=None):
     """Extract resources from a docpack file."""
     # Define allowed extensions for start tab (same as file upload)
@@ -3513,6 +3554,24 @@ def create_app():
                     # Warning message for protected files - placed before the render area
                     file_upload_warning = gr.HTML(visible=False, elem_classes="file-upload-warning")
 
+                    # URL input section
+                    with gr.Row(elem_classes="build-url-input-row"):
+                        build_url_input = gr.Textbox(
+                            placeholder="Enter web URLs (comma separated): https://example.com, https://docs.example.com",
+                            show_label=False,
+                            elem_classes="build-url-input",
+                            scale=4,
+                            lines=1,
+                        )
+                        build_url_submit_btn = gr.Button(
+                            "Add URLs",
+                            elem_classes="build-url-submit-btn",
+                            scale=1,
+                        )
+
+                    # URL warning message
+                    build_url_warning = gr.HTML(visible=False, elem_classes="build-url-warning")
+
                     # Container for dynamic resource components
                     with gr.Column(elem_classes="resources-display-area"):
 
@@ -4187,6 +4246,13 @@ def create_app():
             fn=lambda title, desc, res, blocks: generate_outline_json_from_state(title, desc, res, blocks),
             inputs=[doc_title, doc_description, gr_references_state, gr_blocks_state],
             outputs=[json_output],
+        )
+
+        # URL submit handler for Build+Generate tab
+        build_url_submit_btn.click(
+            fn=handle_build_tab_url_submit,
+            inputs=[build_url_input, gr_references_state, doc_title, doc_description, gr_blocks_state, gr_session_id],
+            outputs=[gr_references_state, build_url_input, build_url_warning, json_output],
         )
 
         # Generate document handler - update to return the download button state
