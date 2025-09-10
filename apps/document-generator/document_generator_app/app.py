@@ -702,20 +702,20 @@ async def handle_document_generation(title, description, resources, blocks, sess
         docx_filename = f"{base_filename}.docx"
         docx_file_path = os.path.join(temp_dir, docx_filename)
         markdown_to_docx(generated_content, docx_file_path)
-        print(f"DEBUG: Created DOCX file at: {docx_file_path}")
+        # print(f"DEBUG: Created DOCX file at: {docx_file_path}")
 
         # Save as Markdown
         markdown_filename = f"{base_filename}.md"
         markdown_file_path = os.path.join(temp_dir, markdown_filename)
         with open(markdown_file_path, "w", encoding="utf-8") as f:
             f.write(generated_content)
-        print(f"DEBUG: Created Markdown file at: {markdown_file_path}")
+        # print(f"DEBUG: Created Markdown file at: {markdown_file_path}")
 
         # Verify files exist
-        if os.path.exists(docx_file_path):
-            print(f"DEBUG: DOCX file exists, size: {os.path.getsize(docx_file_path)} bytes")
-        if os.path.exists(markdown_file_path):
-            print(f"DEBUG: Markdown file exists, size: {os.path.getsize(markdown_file_path)} bytes")
+        # if os.path.exists(docx_file_path):
+        # print(f"DEBUG: DOCX file exists, size: {os.path.getsize(docx_file_path)} bytes")
+        # if os.path.exists(markdown_file_path):
+        # print(f"DEBUG: Markdown file exists, size: {os.path.getsize(markdown_file_path)} bytes")
 
         return json_str, generated_content, docx_file_path, markdown_file_path
 
@@ -888,8 +888,8 @@ def generate_outline_json_from_state(title, description, resources, blocks):
 
     global current_document_state
     current_document_state = {"title": title, "outline_json": json_str, "blocks": blocks}
-    print(f"DEBUG: generate_outline_json_from_state called with title='{title}'")
-    print(f"DEBUG: Updated global current_document_state: {current_document_state}")
+    # print(f"DEBUG: generate_outline_json_from_state called with title='{title}'")
+    # print(f"DEBUG: Updated global current_document_state: {current_document_state}")
 
     return json_str
 
@@ -1081,7 +1081,7 @@ def generate_resource_html(resources):
 
 def refresh_resource_from_panel(resources, resource_path, resource_index, title, description, blocks):
     """Refresh a URL resource from the resource panel."""
-    print(f"DEBUG: Refreshing resource from panel: {resource_path} at index {resource_index}")
+    # print(f"DEBUG: Refreshing resource from panel: {resource_path} at index {resource_index}")
 
     # Find the resource by path
     resource = None
@@ -1131,8 +1131,8 @@ def refresh_resource_from_panel(resources, resource_path, resource_index, title,
         # Regenerate outline with updated resources
         json_str = generate_outline_json_from_state(title, description, resources, blocks)
 
-        print(f"DEBUG: Successfully refreshed URL resource: {resource['name']}")
-        return resources, blocks, json_str, resources_html, None  # No error
+        # print(f"DEBUG: Successfully refreshed URL resource: {resource['name']}")
+        return resources, blocks, json_str
 
     except Exception as e:
         error_msg = f"Failed to refresh URL content: {str(e)}"
@@ -1263,8 +1263,6 @@ def load_example(example_id, session_id=None):
             gr.update(),
             gr.update(),
             gr.update(),
-            gr.update(),
-            gr.update(),
             session_id,
             gr.update(),
             gr.update(),
@@ -1290,9 +1288,11 @@ def load_example(example_id, session_id=None):
             gr.update(),  # description
             gr.update(),  # resources
             gr.update(),  # blocks
-            gr.update(),  # outline
             json.dumps({"error": error_msg}, indent=2),  # json_output
             session_id,  # session_id
+            gr.update(),  # generated_content_html
+            gr.update(),  # generated_content
+            gr.update(),  # save_doc_btn
         )
 
     # Use the import_outline function to load the example
@@ -1300,18 +1300,17 @@ def load_example(example_id, session_id=None):
     # import_outline now returns 11 values matching import_file.change outputs
     # import_outline returns: title, desc, resources, blocks, outline, json, import_file, session_id, gen_html, gen_content, save_btn
     # load_example needs: title, desc, resources, blocks, outline, json, session_id, gen_html, gen_content, save_btn
-    # We need to skip import_file (at index 6) from the result
+    # We need to skip import_file (at index 5) from the result
     return (
         result[0],  # title
         result[1],  # description
         result[2],  # resources
         result[3],  # blocks
-        result[4],  # outline
-        result[5],  # json_str
-        result[7],  # session_id (skip import_file at 6)
-        result[8],  # generated_content_html
-        result[9],  # generated_content
-        result[10],  # save_doc_btn
+        result[4],  # json_str
+        result[6],  # session_id (skip import_file at 5)
+        result[7],  # generated_content_html
+        result[8],  # generated_content
+        result[9],  # save_doc_btn
     )
 
 
@@ -1324,7 +1323,6 @@ def import_outline(file_path, session_id=None):
             gr.update(),  # description
             gr.update(),  # resources
             gr.update(),  # blocks
-            gr.update(),  # outline
             gr.update(),  # json_output
             None,  # import_file
             session_id,  # gr_session_id
@@ -1410,7 +1408,6 @@ def import_outline(file_path, session_id=None):
                 gr.update(),  # description
                 gr.update(),  # resources
                 gr.update(),  # blocks
-                gr.update(),  # outline
                 json.dumps({"error": error_msg}, indent=2),  # json_output
                 None,  # import_file
                 session_id,  # session_id
@@ -1471,7 +1468,6 @@ def import_outline(file_path, session_id=None):
                 gr.update(),  # description
                 gr.update(),  # resources
                 gr.update(),  # blocks
-                gr.update(),  # outline
                 json.dumps({"error": error_msg}, indent=2),  # json_output
                 None,  # import_file
                 session_id,  # session_id
@@ -1614,7 +1610,6 @@ def import_outline(file_path, session_id=None):
             gr.update(),  # description
             gr.update(),  # resources
             gr.update(),  # blocks
-            gr.update(),  # outline
             gr.update(),  # json_output
             None,  # import_file
             session_id,  # gr_session_id
@@ -1679,12 +1674,6 @@ def create_docpack_from_current_state():
 
     global current_document_state
 
-    print(f"=== CREATING DOCPACK at {datetime.now().isoformat()} ===")
-    print(f"Title: {current_document_state.get('title', 'N/A') if current_document_state else 'No state'}")
-    print(f"Has outline_json: {'outline_json' in current_document_state if current_document_state else False}")
-    print(f"Number of blocks: {len(current_document_state.get('blocks', [])) if current_document_state else 0}")
-    print(f"Full current_document_state: {current_document_state}")
-
     if not current_document_state:
         print("ERROR: No current_document_state available for docpack creation")
         return None
@@ -1692,14 +1681,14 @@ def create_docpack_from_current_state():
     try:
         title = current_document_state.get("title", "Document")
         outline_json = current_document_state.get("outline_json", "{}")
-        print(f"DEBUG: Using title '{title}' for docpack filename")
+        # print(f"DEBUG: Using title '{title}' for docpack filename")
 
         # Create filename from title and timestamp with milliseconds to ensure uniqueness
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         milliseconds = int(time.time() * 1000) % 1000
         safe_title = "".join(c if c.isalnum() or c in " -_" else "_" for c in title)[:50]
         docpack_name = f"{safe_title}_{timestamp}_{milliseconds}.docpack"
-        print(f"DEBUG: Generated filename: {docpack_name} (from title: '{title}', timestamp: {timestamp})")
+        # print(f"DEBUG: Generated filename: {docpack_name} (from title: '{title}', timestamp: {timestamp})")
 
         # Create a temporary file for the docpack
         temp_dir = Path(tempfile.gettempdir())
@@ -1742,7 +1731,7 @@ def create_docpack_from_current_state():
 
 def render_block_resources(block_resources, block_type, block_id):
     """Render the resources inside a block."""
-    print(f"render_block_resources for block {block_id}: {len(block_resources) if block_resources else 0} resources")
+    # print(f"render_block_resources for block {block_id}: {len(block_resources) if block_resources else 0} resources")
 
     if block_type == "text":
         # Text blocks always show the drop zone, never show resources
@@ -1775,11 +1764,11 @@ def render_blocks(blocks, focused_block_id=None):
 
     timestamp = int(time.time() * 1000)
 
-    print(f"render_blocks called with {len(blocks) if blocks else 0} blocks at {timestamp}")
+    # print(f"render_blocks called with {len(blocks) if blocks else 0} blocks at {timestamp}")
     if blocks:
         for i, block in enumerate(blocks):
             res_count = len(block.get("resources", []))
-            print(f"  Block {i} ({block['id']}): {res_count} resources")
+        #  print(f"  Block {i} ({block['id']}): {res_count} resources")
 
     if not blocks:
         return "<div class='empty-blocks-message'>Click '+ Add AI' to add an AI generated section.</div><div class='empty-blocks-message'>Click '+ Add Text' to add a traditional text section.</div>"
@@ -1977,9 +1966,9 @@ def handle_ui_start_tab_file_upload(files, current_resources):
 def handle_start_draft_click_wrapper(prompt, resources, session_id=None):
     """Wrapper to handle the Draft button click synchronously."""
     print("DEBUG: handle_start_draft_click_wrapper called")
-    print(f"DEBUG: prompt type: {type(prompt)}, value: '{prompt}'")
-    print(f"DEBUG: resources type: {type(resources)}, value: {resources}")
-    print(f"DEBUG: session_id: {session_id}")
+    # print(f"DEBUG: prompt type: {type(prompt)}, value: '{prompt}'")
+    # print(f"DEBUG: resources type: {type(resources)}, value: {resources}")
+    # print(f"DEBUG: session_id: {session_id}")
 
     # Run the async function synchronously
 
@@ -1989,11 +1978,11 @@ def handle_start_draft_click_wrapper(prompt, resources, session_id=None):
 async def handle_start_draft_click(prompt, resources, session_id=None):
     """Handle the Draft button click on the Start tab."""
     print("DEBUG: In async handle_start_draft_click")
-    print(f"DEBUG: prompt value in async: '{prompt}'")
+    # print(f"DEBUG: prompt value in async: '{prompt}'")
 
     if not prompt or not prompt.strip():
         error_msg = "Please enter a description of what you'd like to create."
-        print(f"DEBUG: No prompt provided, returning error: {error_msg}")
+        # print(f"DEBUG: No prompt provided, returning error: {error_msg}")
         # Return 15 values to match outputs (added loading message and button)
         return (
             gr.update(),  # doc_title
@@ -2025,22 +2014,22 @@ async def handle_start_draft_click(prompt, resources, session_id=None):
         # Get or create session ID
         if not session_id:
             session_id = str(uuid.uuid4())
-            print(f"DEBUG: Created new session_id: {session_id}")
+            # print(f"DEBUG: Created new session_id: {session_id}")
 
-        print(f"DEBUG: Calling generate_docpack_from_prompt with {len(resources) if resources else 0} resources")
+        # print(f"DEBUG: Calling generate_docpack_from_prompt with {len(resources) if resources else 0} resources")
 
         # Call the docpack generation function
         docpack_path, outline_json = await generate_docpack_from_prompt(
             prompt=prompt.strip(), resources=resources or [], session_id=session_id, dev_mode=IS_DEV_MODE
         )
 
-        print(f"DEBUG: Received docpack_path: {docpack_path}")
-        print(f"DEBUG: Received outline_json length: {len(outline_json) if outline_json else 0}")
+        # print(f"DEBUG: Received docpack_path: {docpack_path}")
+        # print(f"DEBUG: Received outline_json length: {len(outline_json) if outline_json else 0}")
 
         # Parse the outline JSON
         if outline_json:
             outline_data = json.loads(outline_json)
-            print(f"DEBUG: Successfully parsed outline with title: {outline_data.get('title', 'No title')}")
+            # print(f"DEBUG: Successfully parsed outline with title: {outline_data.get('title', 'No title')}")
 
             # Process the outline data similar to import_outline function
             title = outline_data.get("title", "Untitled Document")
@@ -2105,9 +2094,9 @@ async def handle_start_draft_click(prompt, resources, session_id=None):
 
                         # Handle refs
                         refs = section.get("refs", [])
-                        if refs and resources:
+                        if refs and processed_resources:
                             for ref in refs:
-                                for resource in resources:
+                                for resource in processed_resources:
                                     if resource.get("key") == ref:
                                         block["resources"].append(resource)
                                         break
@@ -2129,8 +2118,8 @@ async def handle_start_draft_click(prompt, resources, session_id=None):
             if blocks and len(blocks) > 0:
                 blocks[0]["collapsed"] = False
 
-            # Generate the JSON for the outline
-            json_str = json.dumps(outline_data, indent=2)
+            # Generate the JSON for the outline using current state (includes proper refs)
+            json_str = generate_outline_json_from_state(title, description, processed_resources, blocks)
 
             # Return all the values needed to populate the Draft+Generate tab
             # This matches what import_outline returns
@@ -2154,14 +2143,13 @@ async def handle_start_draft_click(prompt, resources, session_id=None):
             )
         else:
             error_msg = "Failed to generate outline. Please try again."
-            print(f"DEBUG: No outline generated, returning error: {error_msg}")
+            # print(f"DEBUG: No outline generated, returning error: {error_msg}")
             # Return 15 values to match outputs
             return (
                 gr.update(),  # doc_title
                 gr.update(),  # doc_description
                 gr.update(),  # gr_references_state
                 gr.update(),  # gr_blocks_state
-                gr.update(),  # outline_state
                 gr.update(),  # json_output
                 session_id,  # gr_session_id
                 gr.update(),  # generated_content_html
@@ -2195,7 +2183,6 @@ async def handle_start_draft_click(prompt, resources, session_id=None):
             gr.update(),  # doc_description
             gr.update(),  # gr_references_state
             gr.update(),  # gr_blocks_state
-            gr.update(),  # outline_state
             gr.update(),  # json_output
             session_id,  # gr_session_id
             gr.update(),  # generated_content_html
@@ -2226,7 +2213,7 @@ def handle_file_upload(files, current_resources, title, description, blocks, ses
         return current_resources, None, gr.update(), gr.update(), session_id, gr.update()
 
     # Debug: Check what we're receiving
-    print(f"DEBUG handle_file_upload - title: {title}, description: {description}, blocks: {blocks}")
+    # print(f"DEBUGhandle_file_upload - title: {title}, description: {description}, blocks: {blocks}")
 
     # Get or create session ID
     if not session_id:
@@ -2272,12 +2259,12 @@ def handle_file_upload(files, current_resources, title, description, blocks, ses
     json_str = generate_outline_json_from_state(title, description, new_resources, blocks)
 
     # Debug: Check what we're returning
-    print(f"DEBUG handle_file_upload - returning json_str: {json_str[:100]}...")
-    print("DEBUG handle_file_upload - full return values:")
-    print(f"  - new_resources length: {len(new_resources)}")
-    print("  - file_upload clear: None")
-    print(f"  - json_str type: {type(json_str)}, length: {len(json_str)}")
-    print(f"  - session_id: {session_id}")
+    # print(f"DEBUGhandle_file_upload - returning json_str: {json_str[:100]}...")
+    # print("DEBUG handle_file_upload - full return values:")
+    # print(f"  - new_resources length: {len(new_resources)}")
+    # print("  - file_upload clear: None")
+    # print(f"  - json_str type: {type(json_str)}, length: {len(json_str)}")fv
+    # print(f"  - session_id: {session_id}")
 
     # Create warning message if there were any protected files
     if warnings:
@@ -2513,7 +2500,7 @@ def replace_resource_file_gradio(resources, old_resource_path, new_file, title, 
 
 def handle_refresh_start_url_resource(resource_index, resources):
     """Handle refresh URL resource request from Start tab and re-render."""
-    print(f"DEBUG: Refreshing URL resource at index {resource_index}")
+    # print(f"DEBUG: Refreshing URL resource at index {resource_index}")
 
     # Call the refresh function
     updated_resources, error_msg = refresh_url_resource(resource_index, resources)
@@ -2580,7 +2567,7 @@ def refresh_url_resource(resource_index, resources):
 
 
 def render_start_resources(resources):
-    print(f"DEBUG render_start_resources called with {len(resources) if resources else 0} resources")
+    # print(f"DEBUGrender_start_resources called with {len(resources) if resources else 0} resources")
     if resources and len(resources) > 0:
         # Create a flex container for resources
         html_content = '<div class="start-resources-list">'
@@ -2619,10 +2606,10 @@ def render_start_resources(resources):
 def delete_gradio_and_render(resources, path, title, desc, blocks, focused):
     """Delete resource via Gradio button and render blocks."""
     print("\n=== delete_gradio_and_render called ===")
-    new_res, new_blocks, outline, json_str = delete_resource_gradio(resources, path, title, desc, blocks)
+    new_res, new_blocks, json_str = delete_resource_gradio(resources, path, title, desc, blocks)
     blocks_html = render_blocks(new_blocks, focused)
     print("=== delete_gradio_and_render complete ===\n")
-    return new_res, new_blocks, outline, json_str, blocks_html
+    return new_res, new_blocks, json_str, blocks_html
 
 
 def handle_add_ai_block_top(blocks, _, title, description, resources):
@@ -2713,8 +2700,8 @@ async def handle_generate_and_update_download(title, description, resources, blo
     # Re-enable the generate button
     generate_btn_update = gr.update(interactive=True)
 
-    print(f"DEBUG: Returning DOCX path to state: {docx_path}")
-    print(f"DEBUG: Returning Markdown path to state: {markdown_path}")
+    # print(f"DEBUG: Returning DOCX path to state: {docx_path}")
+    # print(f"DEBUG: Returning Markdown path to state: {markdown_path}")
 
     # Return both file paths for state storage
     return (
@@ -2918,23 +2905,23 @@ def extract_resources_from_docpack(docpack_path, session_id=None):
 
     resources = []
     if docpack_path.exists():
-        print(f"DEBUG: Docpack exists at {docpack_path}")
+        # print(f"DEBUG: Docpack exists at {docpack_path}")
         try:
             # Use provided session ID or create a new one
             if not session_id:
                 session_id = str(uuid.uuid4())
-                print(f"DEBUG: Created new session ID: {session_id}")
-            else:
-                print(f"DEBUG: Using existing session ID: {session_id}")
+                # print(f"DEBUG: Created new session ID: {session_id}")
+            # else:
+            # print(f"DEBUG: Using existing session ID: {session_id}")
 
             # Create a temporary directory for extraction
             with tempfile.TemporaryDirectory() as temp_dir:
-                print(f"DEBUG: Created temp directory: {temp_dir}")
+                # print(f"DEBUG: Created temp directory: {temp_dir}")
                 # Extract the docpack - convert temp_dir to Path object
-                print(f"DEBUG: Extracting docpack from {docpack_path} to {temp_dir}")
+                # print(f"DEBUG: Extracting docpack from {docpack_path} to {temp_dir}")
                 json_data, extracted_files = DocpackHandler.extract_package(str(docpack_path), Path(temp_dir))
-                print(f"DEBUG: Extraction successful. Found {len(extracted_files)} files")
-                print(f"DEBUG: JSON data has {len(json_data.get('resources', []))} resources")
+                # print(f"DEBUG: Extraction successful. Found {len(extracted_files)} files")
+                # print(f"DEBUG: JSON data has {len(json_data.get('resources', []))} resources")
 
                 # Process resources from the docpack
                 for res_data in json_data.get("resources", []):
@@ -2988,7 +2975,7 @@ def extract_resources_from_docpack(docpack_path, session_id=None):
         except Exception as e:
             print(f"Error extracting resources from docpack: {e}")
 
-    print(f"DEBUG extract_resources_from_docpack: Returning {len(resources)} resources")
+    # print(f"DEBUGextract_resources_from_docpack: Returning {len(resources)} resources")
     for r in resources:
         print(f"  Resource: {r}")
     return resources
@@ -3007,7 +2994,7 @@ def load_code_readme_example(session_id):
     docpack_path = examples_dir / "readme-generation" / "readme.docpack"
     resources = extract_resources_from_docpack(docpack_path, session_id)
 
-    print(f"DEBUG: Loaded {len(resources)} resources for README example")
+    # print(f"DEBUG: Loaded {len(resources)} resources for README example")
     for r in resources:
         print(f"  - {r['name']} ({r['size']})")
 
@@ -3061,39 +3048,39 @@ def load_performance_review_example(session_id):
 
 def remove_start_resource(resources, index_str, name):
     """Remove a resource from the Start tab by index."""
-    print(
-        f"DEBUG: remove_start_resource called with resources={len(resources) if resources else 0}, index_str='{index_str}', name='{name}'"
-    )
+    # print(
+    #    f"DEBUG: remove_start_resource called with resources={len(resources) if resources else 0}, index_str='{index_str}', name='{name}'"
+    # )
 
     if not resources or not index_str:
-        print("DEBUG: Early return - no resources or no index_str")
+        # print("DEBUG: Early return - no resources or no index_str")
         resources_html = render_start_resources(resources)
         return resources, resources_html
 
     try:
         index = int(index_str)
-        print(f"DEBUG: Parsed index={index}, resources length={len(resources)}")
+        # print(f"DEBUG: Parsed index={index}, resources length={len(resources)}")
 
         if 0 <= index < len(resources):
-            print(f"DEBUG: Index is valid. Resource at index: {resources[index].get('name', 'unknown')}")
+            # print(f"DEBUG: Index is valid. Resource at index: {resources[index].get('name', 'unknown')}")
 
             # Verify the name matches as a safety check
             if resources[index]["name"] == name:
-                print(f"DEBUG: Name matches, removing resource at index {index}")
+                # print(f"DEBUG: Name matches, removing resource at index {index}")
                 new_resources = resources.copy()
                 removed_resource = new_resources.pop(index)
-                print(f"DEBUG: Removed resource: {removed_resource}")
+                # print(f"DEBUG: Removed resource: {removed_resource}")
                 resources_html = render_start_resources(new_resources)
-                print(f"DEBUG: Successfully removed resource, new count: {len(new_resources)}")
+                # print(f"DEBUG: Successfully removed resource, new count: {len(new_resources)}")
                 return new_resources, resources_html
-            else:
-                print(f"DEBUG: Name mismatch - expected '{name}', got '{resources[index]['name']}'")
-        else:
-            print(f"DEBUG: Index {index} out of range for {len(resources)} resources")
+            # else:
+            # print(f"DEBUG: Name mismatch - expected '{name}', got '{resources[index]['name']}'")
+        # else:
+        # print(f"DEBUG: Index {index} out of range for {len(resources)} resources")
     except (ValueError, IndexError) as e:
         print(f"DEBUG: Exception in remove_start_resource: {e}")
 
-    print("DEBUG: No changes made, returning original resources")
+    # print("DEBUG: No changes made, returning original resources")
     resources_html = render_start_resources(resources)
     return resources, resources_html
 
@@ -3596,7 +3583,8 @@ def create_app():
 
                                         # Connect events for this resource
                                         resource_path = resource["path"]
-
+                                        # Warning message for protected files
+                                        replace_warning = gr.HTML(visible=False)
                                         # Show different replacement areas based on resource type
                                         if not is_url_resource:
                                             # File resource: show file upload area
@@ -3639,9 +3627,6 @@ def create_app():
                                                 ],
                                                 outputs=[json_output],
                                             )
-
-                                        # Warning message for protected files
-                                        replace_warning = gr.HTML(visible=False)
 
                                         # Title update - don't update gr_references_state to avoid re-render
                                         resource_title.change(
