@@ -1032,7 +1032,6 @@ def generate_resource_html(resources):
                 f'placeholder="Title" '
                 f"oninput=\"updateResourceTitle('{path}', this.value)\" "
                 f'onclick="event.stopPropagation()" />'
-                f'<span class="resource-refresh" onclick="refreshResourceFromPanel(\'{path}\', {idx})" title="Refresh content from URL">🔄</span>'
                 f'<span class="resource-delete" onclick="deleteResourceFromPanel(\'{path}\')">🗑</span>'
                 f"</div>"
                 f'<div class="resource-description-container">'
@@ -1043,6 +1042,9 @@ def generate_resource_html(resources):
                 f'<button class="desc-expand-btn" onclick="toggleResourceDescription(\'{resource_id}\')">⌵</button>'
                 f"</div>"
                 f'<div class="resource-filename" title="{source_url}">🌐 {resource["name"]} (from URL)</div>'
+                f'<div class="resource-refresh-container">'
+                f'<span class="resource-refresh" onclick="refreshResourceFromPanel(\'{path}\', {idx})" title="Refresh content from URL">🔄 Refresh</span>'
+                f"</div>"
                 f"</div>"
                 f"</div>"
             )
@@ -3608,15 +3610,8 @@ def create_app():
                                                     scale=1,
                                                 )
 
-                                                # Show different button combinations based on resource type
+                                                # Delete button
                                                 with gr.Row():
-                                                    if is_url_resource:
-                                                        # URL resource: refresh button + delete button
-                                                        refresh_btn = gr.Button(
-                                                            "🔄",
-                                                            elem_classes="resource-refresh-btn",
-                                                            size="sm",
-                                                        )
                                                     delete_btn = gr.Button(
                                                         "🗑", elem_classes="resource-delete-btn", size="sm"
                                                     )
@@ -3642,6 +3637,15 @@ def create_app():
                                                     elem_classes="resource-filename",
                                                     value=filename_html,
                                                 )
+
+                                                # Add refresh button for URL resources after filename
+                                                if is_url_resource:
+                                                    with gr.Row():
+                                                        refresh_btn = gr.Button(
+                                                            "🔄 Refresh",
+                                                            elem_classes="resource-refresh-btn",
+                                                            size="sm",
+                                                        )
 
                                         # Connect events for this resource
                                         resource_path = resource["path"]
@@ -4246,6 +4250,12 @@ def create_app():
             fn=lambda title, desc, res, blocks: generate_outline_json_from_state(title, desc, res, blocks),
             inputs=[doc_title, doc_description, gr_references_state, gr_blocks_state],
             outputs=[json_output],
+        ).then(
+            # Trigger drag and drop setup after file upload
+            fn=lambda: None,
+            inputs=[],
+            outputs=[],
+            js="() => { console.log('File upload completed, setting up drag and drop...'); if (window.setupDragAndDrop) { setTimeout(() => window.setupDragAndDrop('After file upload'), 500); setTimeout(() => window.setupDragAndDrop('After file upload - retry'), 1500); } }",
         )
 
         # URL submit handler for Build+Generate tab
@@ -4253,6 +4263,12 @@ def create_app():
             fn=handle_build_tab_url_submit,
             inputs=[build_url_input, gr_references_state, doc_title, doc_description, gr_blocks_state, gr_session_id],
             outputs=[gr_references_state, build_url_input, build_url_warning, json_output],
+        ).then(
+            # Trigger drag and drop setup after URL submit
+            fn=lambda: None,
+            inputs=[],
+            outputs=[],
+            js="() => { console.log('URL submit completed, setting up drag and drop...'); if (window.setupDragAndDrop) { setTimeout(() => window.setupDragAndDrop('After URL submit'), 500); setTimeout(() => window.setupDragAndDrop('After URL submit - retry'), 1500); } }",
         )
 
         # Generate document handler - update to return the download button state

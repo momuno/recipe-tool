@@ -553,6 +553,21 @@ function switchToDraftTab() {
             button.click();
             console.log('Clicked Update + Generate tab');
             found = true;
+            
+            // Set up drag and drop after tab switch with a delay to allow DOM to settle
+            setTimeout(() => {
+                console.log('Setting up drag and drop after tab switch...');
+                setupDragAndDrop();
+            }, 500);
+            
+            // Also set up an additional check after a longer delay to catch late resource rendering
+            setTimeout(() => {
+                const resourceItems = document.querySelectorAll('.resource-item-gradio');
+                if (resourceItems.length > 0) {
+                    console.log('Additional check: Found', resourceItems.length, 'resource items after tab switch, ensuring drag and drop is set up');
+                    setupDragAndDrop();
+                }
+            }, 1500);
         }
     });
     
@@ -1173,32 +1188,96 @@ window.addEventListener('load', function() {
 // Function to set up observer for resources
 function setupResourceObserver() {
     let resourceSetupTimeout;
+    let lastResourceCount = 0;
+    let lastDragSetupTime = 0;
+    
+    // Helper function to throttle drag setup calls (max once per 500ms)
+    function throttledSetupDragAndDrop(reason) {
+        const now = Date.now();
+        if (now - lastDragSetupTime > 500) {
+            console.log(`${reason} - setting up drag and drop`);
+            lastDragSetupTime = now;
+            setupDragAndDrop();
+        } else {
+            console.log(`${reason} - throttled (too recent)`);
+        }
+    }
 
     // Function to observe a resources area
     function observeResourcesArea(resourcesArea) {
         if (!resourcesArea) return;
+        
+        // Initialize resource count
+        lastResourceCount = document.querySelectorAll('.resource-item-gradio, .resource-item').length;
 
         const resourceObserver = new MutationObserver((mutations) => {
             // Clear any pending timeout
             clearTimeout(resourceSetupTimeout);
 
-            // Check if resource items were added
+            // Check if resource items were added, removed, or resources area content changed
             let hasResourceChanges = false;
             mutations.forEach(mutation => {
+                // Check for added nodes that are or contain resource items
                 mutation.addedNodes.forEach(node => {
                     if (node.nodeType === 1 &&
                         (node.classList?.contains('resource-item') ||
-                         node.querySelector?.('.resource-item'))) {
+                         node.classList?.contains('resource-item-gradio') ||
+                         node.querySelector?.('.resource-item') ||
+                         node.querySelector?.('.resource-item-gradio'))) {
                         hasResourceChanges = true;
+                        console.log('Resource item added');
                     }
                 });
+                
+                // Check for removed nodes that were resource items
+                mutation.removedNodes.forEach(node => {
+                    if (node.nodeType === 1 &&
+                        (node.classList?.contains('resource-item') ||
+                         node.classList?.contains('resource-item-gradio') ||
+                         node.querySelector?.('.resource-item') ||
+                         node.querySelector?.('.resource-item-gradio'))) {
+                        hasResourceChanges = true;
+                        console.log('Resource item removed, may need to re-setup remaining items');
+                    }
+                });
+                
+                // Also check if the entire resources area content changed
+                if (mutation.type === 'childList' && 
+                    (mutation.target.classList?.contains('resources-display-area') ||
+                     mutation.target.closest('.resources-display-area'))) {
+                    // Always trigger re-setup when resources area changes, even if no items
+                    hasResourceChanges = true;
+                    const resourceCount = document.querySelectorAll('.resource-item-gradio, .resource-item').length;
+                    console.log('Resources area content changed, current resource count:', resourceCount);
+                }
+                
+                // Additional check: any DOM change that might be related to Gradio re-renders
+                if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
+                    // Check if any added nodes contain resource items (deep search)
+                    mutation.addedNodes.forEach(node => {
+                        if (node.nodeType === 1) {
+                            const foundResourceItems = node.querySelectorAll ? node.querySelectorAll('.resource-item-gradio, .resource-item') : [];
+                            if (foundResourceItems.length > 0) {
+                                hasResourceChanges = true;
+                                console.log('Added node contains resource items, count:', foundResourceItems.length);
+                            }
+                        }
+                    });
+                }
             });
 
+            // Also check if resource count changed (for deletion detection)
+            const currentResourceCount = document.querySelectorAll('.resource-item-gradio, .resource-item').length;
+            if (currentResourceCount !== lastResourceCount) {
+                hasResourceChanges = true;
+                console.log('Resource count changed from', lastResourceCount, 'to', currentResourceCount);
+                lastResourceCount = currentResourceCount;
+            }
+            
             if (hasResourceChanges) {
-                console.log('Resources added, setting up drag and drop');
                 // Wait a bit for DOM to stabilize then setup drag and drop
                 resourceSetupTimeout = setTimeout(() => {
-                    setupDragAndDrop();
+                    throttledSetupDragAndDrop('Resource changes detected');
                     setupResourceTitleObservers();
                 }, 200);
             }
@@ -1214,6 +1293,121 @@ function setupResourceObserver() {
 
     // Initial setup
     let currentObserver = observeResourcesArea(document.querySelector('.resources-display-area'));
+    
+    // Set up a periodic check to ensure drag and drop is always working
+    // This catches any edge cases where the MutationObserver might miss something
+    setInterval(() => {
+        const resourceItems = document.querySelectorAll('.resource-item-gradio');
+        if (resourceItems.length > 0) {
+            // Check if any resource items are missing the draggable attribute
+            let needsSetup = false;
+            resourceItems.forEach(item => {
+                if (!item.getAttribute('draggable') || item.getAttribute('draggable') !== 'true') {
+                    needsSetup = true;
+                }
+            });
+            
+            if (needsSetup) {
+                throttledSetupDragAndDrop('Periodic check: Resource items missing drag setup');
+            }
+        }
+        
+        // Also check if drop zones are missing event listeners
+        const dropZones = document.querySelectorAll('.block-resources');
+        if (dropZones.length > 0) {
+            // Check if any drop zones are missing the debug index attribute (indicates missing setup)
+            let needsDropSetup = false;
+            dropZones.forEach(zone => {
+                if (!zone.hasAttribute('data-drop-zone-index')) {
+                    needsDropSetup = true;
+                }
+            });
+            
+            if (needsDropSetup) {
+                throttledSetupDragAndDrop('Periodic check: Drop zones missing setup');
+            }
+        }
+    }, 3000); // Check every 3 seconds
+
+    // Set up observer for content blocks area to detect expand/collapse changes
+    const blocksArea = document.querySelector('.blocks-display, #blocks-display, [data-testid="blocks-display"]');
+    if (blocksArea) {
+        console.log('Setting up blocks area observer');
+        const blocksObserver = new MutationObserver((mutations) => {
+            let hasBlockChanges = false;
+            mutations.forEach(mutation => {
+                // Check if any content blocks or drop zones were modified
+                if (mutation.type === 'childList' || mutation.type === 'attributes') {
+                    // Look for changes to content blocks or their children
+                    if (mutation.target.classList?.contains('content-block') ||
+                        mutation.target.closest('.content-block') ||
+                        mutation.target.classList?.contains('block-resources') ||
+                        mutation.target.closest('.block-resources')) {
+                        hasBlockChanges = true;
+                    }
+                    
+                    // Check added/removed nodes for content blocks
+                    mutation.addedNodes.forEach(node => {
+                        if (node.nodeType === 1 && 
+                            (node.classList?.contains('content-block') ||
+                             node.querySelector?.('.content-block') ||
+                             node.classList?.contains('block-resources') ||
+                             node.querySelector?.('.block-resources'))) {
+                            hasBlockChanges = true;
+                        }
+                    });
+                }
+            });
+            
+            if (hasBlockChanges) {
+                setTimeout(() => {
+                    throttledSetupDragAndDrop('Content blocks changed (expand/collapse)');
+                }, 100);
+            }
+        });
+        
+        blocksObserver.observe(blocksArea, {
+            childList: true,
+            subtree: true,
+            attributes: true,
+            attributeFilter: ['class', 'style'] // Watch for style/class changes that might affect visibility
+        });
+    } else {
+        console.log('Blocks area not found, will rely on periodic checks');
+    }
+    
+    // Set up a global observer for major DOM changes that might affect drag and drop
+    const globalObserver = new MutationObserver((mutations) => {
+        let needsDragSetup = false;
+        mutations.forEach(mutation => {
+            // Check for major structural changes that might affect drag and drop
+            if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
+                mutation.addedNodes.forEach(node => {
+                    if (node.nodeType === 1) {
+                        // Check if the added node contains resources or blocks
+                        const hasResources = node.querySelectorAll ? node.querySelectorAll('.resource-item-gradio, .resource-item').length > 0 : false;
+                        const hasBlocks = node.querySelectorAll ? node.querySelectorAll('.content-block, .block-resources').length > 0 : false;
+                        
+                        if (hasResources || hasBlocks) {
+                            needsDragSetup = true;
+                        }
+                    }
+                });
+            }
+        });
+        
+        if (needsDragSetup) {
+            setTimeout(() => {
+                throttledSetupDragAndDrop('Global observer: Major DOM changes');
+            }, 150);
+        }
+    });
+    
+    // Observe the entire document for major changes, but with a limited scope
+    globalObserver.observe(document.body, {
+        childList: true,
+        subtree: true
+    });
 
     // Also watch for the resources area itself being replaced
     const columnObserver = new MutationObserver((mutations) => {
@@ -1359,6 +1553,15 @@ const observer = new MutationObserver(function(mutations) {
             setupFileUploadDragAndDrop();
             setupResourceTitleObservers();
         }, 50);
+        
+        // Also set up a periodic check for resources that might not have been caught
+        setTimeout(() => {
+            const resourceItems = document.querySelectorAll('.resource-item-gradio');
+            if (resourceItems.length > 0) {
+                console.log('Periodic check: Found', resourceItems.length, 'resource items, ensuring drag and drop is set up');
+                setupDragAndDrop();
+            }
+        }, 1000);
 
         // Debounce the setupAutoExpand to avoid multiple calls
         clearTimeout(debounceTimer);
@@ -2131,6 +2334,14 @@ function setupDragAndDrop() {
     // Setup draggable resources - now look for Gradio resource components
     const resourceItems = document.querySelectorAll('.resource-item-gradio');
     console.log('Found Gradio resource items:', resourceItems.length);
+    
+    // Additional debug info
+    if (resourceItems.length === 0) {
+        console.log('No resource items found. Available elements:');
+        console.log('- .resource-item:', document.querySelectorAll('.resource-item').length);
+        console.log('- .resource-item-gradio:', document.querySelectorAll('.resource-item-gradio').length);
+        console.log('- .resources-display-area:', document.querySelectorAll('.resources-display-area').length);
+    }
 
     resourceItems.forEach((item, index) => {
         // Make sure the item is draggable
@@ -2159,8 +2370,30 @@ function setupDragAndDrop() {
         item.addEventListener('dragend', handleDragEnd);
     });
 
-    // Setup drop zones
-    const dropZones = document.querySelectorAll('.block-resources');
+    // Setup drop zones - try multiple selectors to catch all possible drop areas
+    let dropZones = document.querySelectorAll('.block-resources');
+    
+    // If no drop zones found with the primary selector, try alternative selectors
+    if (dropZones.length === 0) {
+        console.log('No .block-resources found, trying alternative selectors...');
+        
+        // Look for content blocks that might contain drop areas
+        const contentBlocks = document.querySelectorAll('.content-block');
+        contentBlocks.forEach(block => {
+            // Look for drop areas within content blocks
+            const dropAreas = block.querySelectorAll('[class*="resources"], [class*="drop"]');
+            dropAreas.forEach(area => {
+                if (!area.classList.contains('block-resources')) {
+                    area.classList.add('block-resources');
+                    console.log('Added block-resources class to:', area);
+                }
+            });
+        });
+        
+        // Re-query after potentially adding classes
+        dropZones = document.querySelectorAll('.block-resources');
+    }
+    
     console.log('Found drop zones:', dropZones.length);
 
     if (dropZones.length === 0) {
@@ -2175,6 +2408,9 @@ function setupDragAndDrop() {
         setupDropZones(dropZones);
     }
 }
+
+// Make setupDragAndDrop globally accessible for debugging
+window.setupDragAndDrop = setupDragAndDrop;
 
 function setupDropZones(dropZones) {
     dropZones.forEach((zone, index) => {
@@ -2192,7 +2428,17 @@ function setupDropZones(dropZones) {
 
         // Add data attribute to help debug
         zone.setAttribute('data-drop-zone-index', index);
+        
+        // Ensure the zone is properly marked as a valid drop target
+        if (!zone.classList.contains('block-resources')) {
+            zone.classList.add('block-resources');
+        }
+        
+        // Force CSS styles to ensure proper cursor behavior
+        zone.style.position = zone.style.position || 'relative';
+        
         console.log(`Set up drop zone ${index} on element:`, zone);
+        console.log(`Drop zone ${index} classes:`, zone.classList.toString());
     });
 }
 
@@ -2281,6 +2527,15 @@ function handleDragEnd(e) {
     // Remove dragging class from body
     document.body.classList.remove('dragging-resource');
 
+    // Reset any custom cursor styles
+    document.body.style.cursor = '';
+    
+    // Remove drag-over class from all drop zones
+    document.querySelectorAll('.block-resources.drag-over').forEach(zone => {
+        zone.classList.remove('drag-over');
+        zone.style.cursor = '';
+    });
+
     // Clear draggedResource after a small delay to ensure drop completes
     setTimeout(() => {
         draggedResource = null;
@@ -2311,24 +2566,34 @@ function handleDragOver(e) {
         if (!e.currentTarget.dataset.loggedOnce) {
             console.log('DragOver event - draggedResource:', resource);
             console.log('DragOver target:', e.currentTarget);
+            console.log('DataTransfer effectAllowed:', e.dataTransfer.effectAllowed);
             e.currentTarget.dataset.loggedOnce = 'true';
         }
 
         // Only show drag-over effect if we're dragging a resource from the panel
         if (resource) {
-            // Try different drop effects to get the right cursor
+            // Explicitly set the drop effect to allow the drop
             e.dataTransfer.dropEffect = 'copy';
             e.currentTarget.classList.add('drag-over');
 
-            // Force cursor style
+            // Force cursor style through multiple methods
             e.currentTarget.style.cursor = 'copy';
+            
+            // Also set it on the document body during the drag over event
+            document.body.style.cursor = 'copy';
         }
+    } else {
+        // For non-drop zones, explicitly set not-allowed
+        e.dataTransfer.dropEffect = 'none';
     }
 }
 
 function handleDragLeave(e) {
     e.currentTarget.classList.remove('drag-over');
     e.currentTarget.style.cursor = '';
+    
+    // Reset document body cursor
+    document.body.style.cursor = '';
 }
 
 function handleDrop(e) {
