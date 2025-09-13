@@ -1835,13 +1835,110 @@
     flex-shrink: 0;
 }
 
+/* Refresh button for URL resources in panel */
+.resource-refresh {
+    cursor: pointer;
+    padding: 0 4px;
+    margin-right: 4px;
+    font-weight: bold;
+    color: #999;
+    font-size: 16px;
+    transition: all 0.2s ease;
+    opacity: 0;
+    flex-shrink: 0;
+}
+
 .resource-item:hover .resource-delete,
-.resource-item-gradio:hover .resource-delete {
+.resource-item-gradio:hover .resource-delete,
+.resource-item:hover .resource-refresh,
+.resource-item-gradio:hover .resource-refresh {
     opacity: 1;
 }
 
 .resource-delete:hover {
     color: #ff5252;
+}
+
+.resource-refresh:hover {
+    color: var(--secondary-tangerine);
+}
+
+/* Container for refresh button positioned under filename */
+.resource-refresh-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin: 4px -6px -6px -6px !important; /* Match resource-filename margins */
+    padding: 6px !important;
+    background-color: #f8fafa !important;
+    border: 1px solid #4a9d9e !important;
+    border-top: 1px solid #4a9d9e !important;
+    border-right: 1px solid #4a9d9e !important;
+    border-bottom: 1px solid #4a9d9e !important;
+    border-left: 1px solid #4a9d9e !important;
+    border-radius: 0 0 6px 6px !important; /* Rounded bottom corners only */
+    transition: all 0.3s ease !important;
+    box-sizing: border-box !important;
+}
+
+.resource-refresh-container .resource-refresh {
+    font-size: 11px;
+    color: #4a9d9e;
+    padding: 2px 6px;
+    margin-right: 0;
+    text-decoration: none;
+    font-weight: 500;
+    cursor: pointer;
+}
+
+.resource-refresh-container:hover {
+    border-color: #3a8d8e !important;
+    background-color: #f0f9f9 !important;
+}
+
+.resource-refresh-container:hover .resource-refresh {
+    color: #3a8d8e;
+    transform: none !important; /* Override any rotation animations */
+}
+
+/* Pressed/indented effect for refresh buttons when clicked */
+.resource-refresh:active,
+.resource-refresh-container .resource-refresh:active {
+    transform: translateY(1px) !important;
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2) !important;
+}
+
+.resource-refresh-btn:active {
+    transform: translateY(1px) !important;
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2) !important;
+    background-color: #e8f2f2 !important;
+    border-color: #2d6566 !important;
+}
+
+/* Refresh button styling for Gradio resource cards */
+.resource-refresh-btn {
+    width: 100% !important;
+    height: 32px !important;
+    padding: 6px 8px !important;
+    margin: 4px -6px -6px -6px !important; /* Match resource-filename margins */
+    background-color: #f8fafa !important;
+    border: 1px solid #4a9d9e !important;
+    border-top: 1px solid #4a9d9e !important;
+    border-right: 1px solid #4a9d9e !important;
+    border-bottom: 1px solid #4a9d9e !important;
+    border-left: 1px solid #4a9d9e !important;
+    color: #4a9d9e !important;
+    font-size: 11px !important;
+    font-weight: 500 !important;
+    transition: all 0.3s ease !important;
+    border-radius: 0 0 6px 6px !important; /* Rounded bottom corners only */
+    box-sizing: border-box !important;
+}
+
+.resource-refresh-btn:hover {
+    background-color: #f0f9f9 !important;
+    border-color: #3a8d8e !important;
+    color: #3a8d8e !important;
 }
 
 /* Gradio resource delete button styling */
@@ -2094,6 +2191,93 @@
     cursor: pointer;
 }
 
+/* URL resource specific styling */
+.dropped-resource.url-resource {
+    background-color: var(--secondary-tangerine);
+    border-color: var(--secondary-tangerine);
+}
+
+.dropped-resource.url-resource:hover {
+    background-color: var(--secondary-tangerine);
+    border-color: var(--secondary-tangerine);
+}
+
+/* Refresh button styling */
+.refresh-resource {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    margin-left: 4px;
+    margin-right: 2px;
+    background-color: white;
+    border: 1px solid #ddd;
+    border-radius: 3px;
+    color: #666;
+    font-size: 14px;
+    font-weight: normal;
+    font-style: normal;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.refresh-resource:hover {
+    background-color: var(--secondary-tangerine-light);
+    border-color: var(--secondary-tangerine);
+    color: var(--secondary-tangerine-dark);
+    transform: rotate(90deg);
+}
+
+.dropped-resource .resource-icon {
+    font-size: 12px;
+    margin-right: 2px;
+}
+
+.dropped-resource .resource-name {
+    flex: 1;
+}
+
+.dropped-resource .resource-size {
+    font-size: 10px;
+    opacity: 0.8;
+    margin-left: 4px;
+}
+
+/* URL input row styling */
+.start-url-input-row {
+    margin-top: 8px;
+    gap: 8px;
+    align-items: center; /* Center items vertically */
+}
+
+.start-url-input input {
+    font-size: 11px !important;
+    padding: 6px !important;
+    line-height: 1.3 !important;
+}
+
+.start-url-submit-btn {
+    background: var(--secondary-tangerine-light) !important;
+    border: 1px solid #ffcbb8 !important;
+    padding: 4px 12px !important;
+    font-size: 13px !important;
+    font-weight: 500 !important;
+    transition: all 0.2s ease !important;
+    min-height: 32px !important;
+    height: 32px !important;
+    box-shadow: 0 1px 3px rgba(255, 153, 102, 0.15);
+    margin-right: 12px !important;
+    white-space: nowrap;
+}
+
+.start-url-submit-btn:hover {
+    background: #ffcbb8 !important;
+    border-color: var(--secondary-tangerine) !important;
+    transform: translateY(-1px);
+    box-shadow: 0 3px 8px rgba(255, 153, 102, 0.2);
+}
 
 /* Load resource button */
 .load-resource-btn {
@@ -2906,4 +3090,47 @@ input.no-drop,
         opacity: 1;
         transform: translateY(0);
     }
+}
+
+/* Build+Generate Tab URL Input Styles */
+.build-url-input-row {
+    margin-top: 8px;
+    gap: 8px;
+    align-items: center; /* Center items vertically */
+}
+
+.build-url-input input {
+    font-size: 11px !important;
+    padding: 6px !important;
+    line-height: 1.3 !important;
+}
+
+.build-url-submit-btn {
+    background: var(--secondary-tangerine-light) !important;
+    border: 1px solid #ffcbb8 !important;
+    padding: 4px 12px !important;
+    font-size: 13px !important;
+    font-weight: 500 !important;
+    transition: all 0.2s ease !important;
+    min-height: 32px !important;
+    height: 32px !important;
+    box-shadow: 0 1px 3px rgba(255, 153, 102, 0.15);
+    margin-right: 12px !important;
+    white-space: nowrap;
+}
+
+.build-url-submit-btn:hover {
+    background: #ffcbb8 !important;
+    border-color: var(--secondary-tangerine) !important;
+    transform: translateY(-1px);
+    box-shadow: 0 3px 8px rgba(255, 153, 102, 0.2);
+}
+
+.build-url-warning {
+    margin-top: 8px;
+    animation: slideDown 0.3s ease-out;
+}
+
+.build-url-warning .html-container {
+    padding: 0px;
 }
