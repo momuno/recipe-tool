@@ -1,0 +1,83 @@
+graph TD
+    %% User Actions
+    A[User clicks refresh button 🔄] --> B{Which Tab?}
+    
+    %% Start Tab Flow
+    B -->|Start Tab| C[HTML: onclick=refreshStartUrlResource]
+    C --> D[JS: refreshStartUrlResource function]
+    D --> E[JS: Set hidden input values]
+    E --> F[JS: Click start-refresh-url-btn]
+    F --> G[Gradio: start_refresh_url_btn.click]
+    G --> H[Python: handle_refresh_start_url_resource]
+    H --> I[Python: refresh_url_resource]
+    I --> J[Python: extract_text_from_url]
+    J --> K[Python: render_start_resources]
+    K --> L[Update Start Tab Display]
+    
+    %% Build+Generate Tab Flow  
+    B -->|Build+Generate Tab| M[Gradio: refresh_btn.click]
+    M --> N[Python: refresh_resource_from_panel]
+    N --> O[Python: extract_text_from_url]
+    O --> P[Python: generate_outline_json_from_state]
+    P --> Q[Update gr_references_state]
+    Q --> R[Gradio: @gr.render auto-triggers]
+    R --> S[Python: render_resource_components]
+    S --> T[Update Resource Panel Display]
+    
+    %% Resource Creation Flow
+    U[User adds URLs on Start Tab] --> V[Python: download_urls_to_temp]
+    V --> W[Python: extract_text_from_url]
+    W --> X[Create resource with resource_type: url]
+    X --> Y[Python: render_start_resources]
+    
+    %% Draft Button Flow
+    Z[User clicks Draft button] --> AA[Python: handle_start_draft_click]
+    AA --> BB[Python: generate_docpack_from_prompt]
+    BB --> CC[Python: Process outline_data resources]
+    CC --> DD[Python: Preserve original metadata]
+    DD --> EE[Return processed_resources]
+    EE --> FF[Switch to Build+Generate tab]
+    FF --> R
+    
+    %% Shared Functions
+    subgraph "Shared Core Functions"
+        I
+        J
+        O
+        W
+    end
+    
+    %% Hidden Components (Start Tab)
+    subgraph "Start Tab Hidden Components"
+        GG[start_refresh_url_index: gr.Textbox]
+        HH[start_refresh_url_name: gr.Textbox] 
+        II[start_refresh_url_btn: gr.Button]
+        D --> GG
+        D --> HH
+        D --> II
+    end
+    
+    %% Resource Types
+    subgraph "Resource Data Structure"
+        JJ[resource_type: url/file]
+        KK[source_url: original URL]
+        LL[path: local file path]
+        X --> JJ
+        X --> KK
+        X --> LL
+        DD --> JJ
+        DD --> KK
+    end
+
+    %% Styling
+    classDef userAction fill:#e1f5fe
+    classDef javascript fill:#fff3e0
+    classDef python fill:#f3e5f5
+    classDef gradio fill:#e8f5e8
+    classDef data fill:#fce4ec
+    
+    class A,U,Z userAction
+    class C,D,E,F javascript
+    class H,I,J,K,N,O,P,V,W,X,Y,AA,BB,CC,DD,EE,S python
+    class G,M,Q,R,FF gradio
+    class JJ,KK,LL data

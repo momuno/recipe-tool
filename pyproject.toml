@@ -33,6 +33,7 @@ recipe-tool-mcp-server = { workspace = true }
 dev = [
     "build>=1.2.2.post1",
     "debugpy>=1.8.14",
+    "matplotlib>=3.10.6",
     "pyright>=1.1.400",
     "pytest>=8.3.5",
     "pytest-cov>=6.1.1",

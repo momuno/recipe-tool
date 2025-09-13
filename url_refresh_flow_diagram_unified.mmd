@@ -1,0 +1,81 @@
+graph TD
+    %% User Actions
+    A[User clicks refresh button 🔄] --> B{Which Tab?}
+    
+    %% Start Tab Flow (Unified Gradio)
+    B -->|Start Tab| C[Gradio: refresh_btn.click in @gr.render]
+    C --> D[Python: refresh_start_url_resource_unified]
+    D --> E[Python: refresh_url_resource_core]
+    E --> F[Python: extract_text_from_url]
+    F --> G[Update resource in gr_start_attached_references_state]
+    G --> H[Gradio: @gr.render auto-triggers]
+    H --> I[Python: render_start_resource_components]
+    I --> J[Update Start Tab Display]
+    
+    %% Build+Generate Tab Flow  
+    B -->|Build+Generate Tab| K[Gradio: refresh_btn.click in @gr.render]
+    K --> L[Python: refresh_resource_from_panel]
+    L --> M[Python: refresh_url_resource_core]
+    M --> N[Python: extract_text_from_url]
+    N --> O[Python: generate_outline_json_from_state]
+    O --> P[Update gr_references_state]
+    P --> Q[Gradio: @gr.render auto-triggers]
+    Q --> R[Python: render_resource_components]
+    R --> S[Update Resource Panel Display]
+    
+    %% Resource Creation Flow
+    T[User adds URLs on Start Tab] --> U[Python: download_urls_to_temp]
+    U --> V[Python: extract_text_from_url]
+    V --> W[Create resource with resource_type: url]
+    W --> X[Update gr_start_attached_references_state]
+    X --> H
+    
+    %% Draft Button Flow
+    Y[User clicks Draft button] --> Z[Python: handle_start_draft_click]
+    Z --> AA[Python: generate_docpack_from_prompt]
+    AA --> BB[Python: Process outline_data resources]
+    BB --> CC[Python: Preserve original metadata]
+    CC --> DD[Return processed_resources]
+    DD --> EE[Switch to Build+Generate tab]
+    EE --> Q
+    
+    %% Unified Core Functions
+    subgraph "Unified Core Functions"
+        CORE1[refresh_url_resource_core]
+        CORE2[extract_text_from_url]
+    end
+    
+    %% Gradio State Management
+    subgraph "Gradio State & Rendering"
+        STATE1[gr_start_attached_references_state]
+        STATE2[gr_references_state]
+        RENDER1[gr.render auto-triggers Start]
+        RENDER2[gr.render auto-triggers Build+Generate]
+        COMP1[render_start_resource_components]
+        COMP2[render_resource_components]
+    end
+    
+    %% Resource Types
+    subgraph "Resource Data Structure"
+        FF[resource_type: url/file]
+        GG[source_url: original URL]
+        HH[path: local file path]
+        W --> FF
+        W --> GG
+        W --> HH
+        CC --> FF
+        CC --> GG
+    end
+
+    %% Styling
+    classDef userAction fill:#e1f5fe
+    classDef python fill:#f3e5f5
+    classDef gradio fill:#e8f5e8
+    classDef data fill:#fce4ec
+    classDef unified fill:#e8f5e8,stroke:#4caf50,stroke-width:2px
+    
+    class A,T,Y userAction
+    class D,E,F,L,M,N,O,U,V,W,Z,AA,BB,CC,DD python
+    class C,K,G,P,H,Q,I,R,EE gradio
+    class FF,GG,HH data
+    class CORE1,CORE2 unified

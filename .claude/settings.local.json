@@ -1,0 +1,34 @@
+{
+  "enabledMcpjsonServers": ["context7", "deepwiki"],
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /home/momuno/AI_MADE_Explorations/mermaid-hook-system/claude-mermaid-generator.py"
+          }
+        ]
+      },
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /home/momuno/AI_MADE_Explorations/mermaid-hook-system/claude-mermaid-generator.py"
+          }
+        ]
+      },
+      {
+        "matcher": "MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /home/momuno/AI_MADE_Explorations/mermaid-hook-system/claude-mermaid-generator.py"
+          }
+        ]
+      }
+    ]
+  }
+}

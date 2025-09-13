@@ -1,0 +1,18 @@
+{
+  "selected_files": [
+    "apps/document-generator/document_generator_app",
+    "apps/document-generator/document_generator_app/app.py",
+    "apps/document-generator/document_generator_app/static",
+    "apps/document-generator/document_generator_app/static/css",
+    "apps/document-generator/document_generator_app/static/images",
+    "apps/document-generator/document_generator_app/static/js",
+    "apps/document-generator/document_generator_app/executor",
+    "apps/document-generator/document_generator_app/executor/__init__.py",
+    "apps/document-generator/document_generator_app/executor/runner.py",
+    "apps/document-generator/document_generator_app/models",
+    "apps/document-generator/document_generator_app/models/__init__.py",
+    "apps/document-generator/document_generator_app/models/outline.py"
+  ],
+  "timestamp": "2025-09-11T16:08:05.360096",
+  "version": "1.0"
+}
