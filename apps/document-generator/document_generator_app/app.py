@@ -19,6 +19,7 @@ from dotenv import load_dotenv
 from .executor.runner import generate_docpack_from_prompt, generate_document
 from .models.outline import Outline, Resource, Section
 from .session import session_manager
+from .simple_mcp_assistant import ProperMCPAssistant, handle_simple_mcp_chat
 
 # Load environment variables from .env file
 load_dotenv()
@@ -3130,6 +3131,46 @@ def remove_start_resource(resources, index_str, name):
     return resources, resources_html
 
 
+def process_assistant_chat(message, history, blocks, resources, session_id, focused_block, trigger_count):
+    """Process chat message using MCP assistant"""
+    import traceback
+
+    print(f"[PROCESS_ASSISTANT_CHAT] Starting with message: '{message}'")
+    print(f"[PROCESS_ASSISTANT_CHAT] Current trigger_count: {trigger_count}")
+    print(f"[PROCESS_ASSISTANT_CHAT] Current blocks: {len(blocks)}, resources: {len(resources)}")
+    print(f"[PROCESS_ASSISTANT_CHAT] Session ID: {session_id}")
+
+    if not message:
+        print("[PROCESS_ASSISTANT_CHAT] Empty message, returning unchanged")
+        return "", history, trigger_count
+
+    try:
+        print("[PROCESS_ASSISTANT_CHAT] Calling handle_simple_mcp_chat...")
+        # Call the standalone MCP chat handler
+        handle_simple_mcp_chat(message, history, blocks, resources, session_id, focused_block)
+
+        # Increment trigger to force UI update
+        new_trigger = trigger_count + 1
+        print(f"[PROCESS_ASSISTANT_CHAT] Chat handled successfully, new trigger: {new_trigger}")
+
+        # Add messages to history
+        history.append({"role": "user", "content": message})
+        history.append({
+            "role": "assistant",
+            "content": "I've updated the document. The changes should appear automatically.",
+        })
+
+        return "", history, new_trigger
+
+    except Exception as e:
+        error_msg = f"Error processing chat: {str(e)}"
+        print(f"[PROCESS_ASSISTANT_CHAT] Error: {error_msg}")
+        print(f"[PROCESS_ASSISTANT_CHAT] Traceback: {traceback.format_exc()}")
+        history.append({"role": "user", "content": message})
+        history.append({"role": "assistant", "content": error_msg})
+        return "", history, trigger_count
+
+
 def create_app():
     """Create and return the Document Builder Gradio app."""
 
@@ -3506,6 +3547,26 @@ def create_app():
                         elem_id="import-file-input",
                         elem_classes="hidden-component",
                     )
+
+            # Assistant chatbot panel at the top
+            with gr.Row(elem_classes="assistant-section"):
+                with gr.Column(elem_classes="assistant-panel"):
+                    gr.Markdown("### 🤖 Assistant", elem_classes="assistant-title")
+                    chatbot = gr.Chatbot(
+                        type="messages",
+                        height=200,
+                        placeholder="Ask me to help with your document...",
+                        elem_classes="assistant-chatbot",
+                    )
+                    with gr.Row():
+                        msg_input = gr.Textbox(
+                            placeholder="Ask me to help with your document...", container=False, scale=4
+                        )
+                        send_btn = gr.Button("Send", scale=1, variant="primary")
+                        clear_btn = gr.Button("Clear", scale=1)
+
+            # UI update trigger for MCP chat
+            ui_update_trigger = gr.Number(value=0, visible=False)
 
             # Document title and description
             with gr.Row(elem_classes="header-section"):
@@ -4549,6 +4610,54 @@ def create_app():
                 ui_start_tab_url_warning,
             ],
         )
+
+        # Assistant chat handlers
+        msg_input.submit(
+            fn=process_assistant_chat,
+            inputs=[
+                msg_input,
+                chatbot,
+                gr_blocks_state,
+                gr_references_state,
+                gr_session_id,
+                gr_focused_block_state,
+                ui_update_trigger,
+            ],
+            outputs=[msg_input, chatbot, ui_update_trigger],
+            show_api=False,
+        )
+
+        send_btn.click(
+            fn=process_assistant_chat,
+            inputs=[
+                msg_input,
+                chatbot,
+                gr_blocks_state,
+                gr_references_state,
+                gr_session_id,
+                gr_focused_block_state,
+                ui_update_trigger,
+            ],
+            outputs=[msg_input, chatbot, ui_update_trigger],
+            show_api=False,
+        )
+
+        # Clear chat history
+        clear_btn.click(fn=lambda: ([], ""), outputs=[chatbot, msg_input], show_api=False)
+
+        # UI update trigger - when this changes, update all components
+        def trigger_ui_updates(trigger_value):
+            """Debug wrapper for UI updates triggered by MCP chat"""
+            print(f"[UI_UPDATE_TRIGGER] Trigger fired with value: {trigger_value}")
+            # Return the current state of all components
+            return gr.update(), gr.update()
+
+        ui_update_trigger.change(
+            fn=lambda: (gr.update(), gr.update()),
+            inputs=[],
+            outputs=[gr_blocks_state, blocks_display],
+            show_api=False,
+        ).then(fn=render_blocks, inputs=[gr_blocks_state, gr_focused_block_state], outputs=blocks_display)
 
     return app
 

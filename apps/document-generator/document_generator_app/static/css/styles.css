@@ -3134,3 +3134,44 @@ input.no-drop,
 .build-url-warning .html-container {
     padding: 0px;
 }
+
+/* Assistant Panel Styles */
+.assistant-section {
+    background: var(--gradient-subtle);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 20px;
+    border: 1px solid rgba(74, 157, 158, 0.1);
+}
+
+.assistant-panel {
+    width: 100%;
+}
+
+.assistant-title {
+    color: var(--primary-teal-dark);
+    margin-bottom: 15px !important;
+    font-size: 1.2em !important;
+}
+
+.assistant-chatbot {
+    border: 1px solid rgba(74, 157, 158, 0.2);
+    border-radius: 8px;
+    background: white;
+}
+
+.assistant-chatbot .message {
+    padding: 12px;
+    border-radius: 8px;
+    margin-bottom: 8px;
+}
+
+.assistant-chatbot .user {
+    background: var(--primary-teal-light);
+    margin-left: 20%;
+}
+
+.assistant-chatbot .bot {
+    background: var(--secondary-tangerine-light);
+    margin-right: 20%;
+}
