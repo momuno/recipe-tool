@@ -3027,6 +3027,59 @@ def extract_resources_from_docpack(docpack_path, session_id=None):
     return resources
 
 
+def create_draft_document(prompt: str, resources: list = None, session_id: str = None) -> dict:
+    """
+    Drafts the outline for the document, which the user can iterate on. Required before
+    generating the final document.
+
+    Args:
+        prompt: The user prompt for the document.
+        resources: Any resources to include in the document.
+        session_id: The session ID for the document generation if available
+    """
+    print(f"[create_draft_document] Called with prompt: '{prompt}'")
+    print(f"[create_draft_document] Resources: {resources}, Session: {session_id}")
+
+    # Call the existing wrapper function
+    result = handle_start_draft_click_wrapper(prompt, resources or [], session_id)
+
+    # Extract values from the tuple result
+    (
+        doc_title_val,
+        doc_desc_val,
+        resources_val,
+        blocks_val,
+        json_val,
+        session_val,
+        gen_html_val,
+        gen_content_val,
+        save_btn_val,
+        switch_tab_val,
+        error_msg_val,
+        prompt_input_val,
+        draft_btn_val,
+    ) = result
+
+    # Check if there was an error (error message would be visible)
+    if error_msg_val and hasattr(error_msg_val, "visible") and error_msg_val.visible:
+        return {
+            "status": "error",
+            "message": "Failed to create document outline",
+        }
+
+    # Return MCP ToolResult format with success
+    # Return the data directly as a dict, not JSON stringified
+    return {
+        "status": "success",
+        "message": "Document outline created successfully",
+        "data": {
+            "title": doc_title_val.value if hasattr(doc_title_val, "value") else "",
+            "blocks": blocks_val if blocks_val else [],
+            "resources": resources_val if resources_val else [],
+        },
+    }
+
+
 def load_code_readme_example(session_id):
     """Load the code README example prompt and resources."""
     # Get or create session
@@ -4108,12 +4161,20 @@ def create_app():
                 gr_references_state,
             ],  # Always pass None for focused_block_id
             outputs=[gr_blocks_state, json_output],
-        ).then(fn=render_blocks, inputs=[gr_blocks_state, gr_focused_block_state], outputs=blocks_display)
+            show_api=False,
+        ).then(
+            fn=render_blocks, inputs=[gr_blocks_state, gr_focused_block_state], outputs=blocks_display, show_api=False
+        )
 
         # Connect workspace collapse/expand toggle button
         workspace_collapse_btn.click(
-            fn=toggle_all_blocks, inputs=[gr_blocks_state], outputs=[gr_blocks_state, workspace_collapse_btn]
-        ).then(fn=render_blocks, inputs=[gr_blocks_state, gr_focused_block_state], outputs=blocks_display)
+            fn=toggle_all_blocks,
+            inputs=[gr_blocks_state],
+            outputs=[gr_blocks_state, workspace_collapse_btn],
+            show_api=False,
+        ).then(
+            fn=render_blocks, inputs=[gr_blocks_state, gr_focused_block_state], outputs=blocks_display, show_api=False
+        )
 
         # Connect button click to add Text block
 
@@ -4122,14 +4183,20 @@ def create_app():
             fn=delete_block,
             inputs=[gr_blocks_state, delete_block_id, doc_title, doc_description, gr_references_state],
             outputs=[gr_blocks_state, json_output],
-        ).then(fn=render_blocks, inputs=[gr_blocks_state, gr_focused_block_state], outputs=blocks_display)
+            show_api=False,
+        ).then(
+            fn=render_blocks, inputs=[gr_blocks_state, gr_focused_block_state], outputs=blocks_display, show_api=False
+        )
 
         # Delete resource handler
         delete_resource_trigger.click(
             fn=delete_resource_gradio,
             inputs=[gr_references_state, delete_resource_path, doc_title, doc_description, gr_blocks_state],
             outputs=[gr_references_state, gr_blocks_state, json_output],
-        ).then(fn=render_blocks, inputs=[gr_blocks_state, gr_focused_block_state], outputs=blocks_display)
+            show_api=False,
+        ).then(
+            fn=render_blocks, inputs=[gr_blocks_state, gr_focused_block_state], outputs=blocks_display, show_api=False
+        )
 
         # Update block content handler
         update_trigger.click(
@@ -4143,14 +4210,17 @@ def create_app():
                 gr_references_state,
             ],
             outputs=[gr_blocks_state, json_output],
-        ).then(fn=set_focused_block, inputs=update_block_id, outputs=gr_focused_block_state)
+            show_api=False,
+        ).then(fn=set_focused_block, inputs=update_block_id, outputs=gr_focused_block_state, show_api=False)
 
         # Toggle collapse handler - also update the collapse/expand all button
         toggle_trigger.click(
-            fn=toggle_block_collapse, inputs=[gr_blocks_state, toggle_block_id], outputs=gr_blocks_state
-        ).then(fn=set_focused_block, inputs=toggle_block_id, outputs=gr_focused_block_state).then(
-            fn=render_blocks, inputs=[gr_blocks_state, toggle_block_id], outputs=blocks_display
-        ).then(fn=update_collapse_button_state, inputs=[gr_blocks_state], outputs=workspace_collapse_btn)
+            fn=toggle_block_collapse, inputs=[gr_blocks_state, toggle_block_id], outputs=gr_blocks_state, show_api=False
+        ).then(fn=set_focused_block, inputs=toggle_block_id, outputs=gr_focused_block_state, show_api=False).then(
+            fn=render_blocks, inputs=[gr_blocks_state, toggle_block_id], outputs=blocks_display, show_api=False
+        ).then(
+            fn=update_collapse_button_state, inputs=[gr_blocks_state], outputs=workspace_collapse_btn, show_api=False
+        )
 
         # Update heading handler
         update_heading_trigger.click(
@@ -4164,7 +4234,8 @@ def create_app():
                 gr_references_state,
             ],
             outputs=[gr_blocks_state, json_output],
-        ).then(fn=set_focused_block, inputs=update_heading_block_id, outputs=gr_focused_block_state)
+            show_api=False,
+        ).then(fn=set_focused_block, inputs=update_heading_block_id, outputs=gr_focused_block_state, show_api=False)
 
         # Update indent handler
         indent_trigger.click(
@@ -4178,14 +4249,15 @@ def create_app():
                 gr_references_state,
             ],
             outputs=[gr_blocks_state, json_output],
-        ).then(fn=render_blocks, inputs=[gr_blocks_state, gr_focused_block_state], outputs=blocks_display).then(
-            fn=set_focused_block, inputs=indent_block_id, outputs=gr_focused_block_state
-        )
+            show_api=False,
+        ).then(
+            fn=render_blocks, inputs=[gr_blocks_state, gr_focused_block_state], outputs=blocks_display, show_api=False
+        ).then(fn=set_focused_block, inputs=indent_block_id, outputs=gr_focused_block_state, show_api=False)
 
         # Focus handler
-        focus_trigger.click(fn=set_focused_block, inputs=focus_block_id, outputs=gr_focused_block_state).then(
-            fn=render_blocks, inputs=[gr_blocks_state, focus_block_id], outputs=blocks_display
-        )
+        focus_trigger.click(
+            fn=set_focused_block, inputs=focus_block_id, outputs=gr_focused_block_state, show_api=False
+        ).then(fn=render_blocks, inputs=[gr_blocks_state, focus_block_id], outputs=blocks_display, show_api=False)
 
         # Add after handler - for + button on content blocks
         def handle_add_after(blocks, block_id, block_type, title, description, resources):
@@ -4209,14 +4281,20 @@ def create_app():
                 gr_references_state,
             ],
             outputs=[gr_blocks_state, json_output],
-        ).then(fn=render_blocks, inputs=[gr_blocks_state, gr_focused_block_state], outputs=blocks_display)
+            show_api=False,
+        ).then(
+            fn=render_blocks, inputs=[gr_blocks_state, gr_focused_block_state], outputs=blocks_display, show_api=False
+        )
 
         # Convert block type handler
         convert_trigger.click(
             fn=convert_block_type,
             inputs=[gr_blocks_state, convert_block_id, convert_type, doc_title, doc_description, gr_references_state],
             outputs=[gr_blocks_state, json_output],
-        ).then(fn=render_blocks, inputs=[gr_blocks_state, gr_focused_block_state], outputs=blocks_display)
+            show_api=False,
+        ).then(
+            fn=render_blocks, inputs=[gr_blocks_state, gr_focused_block_state], outputs=blocks_display, show_api=False
+        )
 
         # Update block resources handler
         update_resources_trigger.click(
@@ -4230,7 +4308,10 @@ def create_app():
                 gr_references_state,
             ],
             outputs=[gr_blocks_state, json_output],
-        ).then(fn=render_blocks, inputs=[gr_blocks_state, gr_focused_block_state], outputs=blocks_display)
+            show_api=False,
+        ).then(
+            fn=render_blocks, inputs=[gr_blocks_state, gr_focused_block_state], outputs=blocks_display, show_api=False
+        )
 
         # Remove block resource handler
         remove_resource_trigger.click(
@@ -4244,7 +4325,10 @@ def create_app():
                 gr_references_state,
             ],
             outputs=[gr_blocks_state, json_output],
-        ).then(fn=render_blocks, inputs=[gr_blocks_state, gr_focused_block_state], outputs=blocks_display)
+            show_api=False,
+        ).then(
+            fn=render_blocks, inputs=[gr_blocks_state, gr_focused_block_state], outputs=blocks_display, show_api=False
+        )
 
         delete_panel_resource_trigger.click(
             fn=delete_and_render,
@@ -4257,6 +4341,7 @@ def create_app():
                 gr_focused_block_state,
             ],
             outputs=[gr_references_state, gr_blocks_state, json_output, blocks_display],
+            show_api=False,
         )
 
         # Resource panel refresh handler
@@ -4271,6 +4356,7 @@ def create_app():
                 gr_blocks_state,
             ],
             outputs=[gr_references_state, gr_blocks_state, json_output],
+            show_api=False,
         )
 
         # Update resource description handler - don't re-render blocks to avoid interrupting typing
@@ -4286,6 +4372,7 @@ def create_app():
                 gr_references_state,
             ],
             outputs=[gr_blocks_state, json_output],
+            show_api=False,
         )
 
         # Title and description change handlers
@@ -4293,12 +4380,14 @@ def create_app():
             fn=update_document_metadata,
             inputs=[doc_title, doc_description, gr_references_state, gr_blocks_state],
             outputs=[json_output],
+            show_api=False,
         )
 
         doc_description.change(
             fn=update_document_metadata,
             inputs=[doc_title, doc_description, gr_references_state, gr_blocks_state],
             outputs=[json_output],
+            show_api=False,
         )
 
         # Handle file uploads (defined after json_output is created)
@@ -4306,16 +4395,19 @@ def create_app():
             fn=handle_file_upload,
             inputs=[file_upload, gr_references_state, doc_title, doc_description, gr_blocks_state, gr_session_id],
             outputs=[gr_references_state, file_upload, json_output, gr_session_id, file_upload_warning],
+            show_api=False,
         ).then(
             # Force JSON update after resources render
             fn=lambda title, desc, res, blocks: generate_outline_json_from_state(title, desc, res, blocks),
             inputs=[doc_title, doc_description, gr_references_state, gr_blocks_state],
             outputs=[json_output],
+            show_api=False,
         ).then(
             # Trigger drag and drop setup after file upload
             fn=lambda: None,
             inputs=[],
             outputs=[],
+            show_api=False,
             js="() => { console.log('File upload completed, setting up drag and drop...'); if (window.setupDragAndDrop) { setTimeout(() => window.setupDragAndDrop('After file upload'), 500); setTimeout(() => window.setupDragAndDrop('After file upload - retry'), 1500); } }",
         )
 
@@ -4324,11 +4416,13 @@ def create_app():
             fn=handle_build_tab_url_submit,
             inputs=[build_url_input, gr_references_state, doc_title, doc_description, gr_blocks_state, gr_session_id],
             outputs=[gr_references_state, build_url_input, build_url_warning, json_output],
+            show_api=False,
         ).then(
             # Trigger drag and drop setup after URL submit
             fn=lambda: None,
             inputs=[],
             outputs=[],
+            show_api=False,
             js="() => { console.log('URL submit completed, setting up drag and drop...'); if (window.setupDragAndDrop) { setTimeout(() => window.setupDragAndDrop('After URL submit'), 500); setTimeout(() => window.setupDragAndDrop('After URL submit - retry'), 1500); } }",
         )
 
@@ -4344,6 +4438,7 @@ def create_app():
                 gr.update(interactive=False),  # Disable display download button
             ],
             outputs=[generate_doc_btn, generated_content, generated_content_html, download_btn_display],
+            show_api=False,
         ).then(
             fn=handle_generate_and_update_download,
             inputs=[doc_title, doc_description, gr_references_state, gr_blocks_state, gr_session_id],
@@ -4357,6 +4452,7 @@ def create_app():
                 docx_file_path,
                 markdown_file_path,
             ],
+            show_api=False,
         )
 
         # Save button is handled directly by DownloadButton with create_docpack_from_current_state
@@ -4365,6 +4461,7 @@ def create_app():
             fn=handle_download_format,
             inputs=[download_format_input, docx_file_path, markdown_file_path],
             outputs=[save_doc_btn],
+            show_api=False,
         )
 
         # Import file handler
@@ -4383,10 +4480,17 @@ def create_app():
                 generated_content,
                 save_doc_btn,
             ],
-        ).then(fn=render_blocks, inputs=[gr_blocks_state, gr_focused_block_state], outputs=blocks_display)
+            show_api=False,
+        ).then(
+            fn=render_blocks, inputs=[gr_blocks_state, gr_focused_block_state], outputs=blocks_display, show_api=False
+        )
 
         # Update save button value whenever outline changes
-        json_output.change(fn=lambda: gr.update(value=create_docpack_from_current_state()), outputs=save_outline_btn)
+        json_output.change(
+            fn=lambda: gr.update(value=create_docpack_from_current_state(), show_api=False),
+            outputs=save_outline_btn,
+            show_api=False,
+        )
 
         # Load example handler
         load_example_trigger.click(
@@ -4403,7 +4507,10 @@ def create_app():
                 generated_content,
                 save_doc_btn,
             ],
-        ).then(fn=render_blocks, inputs=[gr_blocks_state, gr_focused_block_state], outputs=blocks_display)
+            show_api=False,
+        ).then(
+            fn=render_blocks, inputs=[gr_blocks_state, gr_focused_block_state], outputs=blocks_display, show_api=False
+        )
 
         # Update resource title handler - don't re-render resources to avoid interrupting typing
         update_title_trigger.click(
@@ -4417,6 +4524,7 @@ def create_app():
                 gr_blocks_state,
             ],
             outputs=[gr_references_state, json_output],
+            show_api=False,
         )
 
         # Update resource panel description handler - reuse the same inputs
@@ -4431,6 +4539,7 @@ def create_app():
                 gr_blocks_state,
             ],
             outputs=[gr_references_state, json_output],
+            show_api=False,
         )
 
         replace_resource_trigger.click(
@@ -4450,10 +4559,14 @@ def create_app():
                 json_output,
                 replace_success_msg,
             ],
-        ).then(fn=render_blocks, inputs=[gr_blocks_state, gr_focused_block_state], outputs=blocks_display).then(
+            show_api=False,
+        ).then(
+            fn=render_blocks, inputs=[gr_blocks_state, gr_focused_block_state], outputs=blocks_display, show_api=False
+        ).then(
             # Clear the file input after processing
             fn=lambda: None,
             outputs=replace_resource_file_input,
+            show_api=False,
         )
 
         new_doc_btn.click(
@@ -4470,7 +4583,10 @@ def create_app():
                 save_doc_btn,
                 gr_focused_block_state,
             ],
-        ).then(fn=render_blocks, inputs=[gr_blocks_state, gr_focused_block_state], outputs=blocks_display)
+            show_api=False,
+        ).then(
+            fn=render_blocks, inputs=[gr_blocks_state, gr_focused_block_state], outputs=blocks_display, show_api=False
+        )
 
         # Create a hidden HTML component for tab switching trigger
         switch_tab_trigger = gr.HTML("", visible=True, elem_id="switch-tab-trigger", elem_classes="hidden-component")
@@ -4482,6 +4598,7 @@ def create_app():
             inputs=[ui_start_tab_prompt_input],
             outputs=[ui_start_tab_error_message, ui_start_tab_draft_btn],
             queue=False,  # Run immediately
+            show_api=False,
         ).success(
             fn=handle_start_draft_click,
             inputs=[ui_start_tab_prompt_input, gr_start_attached_references_state, gr_session_id],
@@ -4500,10 +4617,14 @@ def create_app():
                 ui_start_tab_prompt_input,
                 ui_start_tab_draft_btn,
             ],
-        ).then(fn=render_blocks, inputs=[gr_blocks_state, gr_focused_block_state], outputs=blocks_display).then(
+            show_api=False,
+        ).then(
+            fn=render_blocks, inputs=[gr_blocks_state, gr_focused_block_state], outputs=blocks_display, show_api=False
+        ).then(
             fn=generate_outline_json_from_state,
             inputs=[doc_title, doc_description, gr_references_state, gr_blocks_state],
             outputs=[json_output],
+            show_api=False,
         )
 
         # Start tab file upload handler
@@ -4516,6 +4637,7 @@ def create_app():
                 ui_start_tab_attached_references_display,
                 ui_start_tab_upload_warning,
             ],
+            show_api=False,
         )
 
         # URL submit handler
@@ -4528,11 +4650,12 @@ def create_app():
                 ui_start_tab_attached_references_display,
                 ui_start_tab_url_warning,
             ],
+            show_api=False,
         )
 
         # Clear error message when user starts typing
         ui_start_tab_prompt_input.input(
-            fn=lambda: gr.update(visible=False), outputs=[ui_start_tab_error_message], queue=False
+            fn=lambda: gr.update(visible=False), outputs=[ui_start_tab_error_message], queue=False, show_api=False
         )
 
         ui_start_tab_example_code_readme_btn.click(
@@ -4545,6 +4668,7 @@ def create_app():
                 ui_start_tab_attached_references_display,
             ],
             queue=False,
+            show_api=False,
         )
 
         ui_start_tab_example_product_launch_btn.click(
@@ -4557,6 +4681,7 @@ def create_app():
                 ui_start_tab_attached_references_display,
             ],
             queue=False,
+            show_api=False,
         )
 
         ui_start_tab_example_performance_review_btn.click(
@@ -4569,6 +4694,7 @@ def create_app():
                 ui_start_tab_attached_references_display,
             ],
             queue=False,
+            show_api=False,
         )
 
         # Hidden inputs for Start tab resource removal
@@ -4598,6 +4724,7 @@ def create_app():
             fn=remove_start_resource,
             inputs=[gr_start_attached_references_state, start_remove_resource_index, start_remove_resource_name],
             outputs=[gr_start_attached_references_state, ui_start_tab_attached_references_display],
+            show_api=False,
         )
 
         # Start tab URL resource refresh handler
@@ -4609,6 +4736,7 @@ def create_app():
                 ui_start_tab_attached_references_display,
                 ui_start_tab_url_warning,
             ],
+            show_api=False,
         )
 
         # Assistant chat handlers
@@ -4657,7 +4785,12 @@ def create_app():
             inputs=[],
             outputs=[gr_blocks_state, blocks_display],
             show_api=False,
-        ).then(fn=render_blocks, inputs=[gr_blocks_state, gr_focused_block_state], outputs=blocks_display)
+        ).then(
+            fn=render_blocks, inputs=[gr_blocks_state, gr_focused_block_state], outputs=blocks_display, show_api=False
+        )
+
+        # Register API endpoint for MCP integration
+        gr.api(create_draft_document)
 
     return app
 

@@ -83,7 +83,7 @@ You will be given:
 Your job is to select the most appropriate tool and prepare parameters.
 
 Common tool mappings:
-- Document creation requests → mcp_handle_start_draft_click (use full user message as prompt)
+- Document creation requests → create_draft_document (use full user message as prompt)
 - Add section requests → add_ai_block 
 - Generate content → handle_document_generation
 - Export requests → handle_download_format
@@ -175,7 +175,7 @@ Be flexible with language variations like "draft", "create", "make", "write", "g
             logger.warning("No AI agent available, using fallback")
             if any(word in message.lower() for word in ["create", "draft", "make", "write", "document", "about"]):
                 return FunctionIntent(
-                    function_name="mcp_handle_start_draft_click",
+                    function_name="create_draft_document",
                     parameters={"prompt": message},
                     confidence=0.7,
                     reasoning="Fallback pattern matched document creation keywords",
@@ -198,7 +198,7 @@ Be flexible with language variations like "draft", "create", "make", "write", "g
         else:
             # Fallback list
             tool_descriptions = [
-                "- mcp_handle_start_draft_click: Creates document outline from prompt",
+                "- create_draft_document: Creates document outline from prompt",
                 "- handle_document_generation: Generates content for existing blocks",
                 "- add_ai_block: Adds new AI-generated section",
                 "- handle_download_format: Exports document",
@@ -225,7 +225,7 @@ Select the most appropriate tool and prepare parameters for this request."""
             logger.error(f"AI tool selection failed: {e}")
             # Fallback
             return FunctionIntent(
-                function_name="mcp_handle_start_draft_click"
+                function_name="create_draft_document"
                 if any(word in message.lower() for word in ["create", "draft", "make", "write"])
                 else "unknown",
                 parameters={"prompt": message}
@@ -398,7 +398,7 @@ Select the most appropriate tool and prepare parameters for this request."""
         """Prepare arguments for MCP tool call"""
         function_name = function_intent.function_name
 
-        if function_name in ["handle_start_draft_click", "mcp_handle_start_draft_click"]:
+        if function_name in ["create_draft_document", "handle_start_draft_click", "mcp_handle_start_draft_click"]:
             return {"prompt": function_intent.parameters.get("prompt", "")}
         elif function_name == "add_ai_block":
             return {}  # No arguments needed
@@ -562,36 +562,62 @@ async def _async_simple_mcp_chat(
     logger.debug(f"Result type: {type(result)}")
     logger.debug(f"Result content: {result}")
 
-    if function_intent.function_name in ["handle_start_draft_click", "mcp_handle_start_draft_click"] and result:
+    if (
+        function_intent.function_name
+        in ["create_draft_document", "handle_start_draft_click", "mcp_handle_start_draft_click"]
+        and result
+    ):
         logger.info("Extracting document creation results")
 
         # The MCP result should contain ToolResult format with JSON in content
         try:
-            if isinstance(result, dict) and "content" in result:
+            response_data = None
+
+            # Handle direct dict response (new format)
+            if isinstance(result, dict) and "status" in result:
+                response_data = result
+                logger.info(f"Direct dict response: {response_data.get('status', 'unknown')}")
+
+            # Handle MCP ToolResult format (old format)
+            elif isinstance(result, dict) and "content" in result:
                 # Extract the JSON from the MCP ToolResult
                 content_items = result.get("content", [])
                 if content_items and len(content_items) > 0:
                     text_content = content_items[0].get("text", "")
                     if text_content:
-                        # Parse the JSON response from our MCP wrapper
-                        response_data = json.loads(text_content)
-                        logger.info(f"Parsed MCP response: {response_data.get('status', 'unknown')}")
+                        # Check if text_content is already a dict or needs parsing
+                        if isinstance(text_content, str):
+                            # Try to parse as JSON
+                            try:
+                                response_data = json.loads(text_content)
+                            except json.JSONDecodeError:
+                                # Maybe it's a string representation of a dict
+                                logger.error(f"Failed to parse as JSON, attempting eval: {text_content[:100]}")
+                                # Don't use eval in production - this is just for debugging
+                                response_data = None
+                        elif isinstance(text_content, dict):
+                            response_data = text_content
 
-                        if response_data.get("status") == "success" and "data" in response_data:
-                            data = response_data["data"]
-                            new_blocks = data.get("blocks", blocks_state)
-                            new_resources = data.get("resources", resources_state)
-
-                            logger.info(f"Updated blocks: {len(new_blocks)}, resources: {len(new_resources)}")
-                            return history, new_blocks, new_resources, ""
-                        else:
-                            logger.error(f"MCP wrapper returned error: {response_data.get('message', 'Unknown error')}")
+                        if response_data:
+                            logger.info(f"Parsed MCP response: {response_data.get('status', 'unknown')}")
                     else:
                         logger.error("No text content in MCP result")
                 else:
                     logger.error("No content items in MCP result")
             else:
                 logger.error(f"Unexpected MCP result format: {type(result)}")
+
+            # Process the response data
+            if response_data:
+                if response_data.get("status") == "success" and "data" in response_data:
+                    data = response_data["data"]
+                    new_blocks = data.get("blocks", blocks_state)
+                    new_resources = data.get("resources", resources_state)
+
+                    logger.info(f"Updated blocks: {len(new_blocks)}, resources: {len(new_resources)}")
+                    return history, new_blocks, new_resources, ""
+                else:
+                    logger.error(f"MCP wrapper returned error: {response_data.get('message', 'Unknown error')}")
 
         except json.JSONDecodeError as e:
             logger.error(f"Failed to parse JSON from MCP result: {e}")
