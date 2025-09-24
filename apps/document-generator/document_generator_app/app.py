@@ -1320,6 +1320,7 @@ def load_example(example_id, session_id=None):
 
 def import_outline(file_path, session_id=None, already_stored_in_session=False):
     """Import an outline from a .docpack file and convert to blocks format."""
+    print(f"session_id: {session_id}")
     if already_stored_in_session is False:
         if not file_path:
             # Return 11 values matching import_file.change outputs
@@ -1434,6 +1435,8 @@ def import_outline(file_path, session_id=None, already_stored_in_session=False):
                 json_data = json.load(f)
 
         # Extract title and description
+        print(json.dumps(json_data, indent=2))  # For debugging
+
         title = json_data.get("title", "")
         description = json_data.get("general_instruction", "")
 
@@ -1591,6 +1594,7 @@ def import_outline(file_path, session_id=None, already_stored_in_session=False):
                 blocks[0]["collapsed"] = False
 
         # Regenerate outline and JSON
+        print("blocks:", json.dumps(blocks, indent=2))  # For debugging
         json_str = generate_outline_json_from_state(title, description, resources, blocks)
 
         # Generate resources HTML using the proper function
@@ -3033,8 +3037,10 @@ def extract_resources_from_docpack(docpack_path, session_id=None):
         print(f"  Resource: {r}")
     return resources
 
-
-def create_draft_document(prompt: str, resources: list = None, session_id: str = None) -> dict:
+# MCP Tool function.
+# This calls an internal handling function, which runs a recipe, where that recipe stores in session storage.
+# Session storage should probably be handled within the app, not the recipe (or at least have an alternative parameter for what is done.)
+def mcp_create_draft_document(prompt: str, resources: list = None, session_id: str = None) -> dict:
     """
     Drafts the outline for the document, which the user can iterate on. Required before
     generating the final document.
@@ -3044,8 +3050,8 @@ def create_draft_document(prompt: str, resources: list = None, session_id: str =
         resources: Any resources to include in the document.
         session_id: The session ID for the document generation if available
     """
-    print(f"[create_draft_document] Called with prompt: '{prompt}'")
-    print(f"[create_draft_document] Resources: {resources}, Session: {session_id}")
+    print(f"[mcp_create_draft_document] Called with prompt: '{prompt}'")
+    print(f"[mcp_create_draft_document] Resources: {resources}, Session: {session_id}")
 
     # Call the existing wrapper function
     result = handle_start_draft_click_wrapper(prompt, resources or [], session_id)
@@ -3075,17 +3081,52 @@ def create_draft_document(prompt: str, resources: list = None, session_id: str =
         }
 
     # Return MCP ToolResult format with success
-    # Return the data directly as a dict, not JSON stringified
     return {
         "status": "success",
         "message": "Document outline created successfully",
-        "data": {
-            "title": doc_title_val.value if hasattr(doc_title_val, "value") else "",
-            "blocks": blocks_val if blocks_val else [],
-            "resources": resources_val if resources_val else [],
-        },
     }
 
+
+def mcp_new_template(session_id: str = None) -> dict:
+    """
+    Resets the outline (a.k.a. template) for the document, resetting the document. Starts everything over.
+
+    Args:
+        session_id: The session ID for the document generation if available
+    """
+    print(f"[mcp_new_template] Session: {session_id}")
+
+    # Call the existing wrapper function
+    result = reset_document(session_id)
+
+    # Extract values from the tuple result
+    (
+        doc_title_val,
+        doc_desc_val,
+        resources_val,
+        blocks_val,
+        json_val,
+        session_val,
+        gen_html_val,
+        gen_content_val,
+        save_btn_val,
+        focused_block_val
+    ) = result   
+
+    # Store in session storage what will be use to update the UI
+    # logic understood from runner.py's generate_docpack_from_prompt
+    session_dir = session_manager.get_session_dir(session_id)
+    outline_path = Path(session_dir) / "outline.json"
+
+    with open(outline_path, "w", encoding="utf-8") as f:
+        f.write(json_val)
+        print(f"Clean outline written to: {outline_path}")
+    
+    # Return MCP ToolResult format with success
+    return {
+        "status": "success",
+        "message": "Document outline created successfully",
+    }
 
 def load_code_readme_example(session_id):
     """Load the code README example prompt and resources."""
@@ -4790,8 +4831,8 @@ def create_app():
         empty_file_path = gr.State("")
         use_session_storage = gr.State(True)
 
-        ui_update_trigger.change(
-            fn=import_outline,
+        ui_update_trigger.change( #this means for any mcp call that results in a change to the UI that the outline tracks, we need to store it in session within that mcp exposed function.
+            fn=import_outline, # this brings in outline.json from session storage and stores in state vars in UI.  (what I should have done from the beginning... session storage and rerender, and save to session storage...)
             inputs=[
                 empty_file_path,
                 gr_session_id,
@@ -4811,14 +4852,12 @@ def create_app():
             ],
             show_api=False,
         ).then(
-            fn=generate_outline_json_from_state,
-            inputs=[doc_title, doc_description, gr_references_state, gr_blocks_state],
-            outputs=[json_output],
-            show_api=False,
+            fn=render_blocks, inputs=[gr_blocks_state, gr_focused_block_state], outputs=blocks_display, show_api=False
         )
 
         # Register API endpoint for MCP integration
-        gr.api(create_draft_document)
+        gr.api(mcp_create_draft_document)
+        gr.api(mcp_new_template)
 
     return app
 

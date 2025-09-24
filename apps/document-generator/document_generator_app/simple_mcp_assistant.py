@@ -261,17 +261,12 @@ Select the most appropriate tool and prepare parameters for this request."""
         """Prepare arguments for MCP tool call"""
 
         function_name = function_intent.function_name
+        logger.info(f"Context dict: {context}")
 
-        if function_name == "create_draft_document":
+        if function_name == "mcp_create_draft_document":
             return {"prompt": function_intent.parameters.get("prompt", ""), "session_id": context.get("session_id", "")}
-        elif function_name == "generate_final_document":
-            return {}
-        elif function_name == "handle_document_generation":
-            return {"title": context.get("title", ""), "description": context.get("description", "")}
-        elif function_name == "handle_download_format":
-            return {"format_type": function_intent.parameters.get("format", "docx")}
-        elif function_name == "reset_document":
-            return {}
+        elif function_name == "mcp_new_template":
+            return {"session_id": context.get("session_id", "")}
         else:
             # Return any parameters from the function intent
             return function_intent.parameters
