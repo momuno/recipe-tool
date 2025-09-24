@@ -19,7 +19,7 @@ from dotenv import load_dotenv
 from .executor.runner import generate_docpack_from_prompt, generate_document
 from .models.outline import Outline, Resource, Section
 from .session import session_manager
-from .simple_mcp_assistant import ProperMCPAssistant, handle_simple_mcp_chat
+from .simple_mcp_assistant import handle_simple_mcp_chat
 
 # Load environment variables from .env file
 load_dotenv()
@@ -1318,26 +1318,27 @@ def load_example(example_id, session_id=None):
     )
 
 
-def import_outline(file_path, session_id=None):
+def import_outline(file_path, session_id=None, already_stored_in_session=False):
     """Import an outline from a .docpack file and convert to blocks format."""
-    if not file_path:
-        # Return 11 values matching import_file.change outputs
-        return (
-            gr.update(),  # title
-            gr.update(),  # description
-            gr.update(),  # resources
-            gr.update(),  # blocks
-            gr.update(),  # json_output
-            None,  # import_file
-            session_id,  # gr_session_id
-            gr.update(),  # generated_content_html
-            gr.update(),  # generated_content
-            gr.update(),  # save_doc_btn
-        )
+    if already_stored_in_session is False:
+        if not file_path:
+            # Return 11 values matching import_file.change outputs
+            return (
+                gr.update(),  # title
+                gr.update(),  # description
+                gr.update(),  # resources
+                gr.update(),  # blocks
+                gr.update(),  # json_output
+                None,  # import_file
+                session_id,  # gr_session_id
+                gr.update(),  # generated_content_html
+                gr.update(),  # generated_content
+                gr.update(),  # save_doc_btn
+            )
 
-    # Get or create session ID
-    if not session_id:
-        session_id = str(uuid.uuid4())
+        # Get or create session ID
+        if not session_id:
+            session_id = str(uuid.uuid4())
 
     # Define allowed text file extensions
     ALLOWED_EXTENSIONS = {
@@ -1402,29 +1403,35 @@ def import_outline(file_path, session_id=None):
     }
 
     try:
-        file_path = Path(file_path)
+        if already_stored_in_session is False:
+            file_path = Path(file_path)
 
-        # Only accept .docpack files
-        if file_path.suffix.lower() != ".docpack":
-            error_msg = "Import failed: Only .docpack files are supported. Please use a .docpack file created by the Save function."
-            return (
-                gr.update(),  # title
-                gr.update(),  # description
-                gr.update(),  # resources
-                gr.update(),  # blocks
-                json.dumps({"error": error_msg}, indent=2),  # json_output
-                None,  # import_file
-                session_id,  # session_id
-                gr.update(),  # generated_content_html
-                gr.update(),  # generated_content
-                gr.update(),  # save_doc_btn
-            )
+            # Only accept .docpack files
+            if file_path.suffix.lower() != ".docpack":
+                error_msg = "Import failed: Only .docpack files are supported. Please use a .docpack file created by the Save function."
+                return (
+                    gr.update(),  # title
+                    gr.update(),  # description
+                    gr.update(),  # resources
+                    gr.update(),  # blocks
+                    json.dumps({"error": error_msg}, indent=2),  # json_output
+                    None,  # import_file
+                    session_id,  # session_id
+                    gr.update(),  # generated_content_html
+                    gr.update(),  # generated_content
+                    gr.update(),  # save_doc_btn
+                )
 
         # Use session directory for extraction
         session_dir = session_manager.get_session_dir(session_id)
 
         # Extract the docpack to session directory
-        json_data, extracted_files = DocpackHandler.extract_package(file_path, session_dir)
+        if already_stored_in_session is False:
+            json_data, extracted_files = DocpackHandler.extract_package(file_path, session_dir)
+        else:
+            # extract json outline from existing docpack in session dir
+            with open(Path(session_dir / "outline.json"), "r") as f:
+                json_data = json.load(f)
 
         # Extract title and description
         title = json_data.get("title", "")
@@ -3193,9 +3200,14 @@ def process_assistant_chat(message, history, blocks, resources, session_id, focu
     print(f"[PROCESS_ASSISTANT_CHAT] Current blocks: {len(blocks)}, resources: {len(resources)}")
     print(f"[PROCESS_ASSISTANT_CHAT] Session ID: {session_id}")
 
+    # Get or create session
+    if not session_id:
+        session_id = str(uuid.uuid4())
+        print(f"[PROCESS_ASSISTANT_CHAT] Session ID: {session_id}")
+
     if not message:
         print("[PROCESS_ASSISTANT_CHAT] Empty message, returning unchanged")
-        return "", history, trigger_count
+        return "", history, trigger_count, session_id
 
     try:
         print("[PROCESS_ASSISTANT_CHAT] Calling handle_simple_mcp_chat...")
@@ -3213,7 +3225,7 @@ def process_assistant_chat(message, history, blocks, resources, session_id, focu
             "content": "I've updated the document. The changes should appear automatically.",
         })
 
-        return "", history, new_trigger
+        return "", history, new_trigger, session_id
 
     except Exception as e:
         error_msg = f"Error processing chat: {str(e)}"
@@ -3221,7 +3233,7 @@ def process_assistant_chat(message, history, blocks, resources, session_id, focu
         print(f"[PROCESS_ASSISTANT_CHAT] Traceback: {traceback.format_exc()}")
         history.append({"role": "user", "content": message})
         history.append({"role": "assistant", "content": error_msg})
-        return "", history, trigger_count
+        return "", history, trigger_count, session_id
 
 
 def create_app():
@@ -4487,7 +4499,7 @@ def create_app():
 
         # Update save button value whenever outline changes
         json_output.change(
-            fn=lambda: gr.update(value=create_docpack_from_current_state(), show_api=False),
+            fn=lambda: gr.update(value=create_docpack_from_current_state()),
             outputs=save_outline_btn,
             show_api=False,
         )
@@ -4751,7 +4763,7 @@ def create_app():
                 gr_focused_block_state,
                 ui_update_trigger,
             ],
-            outputs=[msg_input, chatbot, ui_update_trigger],
+            outputs=[msg_input, chatbot, ui_update_trigger, gr_session_id],
             show_api=False,
         )
 
@@ -4766,27 +4778,43 @@ def create_app():
                 gr_focused_block_state,
                 ui_update_trigger,
             ],
-            outputs=[msg_input, chatbot, ui_update_trigger],
+            outputs=[msg_input, chatbot, ui_update_trigger, gr_session_id],
             show_api=False,
         )
 
         # Clear chat history
         clear_btn.click(fn=lambda: ([], ""), outputs=[chatbot, msg_input], show_api=False)
 
-        # UI update trigger - when this changes, update all components
-        def trigger_ui_updates(trigger_value):
-            """Debug wrapper for UI updates triggered by MCP chat"""
-            print(f"[UI_UPDATE_TRIGGER] Trigger fired with value: {trigger_value}")
-            # Return the current state of all components
-            return gr.update(), gr.update()
+        # For import_outline, we need proper Gradio components as inputs
+        # Create hidden components for the static values
+        empty_file_path = gr.State("")
+        use_session_storage = gr.State(True)
 
         ui_update_trigger.change(
-            fn=lambda: (gr.update(), gr.update()),
-            inputs=[],
-            outputs=[gr_blocks_state, blocks_display],
+            fn=import_outline,
+            inputs=[
+                empty_file_path,
+                gr_session_id,
+                use_session_storage,
+            ],  # True to indicate outline already in session storage ... being used to populate app ui.
+            outputs=[
+                doc_title,
+                doc_description,
+                gr_references_state,
+                gr_blocks_state,
+                json_output,
+                import_file,  # Add import_file to outputs to clear it
+                gr_session_id,
+                generated_content_html,
+                generated_content,
+                save_doc_btn,
+            ],
             show_api=False,
         ).then(
-            fn=render_blocks, inputs=[gr_blocks_state, gr_focused_block_state], outputs=blocks_display, show_api=False
+            fn=generate_outline_json_from_state,
+            inputs=[doc_title, doc_description, gr_references_state, gr_blocks_state],
+            outputs=[json_output],
+            show_api=False,
         )
 
         # Register API endpoint for MCP integration

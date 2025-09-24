@@ -38,13 +38,6 @@ except ImportError:
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
-if not logger.handlers:
-    handler = logging.StreamHandler()
-    handler.setLevel(logging.DEBUG)
-    formatter = logging.Formatter("[SIMPLE-MCP] %(levelname)s - %(message)s")
-    handler.setFormatter(formatter)
-    logger.addHandler(handler)
-
 
 class FunctionIntent(BaseModel):
     """AI-parsed function intent"""
@@ -250,14 +243,12 @@ Select the most appropriate tool and prepare parameters for this request."""
             # Prepare tool arguments based on the function
             tool_args = self._prepare_mcp_tool_args(function_intent, context)
 
-            logger.info(f"Calling MCP tool: {function_intent.function_name}")
-            logger.debug(f"Tool arguments: {tool_args}")
-
+            logger.debug(f"tool args: {tool_args}")
             # Call MCP tool using JSON-RPC protocol
             result = await self.call_mcp_tool(function_intent.function_name, tool_args)
 
             logger.info(f"MCP tool call completed successfully")
-            logger.debug(f"Result: {str(result)[:200]}...")
+            logger.info(f"Result: {str(result)[:200]}...")
 
             # Return the result and response message
             return result, function_intent.response if function_intent.response else "Tool executed successfully"
@@ -272,7 +263,7 @@ Select the most appropriate tool and prepare parameters for this request."""
         function_name = function_intent.function_name
 
         if function_name == "create_draft_document":
-            return {"prompt": function_intent.parameters.get("prompt", "")}
+            return {"prompt": function_intent.parameters.get("prompt", ""), "session_id": context.get("session_id", "")}
         elif function_name == "generate_final_document":
             return {}
         elif function_name == "handle_document_generation":
@@ -434,11 +425,28 @@ Select the most appropriate tool and prepare parameters for this request."""
                 )
                 response.raise_for_status()
 
-                logger.info(
-                    f"\n\nIMPORTANT: MCP tool call response:\n {response.headers}\n{response.content}\n{response.text}\n"
-                )
-                # Parse SSE response format
+                # Log raw response for debugging
                 response_text = response.text
+                logger.info(f"Raw response text: {response_text[:500]}...")
+                logger.info(f"Response headers: {response.headers}")
+
+                # Try to parse as JSON first (in case it's not SSE format)
+                try:
+                    response_json = response.json()
+                    logger.info(f"Successfully parsed as JSON: {json.dumps(response_json, indent=2)[:500]}...")
+
+                    # If it's a direct JSON response, return the result
+                    if isinstance(response_json, dict):
+                        if "result" in response_json:
+                            return response_json["result"]
+                        elif "data" in response_json:
+                            return response_json["data"]
+                        else:
+                            return response_json
+                except json.JSONDecodeError:
+                    logger.info("Response is not JSON, trying SSE format...")
+
+                # Parse SSE response format
                 if "event: message" in response_text and "data: " in response_text:
                     json_data = response_text.split("data: ", 1)[1].strip()
                     mcp_response = json.loads(json_data)
@@ -562,11 +570,7 @@ async def _async_simple_mcp_chat(
     logger.debug(f"Result type: {type(result)}")
     logger.debug(f"Result content: {result}")
 
-    if (
-        function_intent.function_name
-        in ["create_draft_document", "handle_start_draft_click", "mcp_handle_start_draft_click"]
-        and result
-    ):
+    if function_intent.function_name in ["create_draft_document"] and result:
         logger.info("Extracting document creation results")
 
         # The MCP result should contain ToolResult format with JSON in content
@@ -586,20 +590,35 @@ async def _async_simple_mcp_chat(
                     text_content = content_items[0].get("text", "")
                     if text_content:
                         # Check if text_content is already a dict or needs parsing
-                        if isinstance(text_content, str):
+                        if isinstance(text_content, dict):
+                            response_data = text_content
+                            logger.info(f"text_content is already a dict")
+                        elif isinstance(text_content, str):
+                            logger.info(f"text_content is a string, attempting to parse...")
                             # Try to parse as JSON
                             try:
                                 response_data = json.loads(text_content)
-                            except json.JSONDecodeError:
-                                # Maybe it's a string representation of a dict
-                                logger.error(f"Failed to parse as JSON, attempting eval: {text_content[:100]}")
-                                # Don't use eval in production - this is just for debugging
-                                response_data = None
-                        elif isinstance(text_content, dict):
-                            response_data = text_content
+                                logger.info(f"Successfully parsed as JSON")
+                            except json.JSONDecodeError as e:
+                                logger.error(f"Failed to parse as JSON: {e}")
+                                # Try using ast.literal_eval for Python dict strings
+                                import ast
+
+                                try:
+                                    response_data = ast.literal_eval(text_content)
+                                    logger.info(f"Successfully parsed with ast.literal_eval")
+                                except (ValueError, SyntaxError) as e2:
+                                    logger.error(f"Failed to parse with ast.literal_eval: {e2}")
+                                    response_data = None
+                        else:
+                            logger.error(f"Unexpected text_content type: {type(text_content)}")
+                            response_data = None
 
                         if response_data:
-                            logger.info(f"Parsed MCP response: {response_data.get('status', 'unknown')}")
+                            logger.info(
+                                f"Parsed MCP response: {response_data.get('status', 'unknown') if isinstance(response_data, dict) else 'not a dict'}"
+                            )
+                            logger.info(f"response_data preview: {response_data.get('data')}")
                     else:
                         logger.error("No text content in MCP result")
                 else:
