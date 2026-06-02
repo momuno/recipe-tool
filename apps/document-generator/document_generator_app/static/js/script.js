@@ -3,11 +3,9 @@ console.log('🚀 JavaScript file loaded successfully!');
 
 // Auto-resize textarea function
 function autoResizeTextarea(textarea) {
-    console.log('Auto-resizing textarea:', textarea);
     textarea.style.height = 'auto';
     const newHeight = Math.max(120, textarea.scrollHeight);
     textarea.style.height = newHeight + 'px';
-    console.log('Set textarea height to:', newHeight + 'px', 'scrollHeight:', textarea.scrollHeight);
 }
 
 // Setup auto-resize for all text block textareas
@@ -3821,6 +3819,9 @@ document.addEventListener('DOMContentLoaded', function () {
 
         setupResourceUploadText();
         console.log('Called setupResourceUploadText()');
+        
+        setupChatbotMonitor();
+        console.log('Called setupChatbotMonitor()');
 
         preventResourceDrops();
         console.log('Called preventResourceDrops()');
@@ -3940,3 +3941,111 @@ function refreshResourceFromPanel(resourcePath, resourceIndex) {
         console.error('Panel refresh button not found');
     }
 }
+
+// Monitor chatbot for file upload trigger
+function setupChatbotMonitor() {
+    console.log("🔧 setupChatbotMonitor() called");
+    let lastCheckboxState = false;
+    let foundCheckbox = false;
+    
+    // Poll for changes in the file upload trigger checkbox
+    setInterval(() => {
+        // Look for the checkbox input in file-upload-trigger
+        const checkbox = document.querySelector("#file-upload-trigger input[type='checkbox']");
+        if (!checkbox) {
+            if (!foundCheckbox) {
+                console.log("[Chatbot Monitor] Checkbox not found yet...");
+            }
+            return;
+        }
+        
+        if (!foundCheckbox) {
+            console.log("[Chatbot Monitor] ✓ Found checkbox!");
+            foundCheckbox = true;
+        }
+        
+        // Check if checkbox state changed
+        const currentState = checkbox.checked;
+        
+        if (currentState !== lastCheckboxState) {
+            console.log(`[Chatbot Monitor] Checkbox state changed: ${lastCheckboxState} -> ${currentState}`);
+            
+            if (currentState) {  // Only trigger on transition to checked
+                // Trigger file upload
+                const uploadDiv = document.querySelector(".file-upload-dropzone");
+                if (uploadDiv) {
+                    const button = uploadDiv.querySelector("button");
+                    if (button) {
+                        console.log("[Chatbot Monitor] Clicking file upload button");
+                        try {
+                            button.click();
+                            console.log("[Chatbot Monitor] Click successful");
+                        } catch(e) {
+                            console.error("[Chatbot Monitor] Click failed:", e.message);
+                        }
+                    } else {
+                        console.error("[Chatbot Monitor] Button not found inside file-upload-dropzone");
+                    }
+                } else {
+                    console.error("[Chatbot Monitor] file-upload-dropzone div not found");
+                }
+            }
+            
+            lastCheckboxState = currentState;
+        }
+    }, 200);  // Check more frequently for better responsiveness
+}
+
+// Initialize on page load
+document.addEventListener("DOMContentLoaded", () => {
+    setupChatbotMonitor();
+});
+
+
+// Also call setupChatbotMonitor immediately in case DOMContentLoaded already fired
+if (document.readyState === 'loading') {
+    console.log("[Init] Document still loading, waiting for DOMContentLoaded");
+    document.addEventListener('DOMContentLoaded', setupChatbotMonitor);
+} else {
+    console.log("[Init] Document already loaded, calling setupChatbotMonitor immediately");
+    setupChatbotMonitor();
+}
+
+// Also call it after a delay as a backup
+setTimeout(() => {
+    console.log("[Init] Calling setupChatbotMonitor after 2 second delay (backup)");
+    setupChatbotMonitor();
+}, 2000);
+
+// Debug function to inspect the file-upload-trigger element
+window.debugFileUploadTrigger = function() {
+    console.log("[Debug] Looking for #file-upload-trigger...");
+    const triggerElement = document.querySelector("#file-upload-trigger");
+    
+    if (triggerElement) {
+        console.log("[Debug] Found trigger element:", triggerElement);
+        console.log("[Debug] Element type:", triggerElement.tagName);
+        console.log("[Debug] Element HTML:", triggerElement.outerHTML.substring(0, 200));
+        console.log("[Debug] Child elements:", triggerElement.children);
+        
+        // Look for any input inside
+        const anyInput = triggerElement.querySelector("input");
+        if (anyInput) {
+            console.log("[Debug] Found input:", anyInput);
+            console.log("[Debug] Input type:", anyInput.type);
+            console.log("[Debug] Input value:", anyInput.value);
+        } else {
+            console.log("[Debug] No input found inside trigger element");
+        }
+        
+        // Check for Gradio's structure
+        const gradioInput = document.querySelector(".number-input input");
+        if (gradioInput) {
+            console.log("[Debug] Found Gradio number input:", gradioInput);
+        }
+    } else {
+        console.log("[Debug] #file-upload-trigger not found");
+    }
+};
+
+console.log("[Debug] Added debug function: window.debugFileUploadTrigger()");

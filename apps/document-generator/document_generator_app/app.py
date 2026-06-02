@@ -3037,6 +3037,7 @@ def extract_resources_from_docpack(docpack_path, session_id=None):
         print(f"  Resource: {r}")
     return resources
 
+
 # MCP Tool function.
 # This calls an internal handling function, which runs a recipe, where that recipe stores in session storage.
 # Session storage should probably be handled within the app, not the recipe (or at least have an alternative parameter for what is done.)
@@ -3110,8 +3111,8 @@ def mcp_new_template(session_id: str = None) -> dict:
         gen_html_val,
         gen_content_val,
         save_btn_val,
-        focused_block_val
-    ) = result   
+        focused_block_val,
+    ) = result
 
     # Store in session storage what will be use to update the UI
     # logic understood from runner.py's generate_docpack_from_prompt
@@ -3121,12 +3122,24 @@ def mcp_new_template(session_id: str = None) -> dict:
     with open(outline_path, "w", encoding="utf-8") as f:
         f.write(json_val)
         print(f"Clean outline written to: {outline_path}")
-    
+
     # Return MCP ToolResult format with success
     return {
         "status": "success",
         "message": "Document outline created successfully",
     }
+
+
+def mcp_add_reference(session_id: str = None) -> dict:
+    """MCP tool to trigger file upload dialog for adding references to the document."""
+    # This function just returns a marker - the actual file upload trigger
+    # is handled by the frontend JavaScript when it detects this response
+    return {
+        "status": "success",
+        "action": "trigger_file_upload",
+        "message": "Please select files to add as references to the document",
+    }
+
 
 def load_code_readme_example(session_id):
     """Load the code README example prompt and resources."""
@@ -3232,7 +3245,9 @@ def remove_start_resource(resources, index_str, name):
     return resources, resources_html
 
 
-def process_assistant_chat(message, history, blocks, resources, session_id, focused_block, trigger_count):
+def process_assistant_chat(
+    message, history, blocks, resources, session_id, focused_block, trigger_count, file_upload_state
+):
     """Process chat message using MCP assistant"""
     import traceback
 
@@ -3248,25 +3263,39 @@ def process_assistant_chat(message, history, blocks, resources, session_id, focu
 
     if not message:
         print("[PROCESS_ASSISTANT_CHAT] Empty message, returning unchanged")
-        return "", history, trigger_count, session_id
+
+        return "", history, trigger_count, session_id, file_upload_state
 
     try:
         print("[PROCESS_ASSISTANT_CHAT] Calling handle_simple_mcp_chat...")
-        # Call the standalone MCP chat handler
-        handle_simple_mcp_chat(message, history, blocks, resources, session_id, focused_block)
+        # Call the standalone MCP chat handler and get updated history
+        updated_history = handle_simple_mcp_chat(message, history, blocks, resources, session_id, focused_block)
 
         # Increment trigger to force UI update
         new_trigger = trigger_count + 1
         print(f"[PROCESS_ASSISTANT_CHAT] Chat handled successfully, new trigger: {new_trigger}")
 
-        # Add messages to history
-        history.append({"role": "user", "content": message})
-        history.append({
-            "role": "assistant",
-            "content": "I've updated the document. The changes should appear automatically.",
-        })
+        # Check if the last message has the file upload trigger
+        should_trigger_upload = False
+        if updated_history and len(updated_history) > 0:
+            last_msg = updated_history[-1]
+            print(f"[PROCESS_ASSISTANT_CHAT] Last message: {last_msg}")
+            if isinstance(last_msg, dict) and last_msg.get("metadata", {}).get("action") == "trigger_file_upload":
+                print("[PROCESS_ASSISTANT_CHAT] ✓ File upload trigger detected in metadata!")
+                should_trigger_upload = True
+            else:
+                print(
+                    f"[PROCESS_ASSISTANT_CHAT] No trigger. Metadata: {last_msg.get('metadata', {}) if isinstance(last_msg, dict) else 'N/A'}"
+                )
 
-        return "", history, new_trigger, session_id
+        print(f"[PROCESS_ASSISTANT_CHAT] Returning: should_trigger_upload={should_trigger_upload}")
+
+        # Toggle the checkbox if we should trigger upload (alternate between True and False)
+        # This ensures the checkbox always changes state to trigger the event
+        new_file_upload_state = not file_upload_state if should_trigger_upload else file_upload_state
+        print(f"[PROCESS_ASSISTANT_CHAT] File upload checkbox: {file_upload_state} -> {new_file_upload_state}")
+
+        return "", updated_history, new_trigger, session_id, new_file_upload_state
 
     except Exception as e:
         error_msg = f"Error processing chat: {str(e)}"
@@ -3274,7 +3303,8 @@ def process_assistant_chat(message, history, blocks, resources, session_id, focu
         print(f"[PROCESS_ASSISTANT_CHAT] Traceback: {traceback.format_exc()}")
         history.append({"role": "user", "content": message})
         history.append({"role": "assistant", "content": error_msg})
-        return "", history, trigger_count, session_id
+
+        return "", history, trigger_count, session_id, file_upload_state
 
 
 def create_app():
@@ -3664,6 +3694,8 @@ def create_app():
                         placeholder="Ask me to help with your document...",
                         elem_classes="assistant-chatbot",
                     )
+                    # Hidden checkbox to trigger file upload (toggles between true/false)
+                    file_upload_trigger = gr.Checkbox(value=False, visible=True, elem_id="file-upload-trigger", elem_classes="hidden-component")
                     with gr.Row():
                         msg_input = gr.Textbox(
                             placeholder="Ask me to help with your document...", container=False, scale=4
@@ -4792,7 +4824,7 @@ def create_app():
             show_api=False,
         )
 
-        # Assistant chat handlers
+        # Assistant chat handlers with file upload trigger
         msg_input.submit(
             fn=process_assistant_chat,
             inputs=[
@@ -4803,8 +4835,9 @@ def create_app():
                 gr_session_id,
                 gr_focused_block_state,
                 ui_update_trigger,
+                file_upload_trigger,  # Add current counter value as input
             ],
-            outputs=[msg_input, chatbot, ui_update_trigger, gr_session_id],
+            outputs=[msg_input, chatbot, ui_update_trigger, gr_session_id, file_upload_trigger],
             show_api=False,
         )
 
@@ -4818,8 +4851,9 @@ def create_app():
                 gr_session_id,
                 gr_focused_block_state,
                 ui_update_trigger,
+                file_upload_trigger,  # Add current counter value as input
             ],
-            outputs=[msg_input, chatbot, ui_update_trigger, gr_session_id],
+            outputs=[msg_input, chatbot, ui_update_trigger, gr_session_id, file_upload_trigger],
             show_api=False,
         )
 
@@ -4831,8 +4865,8 @@ def create_app():
         empty_file_path = gr.State("")
         use_session_storage = gr.State(True)
 
-        ui_update_trigger.change( #this means for any mcp call that results in a change to the UI that the outline tracks, we need to store it in session within that mcp exposed function.
-            fn=import_outline, # this brings in outline.json from session storage and stores in state vars in UI.  (what I should have done from the beginning... session storage and rerender, and save to session storage...)
+        ui_update_trigger.change(  # this means for any mcp call that results in a change to the UI that the outline tracks, we need to store it in session within that mcp exposed function.
+            fn=import_outline,  # this brings in outline.json from session storage and stores in state vars in UI.  (what I should have done from the beginning... session storage and rerender, and save to session storage...)
             inputs=[
                 empty_file_path,
                 gr_session_id,
@@ -4858,6 +4892,7 @@ def create_app():
         # Register API endpoint for MCP integration
         gr.api(mcp_create_draft_document)
         gr.api(mcp_new_template)
+        gr.api(mcp_add_reference)
 
     return app
 
