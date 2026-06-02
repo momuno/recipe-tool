@@ -1,9 +1,9 @@
 import argparse
-import asyncio
 import json
 import os
 import tempfile
 import time
+import logging
 import uuid
 from pathlib import Path
 from typing import Any, Dict, List
@@ -20,6 +20,8 @@ from .session import session_manager
 
 # Load environment variables from .env file
 load_dotenv()
+
+logger = logging.getLogger(__name__)
 
 # Global variable to track if app is running in dev mode
 IS_DEV_MODE = False
@@ -87,6 +89,9 @@ SUPPORTED_FILE_TYPES = [
     ".docx",
 ]
 
+# Allowed text file extensions for resource imports (derived from SUPPORTED_FILE_TYPES, excluding .docx which has special handling)
+ALLOWED_TEXT_EXTENSIONS = {ext for ext in SUPPORTED_FILE_TYPES if ext != ".docx"}
+
 
 def markdown_to_docx(markdown_content: str, output_path: str) -> str:
     """Convert markdown content to docx file and return the output path."""
@@ -108,9 +113,6 @@ def check_docx_protected(docx_path: str) -> tuple[bool, str]:
     Returns (is_protected, error_message)
     """
     try:
-        from docx import Document
-
-        filename = os.path.basename(docx_path)
         # Try to open the document
         doc = Document(docx_path)
         # Try to access at least one paragraph to ensure it's readable
@@ -229,11 +231,6 @@ def add_ai_block(blocks, focused_block_id=None):
     return blocks + [new_block]
 
 
-def add_heading_block(blocks):
-    """Add a heading block."""
-    new_block = {"id": str(uuid.uuid4()), "type": "heading", "content": "Heading"}
-    return blocks + [new_block]
-
 
 def add_text_block(blocks, focused_block_id=None):
     """Add a text block."""
@@ -311,54 +308,6 @@ def update_block_heading(blocks, block_id, heading, title, description, resource
 def set_focused_block(block_id):
     """Set the currently focused block."""
     return block_id
-
-
-def reset_document(session_id=None):
-    """Reset the document to initial empty state."""
-    # Create new session ID
-    new_session_id = str(uuid.uuid4())
-
-    # Reset to initial blocks
-    initial_blocks = [
-        {
-            "id": str(uuid.uuid4()),
-            "type": "ai",
-            "heading": "",
-            "content": "",
-            "resources": [],
-            "collapsed": False,  # AI block starts expanded
-            "indent_level": 0,
-        },
-        {
-            "id": str(uuid.uuid4()),
-            "type": "text",
-            "heading": "",
-            "content": "",
-            "resources": [],
-            "collapsed": True,  # Text block starts collapsed
-            "indent_level": 0,
-        },
-    ]
-
-    # Generate initial outline
-    outline, json_str = regenerate_outline_from_state("", "", [], initial_blocks)
-
-    # Return empty title, description, empty resources, initial blocks
-    return (
-        gr.update(value=""),  # title - use gr.update to ensure proper clearing
-        gr.update(value=""),  # description - use gr.update to ensure proper clearing
-        [],  # resources
-        initial_blocks,  # blocks
-        outline,  # outline
-        json_str,  # json_output
-        None,  # import_file
-        new_session_id,  # session_id
-        gr.update(
-            value="<em>Click '▷ Generate' to see the generated content here.</em><br><br><br>", visible=True
-        ),  # generated_content_html
-        gr.update(visible=False),  # generated_content
-        gr.update(interactive=False),  # save_doc_btn
-    )
 
 
 def convert_block_type(blocks, block_id, to_type, title, description, resources):
@@ -448,19 +397,6 @@ def update_block_indent(blocks, block_id, direction, title, description, resourc
     return blocks, outline, json_str
 
 
-def save_inline_resources(blocks, output_dir):
-    """Save inline resources from edited text blocks to disk."""
-    saved_resources = []
-    for block in blocks:
-        if block.get("type") == "text" and block.get("edited") and block.get("text_content"):
-            # Save the inline resource
-            filename = f"inline_{block['id']}.txt"
-            filepath = Path(output_dir) / filename
-            filepath.write_text(block["text_content"], encoding="utf-8")
-            saved_resources.append({"block_id": block["id"], "path": str(filepath)})
-    return saved_resources
-
-
 async def handle_document_generation(title, description, resources, blocks, session_id=None):
     """Generate document using the recipe executor."""
     json_str = ""  # Initialize json_str before the try block
@@ -494,20 +430,20 @@ async def handle_document_generation(title, description, resources, blocks, sess
         docx_filename = f"{base_filename}.docx"
         docx_file_path = os.path.join(temp_dir, docx_filename)
         markdown_to_docx(generated_content, docx_file_path)
-        print(f"DEBUG: Created DOCX file at: {docx_file_path}")
+        logger.debug(f"Created DOCX file at: {docx_file_path}")
 
         # Save as Markdown
         markdown_filename = f"{base_filename}.md"
         markdown_file_path = os.path.join(temp_dir, markdown_filename)
         with open(markdown_file_path, "w", encoding="utf-8") as f:
             f.write(generated_content)
-        print(f"DEBUG: Created Markdown file at: {markdown_file_path}")
+        logger.debug(f"Created Markdown file at: {markdown_file_path}")
 
         # Verify files exist
         if os.path.exists(docx_file_path):
-            print(f"DEBUG: DOCX file exists, size: {os.path.getsize(docx_file_path)} bytes")
+            logger.debug(f"DOCX file exists, size: {os.path.getsize(docx_file_path)} bytes")
         if os.path.exists(markdown_file_path):
-            print(f"DEBUG: Markdown file exists, size: {os.path.getsize(markdown_file_path)} bytes")
+            logger.debug(f"Markdown file exists, size: {os.path.getsize(markdown_file_path)} bytes")
 
         return json_str, generated_content, docx_file_path, markdown_file_path
 
@@ -523,7 +459,6 @@ def generate_document_json(title, description, resources, blocks, save_inline=Fa
         save_inline: If True, save inline resources to inline_dir and use real paths
         inline_dir: Directory to save inline resources to (required if save_inline=True)
     """
-    import json
 
     # Create the base structure
     doc_json = {"title": title, "general_instruction": description, "resources": [], "sections": []}
@@ -646,14 +581,12 @@ def generate_document_json(title, description, resources, blocks, save_inline=Fa
             })
     else:
         # For preview, save to temp gradio directory immediately
-        import tempfile
 
         gradio_temp_dir = Path(tempfile.gettempdir()) / "gradio"
         gradio_temp_dir.mkdir(exist_ok=True)
 
         for inline_res in inline_resources:
             # Generate unique filename with timestamp
-            import time
 
             timestamp = str(int(time.time() * 1000000))
             filename = f"inline_{inline_res['block_id']}_{timestamp}.txt"
@@ -681,16 +614,16 @@ def regenerate_outline_from_state(title, description, resources, blocks):
         # Update global state whenever outline is regenerated
         global current_document_state
         current_document_state = {"title": title, "outline_json": json_str, "blocks": blocks}
-        print(f"DEBUG: regenerate_outline_from_state called with title='{title}'")
-        print(f"DEBUG: Updated global current_document_state: {current_document_state}")
+        logger.debug(f"regenerate_outline_from_state called with title='{title}'")
+        logger.debug(f"Updated global current_document_state: {current_document_state}")
 
         return outline, json_str
     except Exception as e:
         # Return None outline and error message in JSON
         import traceback
 
-        print(f"ERROR in regenerate_outline_from_state: {str(e)}")
-        print(traceback.format_exc())
+        logger.error(f"ERROR in regenerate_outline_from_state: {str(e)}")
+        logger.debug("%s", traceback.format_exc())
         error_json = json.dumps({"error": str(e), "traceback": traceback.format_exc()}, indent=2)
         return None, error_json
 
@@ -704,7 +637,6 @@ def update_document_metadata(title, description, resources, blocks):
 
 def update_block_resources(blocks, block_id, resource_json, title, description, resources):
     """Update a block's resources when a resource is dropped on it."""
-    import json
 
     # Parse the resource data
     resource_data = json.loads(resource_json)
@@ -731,7 +663,7 @@ def update_block_resources(blocks, block_id, resource_json, title, description, 
                         with open(file_path, "r", encoding="utf-8") as f:
                             block["content"] = f.read()
                 except Exception as e:
-                    print(f"Error loading file content: {e}")
+                    logger.debug(f"Error loading file content: {e}")
                     # Keep existing content if file can't be read
             else:
                 # For AI blocks, allow multiple resources
@@ -850,7 +782,7 @@ def generate_resource_html(resources):
 
 def delete_resource_from_panel(resources, resource_path, title, description, blocks):
     """Delete a resource from the resource panel and all blocks that use it."""
-    print(f"Deleting resource from panel: {resource_path}")
+    logger.debug(f"Deleting resource from panel: {resource_path}")
 
     # Remove from resources list
     new_resources = [res for res in resources if res.get("path") != resource_path]
@@ -867,7 +799,7 @@ def delete_resource_from_panel(resources, resource_path, title, description, blo
             block_copy["resources"] = [res for res in block_copy["resources"] if res.get("path") != resource_path]
 
             if original_count != len(block_copy["resources"]):
-                print(
+                logger.debug(
                     f"Removed resource from block {block_copy['id']}: {original_count} -> {len(block_copy['resources'])}"
                 )
 
@@ -1041,68 +973,6 @@ def import_outline(file_path, session_id=None):
     if not session_id:
         session_id = str(uuid.uuid4())
 
-    # Define allowed text file extensions
-    ALLOWED_EXTENSIONS = {
-        ".txt",
-        ".md",
-        ".py",
-        ".c",
-        ".cpp",
-        ".h",
-        ".java",
-        ".js",
-        ".ts",
-        ".jsx",
-        ".tsx",
-        ".json",
-        ".xml",
-        ".yaml",
-        ".yml",
-        ".toml",
-        ".ini",
-        ".cfg",
-        ".conf",
-        ".sh",
-        ".bash",
-        ".zsh",
-        ".fish",
-        ".ps1",
-        ".bat",
-        ".cmd",
-        ".rs",
-        ".go",
-        ".rb",
-        ".php",
-        ".pl",
-        ".lua",
-        ".r",
-        ".m",
-        ".swift",
-        ".kt",
-        ".scala",
-        ".clj",
-        ".ex",
-        ".exs",
-        ".elm",
-        ".fs",
-        ".ml",
-        ".sql",
-        ".html",
-        ".htm",
-        ".css",
-        ".scss",
-        ".sass",
-        ".less",
-        ".vue",
-        ".svelte",
-        ".astro",
-        ".tex",
-        ".rst",
-        ".adoc",
-        ".org",
-        ".csv",
-    }
-
     try:
         file_path = Path(file_path)
 
@@ -1150,7 +1020,7 @@ def import_outline(file_path, session_id=None):
                 continue  # Don't add to regular resources
 
             # Check if file extension is allowed
-            if file_ext not in ALLOWED_EXTENSIONS:
+            if file_ext not in ALLOWED_TEXT_EXTENSIONS:
                 invalid_resources.append(f"{resource_name} ({file_ext})")
                 continue
 
@@ -1168,7 +1038,7 @@ def import_outline(file_path, session_id=None):
             error_msg = "Import failed: The following resources have unsupported file types:\n" + "\n".join(
                 invalid_resources
             )
-            error_msg += f"\n\nOnly text files are allowed: {', '.join(sorted(ALLOWED_EXTENSIONS))}"
+            error_msg += f"\n\nOnly text files are allowed: {', '.join(sorted(ALLOWED_TEXT_EXTENSIONS))}"
             # Return error in the JSON output field
             return (
                 gr.update(),  # title
@@ -1242,7 +1112,7 @@ def import_outline(file_path, session_id=None):
                                 block["text_content"] = block["content"]
                                 block["edited"] = True  # Mark as edited
                         except Exception as e:
-                            print(f"Error loading inline resource: {e}")
+                            logger.debug(f"Error loading inline resource: {e}")
                     elif resource_key and resources:
                         # Regular resource reference - find by key
                         for resource in resources:
@@ -1254,7 +1124,7 @@ def import_outline(file_path, session_id=None):
                                         block["content"] = f.read()
                                         block["text_content"] = block["content"]
                                 except Exception as e:
-                                    print(f"Error loading resource content: {e}")
+                                    logger.debug(f"Error loading resource content: {e}")
                                 break
                 else:
                     # Default to AI block if no specific type indicators
@@ -1290,9 +1160,6 @@ def import_outline(file_path, session_id=None):
         # Regenerate outline and JSON
         outline, json_str = regenerate_outline_from_state(title, description, resources, blocks)
 
-        # Generate resources HTML using the proper function
-        generate_resource_html(resources)
-
         # Return values matching what import_file.change expects
         return (
             title,
@@ -1312,7 +1179,7 @@ def import_outline(file_path, session_id=None):
 
     except Exception as e:
         error_msg = f"Error importing file: {str(e)}"
-        print(error_msg)
+        logger.debug("%s", error_msg)
         # Return current values on error matching expected outputs
         return (
             gr.update(),  # title
@@ -1373,38 +1240,37 @@ def save_outline(title, outline_json, blocks):
 
     except Exception as e:
         error_msg = f"Error creating docpack: {str(e)}"
-        print(error_msg)
+        logger.debug("%s", error_msg)
         return gr.update(value=None, visible=False)
 
 
 def create_docpack_from_current_state():
     """Create a docpack using the current global document state."""
-    import time
     from datetime import datetime
 
     global current_document_state
 
-    print(f"=== CREATING DOCPACK at {datetime.now().isoformat()} ===")
-    print(f"Title: {current_document_state.get('title', 'N/A') if current_document_state else 'No state'}")
-    print(f"Has outline_json: {'outline_json' in current_document_state if current_document_state else False}")
-    print(f"Number of blocks: {len(current_document_state.get('blocks', [])) if current_document_state else 0}")
-    print(f"Full current_document_state: {current_document_state}")
+    logger.debug(f"=== CREATING DOCPACK at {datetime.now().isoformat()} ===")
+    logger.debug(f"Title: {current_document_state.get('title', 'N/A') if current_document_state else 'No state'}")
+    logger.debug(f"Has outline_json: {'outline_json' in current_document_state if current_document_state else False}")
+    logger.debug(f"Number of blocks: {len(current_document_state.get('blocks', [])) if current_document_state else 0}")
+    logger.debug(f"Full current_document_state: {current_document_state}")
 
     if not current_document_state:
-        print("ERROR: No current_document_state available for docpack creation")
+        logger.error("ERROR: No current_document_state available for docpack creation")
         return None
 
     try:
         title = current_document_state.get("title", "Document")
         outline_json = current_document_state.get("outline_json", "{}")
-        print(f"DEBUG: Using title '{title}' for docpack filename")
+        logger.debug(f"Using title '{title}' for docpack filename")
 
         # Create filename from title and timestamp with milliseconds to ensure uniqueness
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         milliseconds = int(time.time() * 1000) % 1000
         safe_title = "".join(c if c.isalnum() or c in " -_" else "_" for c in title)[:50]
         docpack_name = f"{safe_title}_{timestamp}_{milliseconds}.docpack"
-        print(f"DEBUG: Generated filename: {docpack_name} (from title: '{title}', timestamp: {timestamp})")
+        logger.debug(f"Generated filename: {docpack_name} (from title: '{title}', timestamp: {timestamp})")
 
         # Create a temporary file for the docpack
         temp_dir = Path(tempfile.gettempdir())
@@ -1441,13 +1307,13 @@ def create_docpack_from_current_state():
 
     except Exception as e:
         error_msg = f"Error creating docpack: {str(e)}"
-        print(error_msg)
+        logger.debug("%s", error_msg)
         return None
 
 
 def render_block_resources(block_resources, block_type, block_id):
     """Render the resources inside a block."""
-    print(f"render_block_resources for block {block_id}: {len(block_resources) if block_resources else 0} resources")
+    logger.debug(f"render_block_resources for block {block_id}: {len(block_resources) if block_resources else 0} resources")
 
     if block_type == "text":
         # Text blocks always show the drop zone, never show resources
@@ -1476,15 +1342,14 @@ def render_block_resources(block_resources, block_type, block_id):
 
 def render_blocks(blocks, focused_block_id=None):
     """Render blocks as HTML."""
-    import time
 
     timestamp = int(time.time() * 1000)
 
-    print(f"render_blocks called with {len(blocks) if blocks else 0} blocks at {timestamp}")
+    logger.debug(f"render_blocks called with {len(blocks) if blocks else 0} blocks at {timestamp}")
     if blocks:
         for i, block in enumerate(blocks):
             res_count = len(block.get("resources", []))
-            print(f"  Block {i} ({block['id']}): {res_count} resources")
+            logger.debug(f"  Block {i} ({block['id']}): {res_count} resources")
 
     if not blocks:
         return "<div class='empty-blocks-message'>Click '+ Add AI' to add an AI generated section.</div><div class='empty-blocks-message'>Click '+ Add Text' to add a traditional text section.</div>"
@@ -1548,17 +1413,6 @@ def render_blocks(blocks, focused_block_id=None):
                     <div class='block-resources'>
                         {render_block_resources(block.get("resources", []), "AI", block_id)}
                     </div>
-                </div>
-            </div>
-            """
-        elif block["type"] == "heading":
-            html += f"""
-            <div class='content-block heading-block' data-id='{block_id}'>
-                <button class='delete-btn' onclick='deleteBlock("{block_id}")'>🗑</button>
-                <button class='add-btn' onclick='addBlockAfter("{block_id}")'>+</button>
-                <div class='block-header heading-header'>
-                    <input type='text' value='{block["content"]}'
-                           oninput='updateBlockContent("{block_id}", this.value)'/>
                 </div>
             </div>
             """
@@ -1678,26 +1532,14 @@ def handle_start_file_upload(files, current_resources):
     return new_resources, None, gr.update(visible=False)
 
 
-def handle_start_draft_click_wrapper(prompt, resources, session_id=None):
-    """Wrapper to handle the Draft button click synchronously."""
-    print("DEBUG: handle_start_draft_click_wrapper called")
-    print(f"DEBUG: prompt type: {type(prompt)}, value: '{prompt}'")
-    print(f"DEBUG: resources type: {type(resources)}, value: {resources}")
-    print(f"DEBUG: session_id: {session_id}")
-
-    # Run the async function synchronously
-
-    return asyncio.run(handle_start_draft_click(prompt, resources, session_id))
-
-
 async def handle_start_draft_click(prompt, resources, session_id=None):
     """Handle the Draft button click on the Start tab."""
-    print("DEBUG: In async handle_start_draft_click")
-    print(f"DEBUG: prompt value in async: '{prompt}'")
+    logger.debug("In async handle_start_draft_click")
+    logger.debug(f"prompt value in async: '{prompt}'")
 
     if not prompt or not prompt.strip():
         error_msg = "Please enter a description of what you'd like to create."
-        print(f"DEBUG: No prompt provided, returning error: {error_msg}")
+        logger.debug(f"No prompt provided, returning error: {error_msg}")
         # Return 15 values to match outputs (added loading message and button)
         return (
             gr.update(),  # doc_title
@@ -1730,22 +1572,22 @@ async def handle_start_draft_click(prompt, resources, session_id=None):
         # Get or create session ID
         if not session_id:
             session_id = str(uuid.uuid4())
-            print(f"DEBUG: Created new session_id: {session_id}")
+            logger.debug(f"Created new session_id: {session_id}")
 
-        print(f"DEBUG: Calling generate_docpack_from_prompt with {len(resources) if resources else 0} resources")
+        logger.debug(f"Calling generate_docpack_from_prompt with {len(resources) if resources else 0} resources")
 
         # Call the docpack generation function
         docpack_path, outline_json = await generate_docpack_from_prompt(
             prompt=prompt.strip(), resources=resources or [], session_id=session_id, dev_mode=IS_DEV_MODE
         )
 
-        print(f"DEBUG: Received docpack_path: {docpack_path}")
-        print(f"DEBUG: Received outline_json length: {len(outline_json) if outline_json else 0}")
+        logger.debug(f"Received docpack_path: {docpack_path}")
+        logger.debug(f"Received outline_json length: {len(outline_json) if outline_json else 0}")
 
         # Parse the outline JSON
         if outline_json:
             outline_data = json.loads(outline_json)
-            print(f"DEBUG: Successfully parsed outline with title: {outline_data.get('title', 'No title')}")
+            logger.debug(f"Successfully parsed outline with title: {outline_data.get('title', 'No title')}")
 
             # Process the outline data similar to import_outline function
             title = outline_data.get("title", "Untitled Document")
@@ -1848,7 +1690,7 @@ async def handle_start_draft_click(prompt, resources, session_id=None):
             )
         else:
             error_msg = "Failed to generate outline. Please try again."
-            print(f"DEBUG: No outline generated, returning error: {error_msg}")
+            logger.debug(f"No outline generated, returning error: {error_msg}")
             # Return 15 values to match outputs
             return (
                 gr.update(),  # doc_title
@@ -1881,8 +1723,8 @@ async def handle_start_draft_click(prompt, resources, session_id=None):
         import traceback
 
         error_msg = f"Error: {str(e)}"
-        print(f"ERROR in handle_start_draft_click: {error_msg}")
-        print(f"Traceback: {traceback.format_exc()}")
+        logger.error(f"ERROR in handle_start_draft_click: {error_msg}")
+        logger.debug(f"Traceback: {traceback.format_exc()}")
         # Return 15 values to match outputs
         return (
             gr.update(),  # doc_title
@@ -1920,7 +1762,7 @@ def handle_file_upload(files, current_resources, title, description, blocks, ses
         return current_resources, None, gr.update(), gr.update(), session_id, gr.update()
 
     # Debug: Check what we're receiving
-    print(f"DEBUG handle_file_upload - title: {title}, description: {description}, blocks: {blocks}")
+    logger.debug(f"DEBUG handle_file_upload - title: {title}, description: {description}, blocks: {blocks}")
 
     # Get or create session ID
     if not session_id:
@@ -1965,13 +1807,13 @@ def handle_file_upload(files, current_resources, title, description, blocks, ses
     outline, json_str = regenerate_outline_from_state(title, description, new_resources, blocks)
 
     # Debug: Check what we're returning
-    print(f"DEBUG handle_file_upload - returning json_str: {json_str[:100]}...")
-    print("DEBUG handle_file_upload - full return values:")
-    print(f"  - new_resources length: {len(new_resources)}")
-    print("  - file_upload clear: None")
-    print(f"  - outline type: {type(outline)}")
-    print(f"  - json_str type: {type(json_str)}, length: {len(json_str)}")
-    print(f"  - session_id: {session_id}")
+    logger.debug(f"DEBUG handle_file_upload - returning json_str: {json_str[:100]}...")
+    logger.debug("DEBUG handle_file_upload - full return values:")
+    logger.debug(f"  - new_resources length: {len(new_resources)}")
+    logger.debug("  - file_upload clear: None")
+    logger.debug(f"  - outline type: {type(outline)}")
+    logger.debug(f"  - json_str type: {type(json_str)}, length: {len(json_str)}")
+    logger.debug(f"  - session_id: {session_id}")
 
     # Create warning message if there were any protected files
     if warnings:
@@ -2047,7 +1889,7 @@ def update_resource_description_gradio(resources, resource_path, new_description
 
 def delete_resource_gradio(resources, resource_path, title, description, blocks):
     """Delete a resource from Gradio component."""
-    print(f"Deleting resource: {resource_path}")
+    logger.debug(f"Deleting resource: {resource_path}")
 
     # Remove from resources list
     new_resources = [res for res in resources if res.get("path") != resource_path]
@@ -2063,7 +1905,7 @@ def delete_resource_gradio(resources, resource_path, title, description, blocks)
             new_count = len(block_copy["resources"])
 
             if original_count != new_count:
-                print(f"Removed resource from block {block_copy['id']}: {original_count} -> {new_count}")
+                logger.debug(f"Removed resource from block {block_copy['id']}: {original_count} -> {new_count}")
 
             # If this is a text block and we just removed its resource, clear the content
             if block_copy["type"] == "text" and len(block_copy["resources"]) == 0:
@@ -2164,7 +2006,7 @@ def replace_resource_file_gradio(resources, old_resource_path, new_file, title, 
                                             with open(dest_path, "r", encoding="utf-8") as f:
                                                 block["content"] = f.read()
                                     except Exception as e:
-                                        print(f"Error loading new file content: {e}")
+                                        logger.debug(f"Error loading new file content: {e}")
 
                 break
 
@@ -2175,7 +2017,7 @@ def replace_resource_file_gradio(resources, old_resource_path, new_file, title, 
         return resources, outline, json_str, None, gr.update(visible=False)
 
     except Exception as e:
-        print(f"Error replacing resource file: {e}")
+        logger.debug(f"Error replacing resource file: {e}")
         import random
 
         warning_id = f"warning_{random.randint(1000, 9999)}"
@@ -2246,10 +2088,7 @@ def create_app():
                 # Single expanding card
                 with gr.Column(elem_classes="start-input-card-container"):
                     with gr.Column(elem_classes="start-input-card"):
-                        gr.TextArea(
-                            label="What document would you like to create?",
-                            elem_classes="resource-drop-label",
-                        )
+                        gr.Markdown("**What document would you like to create?**", elem_classes="resource-drop-label")
                         # Example buttons container - always visible at the top
                         with gr.Column(elem_classes="start-examples-container"):
                             with gr.Row(elem_classes="start-examples-buttons"):
@@ -2287,7 +2126,7 @@ def create_app():
                         with gr.Column(elem_classes="start-expandable-content", elem_id="start-expandable-section"):
                             # Display uploaded resources (above dropzone and button)
                             with gr.Column(elem_classes="start-resources-display-container"):
-                                # Create a placeholder for the resources displayfvz
+                                # Create a placeholder for the resources display
                                 start_resources_display = gr.HTML(
                                     value='<div class="start-resources-list"></div>',
                                     elem_classes="start-resources-display",
@@ -2295,14 +2134,14 @@ def create_app():
 
                                 # Function to render resources
                                 def render_start_resources(resources):
-                                    print(
+                                    logger.debug(
                                         f"DEBUG render_start_resources called with {len(resources) if resources else 0} resources"
                                     )
                                     if resources and len(resources) > 0:
                                         # Create a flex container for resources
                                         html_content = '<div class="start-resources-list">'
                                         for idx, resource in enumerate(resources):
-                                            print(f"  Rendering resource: {resource['name']}")
+                                            logger.debug(f"  Rendering resource: {resource['name']}")
                                             html_content += f"""
                                                 <div class="dropped-resource">
                                                     <span>{resource["name"]}</span>
@@ -2316,10 +2155,7 @@ def create_app():
                                         return '<div class="start-resources-list"></div>'
 
                             # Upload area - full width
-                            gr.TextArea(
-                                label="Add reference files for AI context. (.docx, .md, .csv, .py, .json, .txt, etc.)",
-                                elem_classes="resource-drop-label",
-                            )
+                            gr.Markdown("**Add reference files for AI context.** (.docx, .md, .csv, .py, .json, .txt, etc.)", elem_classes="resource-drop-label")
                             # File upload dropzone
                             start_file_upload = gr.File(
                                 label="Drop files here or click to upload",
@@ -2750,12 +2586,12 @@ def create_app():
                                         # Delete button
                                         def delete_gradio_and_render(resources, path, title, desc, blocks, focused):
                                             """Delete resource via Gradio button and render blocks."""
-                                            print("\n=== delete_gradio_and_render called ===")
+                                            logger.debug("\n=== delete_gradio_and_render called ===")
                                             new_res, new_blocks, outline, json_str = delete_resource_gradio(
                                                 resources, path, title, desc, blocks
                                             )
                                             blocks_html = render_blocks(new_blocks, focused)
-                                            print("=== delete_gradio_and_render complete ===\n")
+                                            logger.debug("=== delete_gradio_and_render complete ===\n")
                                             return new_res, new_blocks, outline, json_str, blocks_html
 
                                         delete_btn.click(
@@ -2833,9 +2669,6 @@ def create_app():
                         delete_trigger = gr.Button(
                             "Delete", visible=True, elem_id="delete-trigger", elem_classes="hidden-component"
                         )
-
-                        # Hidden HTML for JavaScript execution
-                        gr.HTML(visible=False)
 
                         # Hidden components for content updates
                         update_block_id = gr.Textbox(
@@ -3251,21 +3084,21 @@ def create_app():
         # Delete resource from panel handler
         def delete_and_render(resources, resource_path, title, description, blocks, focused_id):
             """Delete resource and return both the state updates and rendered HTML."""
-            print("\n=== delete_and_render called ===")
-            print(f"Resource path: {resource_path}")
-            print(f"Blocks before: {len(blocks)} blocks")
+            logger.debug("\n=== delete_and_render called ===")
+            logger.debug(f"Resource path: {resource_path}")
+            logger.debug(f"Blocks before: {len(blocks)} blocks")
 
             new_resources, updated_blocks, outline, json_str = delete_resource_from_panel(
                 resources, resource_path, title, description, blocks
             )
 
-            print(f"Blocks after delete: {len(updated_blocks)} blocks")
+            logger.debug(f"Blocks after delete: {len(updated_blocks)} blocks")
 
             # Render the blocks immediately
             blocks_html = render_blocks(updated_blocks, focused_id)
 
-            print(f"Generated HTML length: {len(blocks_html)}")
-            print("=== delete_and_render complete ===\n")
+            logger.debug(f"Generated HTML length: {len(blocks_html)}")
+            logger.debug("=== delete_and_render complete ===\n")
 
             return new_resources, updated_blocks, outline, json_str, blocks_html
 
@@ -3345,8 +3178,8 @@ def create_app():
             # Re-enable the generate button
             generate_btn_update = gr.update(interactive=True)
 
-            print(f"DEBUG: Returning DOCX path to state: {docx_path}")
-            print(f"DEBUG: Returning Markdown path to state: {markdown_path}")
+            logger.debug(f"Returning DOCX path to state: {docx_path}")
+            logger.debug(f"Returning Markdown path to state: {markdown_path}")
 
             # Return both file paths for state storage
             return (
@@ -3390,20 +3223,20 @@ def create_app():
         # Handle download format selection
         def handle_download_format(format_type, docx_path, markdown_path):
             """Handle download based on selected format."""
-            print(f"Download format selected: {format_type}")
-            print(f"DOCX path: {docx_path}")
-            print(f"Markdown path: {markdown_path}")
+            logger.debug(f"Download format selected: {format_type}")
+            logger.debug(f"DOCX path: {docx_path}")
+            logger.debug(f"Markdown path: {markdown_path}")
 
             if format_type == "markdown" and markdown_path:
-                print(f"Setting download to markdown: {markdown_path}")
+                logger.debug(f"Setting download to markdown: {markdown_path}")
                 # Return the markdown file path for download
                 return gr.update(value=markdown_path)
             elif format_type == "docx" and docx_path:
-                print(f"Setting download to DOCX: {docx_path}")
+                logger.debug(f"Setting download to DOCX: {docx_path}")
                 # Return the DOCX file path for download
                 return gr.update(value=docx_path)
             else:
-                print("No valid format or path, keeping current state")
+                logger.debug("No valid format or path, keeping current state")
                 # Keep current state
                 return gr.update()
 
@@ -3668,92 +3501,25 @@ def create_app():
         # Example button handlers
         def extract_resources_from_docpack(docpack_path, session_id=None):
             """Extract resources from a docpack file."""
-            # Define allowed extensions for start tab (same as file upload)
-            ALLOWED_EXTENSIONS = {
-                ".txt",
-                ".md",
-                ".py",
-                ".c",
-                ".cpp",
-                ".h",
-                ".java",
-                ".js",
-                ".ts",
-                ".jsx",
-                ".tsx",
-                ".json",
-                ".xml",
-                ".yaml",
-                ".yml",
-                ".toml",
-                ".ini",
-                ".cfg",
-                ".conf",
-                ".sh",
-                ".bash",
-                ".zsh",
-                ".fish",
-                ".ps1",
-                ".bat",
-                ".cmd",
-                ".rs",
-                ".go",
-                ".rb",
-                ".php",
-                ".pl",
-                ".lua",
-                ".r",
-                ".m",
-                ".swift",
-                ".kt",
-                ".scala",
-                ".clj",
-                ".ex",
-                ".erl",
-                ".hs",
-                ".ml",
-                ".fs",
-                ".nim",
-                ".d",
-                ".dart",
-                ".jl",
-                ".v",
-                ".zig",
-                ".html",
-                ".htm",
-                ".css",
-                ".scss",
-                ".sass",
-                ".less",
-                ".vue",
-                ".svelte",
-                ".astro",
-                ".tex",
-                ".rst",
-                ".adoc",
-                ".org",
-                ".csv",
-            }
-
             resources = []
             if docpack_path.exists():
-                print(f"DEBUG: Docpack exists at {docpack_path}")
+                logger.debug(f"Docpack exists at {docpack_path}")
                 try:
                     # Use provided session ID or create a new one
                     if not session_id:
                         session_id = str(uuid.uuid4())
-                        print(f"DEBUG: Created new session ID: {session_id}")
+                        logger.debug(f"Created new session ID: {session_id}")
                     else:
-                        print(f"DEBUG: Using existing session ID: {session_id}")
+                        logger.debug(f"Using existing session ID: {session_id}")
 
                     # Create a temporary directory for extraction
                     with tempfile.TemporaryDirectory() as temp_dir:
-                        print(f"DEBUG: Created temp directory: {temp_dir}")
+                        logger.debug(f"Created temp directory: {temp_dir}")
                         # Extract the docpack - convert temp_dir to Path object
-                        print(f"DEBUG: Extracting docpack from {docpack_path} to {temp_dir}")
+                        logger.debug(f"Extracting docpack from {docpack_path} to {temp_dir}")
                         json_data, extracted_files = DocpackHandler.extract_package(str(docpack_path), Path(temp_dir))
-                        print(f"DEBUG: Extraction successful. Found {len(extracted_files)} files")
-                        print(f"DEBUG: JSON data has {len(json_data.get('resources', []))} resources")
+                        logger.debug(f"Extraction successful. Found {len(extracted_files)} files")
+                        logger.debug(f"JSON data has {len(json_data.get('resources', []))} resources")
 
                         # Process resources from the docpack
                         for res_data in json_data.get("resources", []):
@@ -3768,7 +3534,7 @@ def create_app():
                             file_ext = Path(resource_filename).suffix.lower()
 
                             # Check if file extension is allowed
-                            if file_ext not in ALLOWED_EXTENSIONS:
+                            if file_ext not in ALLOWED_TEXT_EXTENSIONS:
                                 continue
 
                             for extracted_file in extracted_files:
@@ -3807,11 +3573,11 @@ def create_app():
                                     })
                                     break
                 except Exception as e:
-                    print(f"Error extracting resources from docpack: {e}")
+                    logger.debug(f"Error extracting resources from docpack: {e}")
 
-            print(f"DEBUG extract_resources_from_docpack: Returning {len(resources)} resources")
+            logger.debug(f"DEBUG extract_resources_from_docpack: Returning {len(resources)} resources")
             for r in resources:
-                print(f"  Resource: {r}")
+                logger.debug(f"  Resource: {r}")
             return resources
 
         def load_code_readme_example(session_id):
@@ -3827,9 +3593,9 @@ def create_app():
             docpack_path = examples_dir / "readme-generation" / "readme.docpack"
             resources = extract_resources_from_docpack(docpack_path, session_id)
 
-            print(f"DEBUG: Loaded {len(resources)} resources for README example")
+            logger.debug(f"Loaded {len(resources)} resources for README example")
             for r in resources:
-                print(f"  - {r['name']} ({r['size']})")
+                logger.debug(f"  - {r['name']} ({r['size']})")
 
             # Render the resources HTML
             resources_html = render_start_resources(resources)
@@ -3911,39 +3677,39 @@ def create_app():
         # Function to remove resource from Start tab
         def remove_start_resource(resources, index_str, name):
             """Remove a resource from the Start tab by index."""
-            print(
-                f"DEBUG: remove_start_resource called with resources={len(resources) if resources else 0}, index_str='{index_str}', name='{name}'"
+            logger.debug(
+                f"remove_start_resource called with resources={len(resources) if resources else 0}, index_str='{index_str}', name='{name}'"
             )
 
             if not resources or not index_str:
-                print("DEBUG: Early return - no resources or no index_str")
+                logger.debug("Early return - no resources or no index_str")
                 resources_html = render_start_resources(resources)
                 return resources, resources_html
 
             try:
                 index = int(index_str)
-                print(f"DEBUG: Parsed index={index}, resources length={len(resources)}")
+                logger.debug(f"Parsed index={index}, resources length={len(resources)}")
 
                 if 0 <= index < len(resources):
-                    print(f"DEBUG: Index is valid. Resource at index: {resources[index].get('name', 'unknown')}")
+                    logger.debug(f"Index is valid. Resource at index: {resources[index].get('name', 'unknown')}")
 
                     # Verify the name matches as a safety check
                     if resources[index]["name"] == name:
-                        print(f"DEBUG: Name matches, removing resource at index {index}")
+                        logger.debug(f"Name matches, removing resource at index {index}")
                         new_resources = resources.copy()
                         removed_resource = new_resources.pop(index)
-                        print(f"DEBUG: Removed resource: {removed_resource}")
+                        logger.debug(f"Removed resource: {removed_resource}")
                         resources_html = render_start_resources(new_resources)
-                        print(f"DEBUG: Successfully removed resource, new count: {len(new_resources)}")
+                        logger.debug(f"Successfully removed resource, new count: {len(new_resources)}")
                         return new_resources, resources_html
                     else:
-                        print(f"DEBUG: Name mismatch - expected '{name}', got '{resources[index]['name']}'")
+                        logger.debug(f"Name mismatch - expected '{name}', got '{resources[index]['name']}'")
                 else:
-                    print(f"DEBUG: Index {index} out of range for {len(resources)} resources")
+                    logger.debug(f"Index {index} out of range for {len(resources)} resources")
             except (ValueError, IndexError) as e:
-                print(f"DEBUG: Exception in remove_start_resource: {e}")
+                logger.debug(f"Exception in remove_start_resource: {e}")
 
-            print("DEBUG: No changes made, returning original resources")
+            logger.debug("No changes made, returning original resources")
             resources_html = render_start_resources(resources)
             return resources, resources_html
 
@@ -3963,13 +3729,13 @@ def check_deployment_status():
     app_root = Path(__file__).resolve().parents[1]
     bundled_recipe_path = app_root / "document_generator_app" / "recipes" / "document_generator_recipe.json"
 
-    print("Document Generator starting...")
-    print(f"Recipe source: {'bundled' if bundled_recipe_path.exists() else 'development'}")
+    logger.info("Document Generator starting...")
+    logger.info(f"Recipe source: {'bundled' if bundled_recipe_path.exists() else 'development'}")
 
     # Show LLM provider configuration
     provider = os.getenv("LLM_PROVIDER", "openai")
     model = os.getenv("DEFAULT_MODEL", "gpt-4o")
-    print(f"LLM: {provider}/{model}")
+    logger.info(f"LLM: {provider}/{model}")
 
 
 def main():
@@ -3992,17 +3758,16 @@ def main():
 
     # Configuration for hosting - Azure App Service uses PORT environment variable
     if args.dev:
-        print("Running in DEVELOPMENT mode")
+        logger.info("Running in DEVELOPMENT mode")
 
     # Production mode settings
     server_name = os.getenv("GRADIO_SERVER_NAME", "0.0.0.0")
     server_port = int(os.getenv("PORT", os.getenv("GRADIO_SERVER_PORT", "8000")))
 
-    print(f"Server: {server_name}:{server_port}")
+    logger.info(f"Server: {server_name}:{server_port}")
 
     app = create_app()
 
-    import logging
 
     if args.dev:
         logging.basicConfig(level=logging.DEBUG)

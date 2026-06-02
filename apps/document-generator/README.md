@@ -33,8 +33,7 @@ Document Generator is a web-based application that helps users create comprehens
 
    # Update environment variables
    cp .env.example .env
-   # Change RECIPE_EXECUTOR_OPENAI_API_KEY to OPENAI_API_KEY. (as of 2025-08-04)
-   # Fill in OPENAI_API_KEY.
+   # Fill in your LLM provider's API key (e.g., OPENAI_API_KEY)
    
    # Run
    document-generator-app
@@ -85,7 +84,7 @@ Document Generator is a web-based application that helps users create comprehens
 4. **Generate Document**
    - Click "▷ Generate"
    - The AI processes each section using your prompts and resources
-   - Download the generated Markdown document
+   - Download the generated document as DOCX or Markdown
   
    <img width="803" height="190" alt="image" src="https://github.com/user-attachments/assets/62a7fd33-6c45-4759-ac96-b382adfe7d05" />
 
@@ -109,14 +108,16 @@ Document Generator is a web-based application that helps users create comprehens
 ```
 document-generator/
 ├── document_generator_app/
-│   ├── app.py              # Gradio UI and main application
-│   ├── config.py           # Configuration and settings
+│   ├── app.py                  # Gradio UI and main application
+│   ├── config.py               # Configuration and settings
+│   ├── session.py              # Per-user session directory management
+│   ├── resource_resolver.py    # Resource path resolution and URL downloading
 │   ├── executor/
-│   │   └── runner.py       # Document and template generation engine
+│   │   └── runner.py           # Document and template generation engine
 │   ├── models/
-│   │   └── outline.py      # Template model
-│   ├── recipes/            # AI workflow definitions, executed by generation engine
-│   └── static/             # UI assets (CSS, JS, images)
+│   │   └── outline.py          # Template data model
+│   ├── recipes/
+│   └── static/
 ├── examples/               # Sample documents and templates
 └── scripts/                # Deployment utilities
 ```

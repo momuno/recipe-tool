@@ -5,7 +5,6 @@ Defines Resource, Section, and Outline dataclasses with serialization utilities.
 
 from dataclasses import dataclass, field, asdict
 from typing import List, Optional, Dict, Any
-from jsonschema import validate
 
 
 @dataclass
@@ -101,56 +100,3 @@ class Outline:
             sections=sec_list,
         )
 
-
-# JSON Schema for outline validation
-OUTLINE_SCHEMA = {
-    "$schema": "http://json-schema.org/draft-07/schema#",
-    "title": "Outline",
-    "type": "object",
-    "properties": {
-        "title": {"type": "string"},
-        "general_instruction": {"type": "string"},
-        "resources": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "key": {"type": "string"},
-                    "path": {"type": "string"},
-                    "title": {"type": "string"},
-                    "description": {"type": "string"},
-                    "merge_mode": {"type": "string", "enum": ["concat", "dict"]},
-                    "txt_path": {"type": "string"},
-                },
-                "required": ["key", "path", "title", "description"],
-                "additionalProperties": False,
-            },
-        },
-        "sections": {"type": "array", "items": {"$ref": "#/definitions/section"}},
-    },
-    "definitions": {
-        "section": {
-            "type": "object",
-            "properties": {
-                "title": {"type": "string"},
-                "prompt": {"type": "string"},
-                "refs": {"type": "array", "items": {"type": "string"}},
-                "resource_key": {"type": "string"},
-                "sections": {"type": "array", "items": {"$ref": "#/definitions/section"}},
-            },
-            "required": ["title"],
-            "oneOf": [{"required": ["prompt"]}, {"required": ["resource_key"]}],
-            "additionalProperties": False,
-        }
-    },
-    "required": ["title", "general_instruction", "resources", "sections"],
-    "additionalProperties": False,
-}
-
-
-def validate_outline(data: dict) -> None:
-    """
-    Validate outline data against the JSON schema.
-    Raises jsonschema.ValidationError on failure.
-    """
-    validate(instance=data, schema=OUTLINE_SCHEMA)

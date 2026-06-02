@@ -181,6 +181,11 @@ Before deploying code, verify your App Service is properly configured:
    az login
    ```
 3. **Deploy directly from folder:**
+
+   > **Note:** For production deployments, use `make build` followed by `./deploy.sh` as described in the main README.
+   > The `deploy.sh` script creates an optimized deployment package with pre-built wheels.
+   > The `az webapp up` method below is suitable for initial setup and development deployments.
+
    ```bash
    cd apps/document-generator
    az webapp up \

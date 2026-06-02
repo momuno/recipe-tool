@@ -1,4 +1,4 @@
- #!/bin/bash
+#!/bin/bash
   # Read arguments to script: --name --resource-group --slot (slot is optional)
   echo ""
   echo "Starting deployment script..."

@@ -38,13 +38,10 @@ def resolve_resource(resource: Resource, session_id: Optional[str]) -> Path:
 
 
 def _resolve_file_resource(resource: Resource, session_id: Optional[str]) -> Path:
-    """Resolve uploaded file resource to local path."""
-    files_dir = session_manager.get_files_dir(session_id)
-    file_path = files_dir / resource.path
-
+    """Validate that an uploaded file resource exists at its absolute path."""
+    file_path = Path(resource.path)
     if not file_path.exists():
         raise FileNotFoundError(f"Resource file not found: {resource.path}")
-
     return file_path
 
 
