@@ -2064,7 +2064,7 @@ def create_app():
     # Wrap JS in script tags for head injection
     custom_js = f"<script>{js_content}</script>"
 
-    with gr.Blocks(title="Document Generator", css=custom_css, head=custom_js) as app:
+    with gr.Blocks(title="Document Generator") as app:
         # Needed to declare up front, so elements will appear in deployed DOM
         gr.DownloadButton(visible=True, elem_classes="hidden-component")
         gr.File(visible=True, elem_classes="hidden-component")
@@ -2199,8 +2199,6 @@ def create_app():
                                 container=False,
                                 elem_classes="start-feature-image",
                                 elem_id="template-control-image",
-                                show_download_button=False,
-                                show_fullscreen_button=False,
                                 interactive=False,
                             )
                             gr.Markdown("### Template Control", elem_classes="start-feature-item-title")
@@ -2220,8 +2218,6 @@ def create_app():
                                 container=False,
                                 elem_classes="start-feature-image",
                                 elem_id="evergreen-content-image",
-                                show_download_button=False,
-                                show_fullscreen_button=False,
                                 interactive=False,
                             )
                             gr.Markdown("### Evergreen Content", elem_classes="start-feature-item-title")
@@ -2241,8 +2237,6 @@ def create_app():
                                 container=False,
                                 elem_classes="start-feature-image",
                                 elem_id="smart-regeneration-image",
-                                show_download_button=False,
-                                show_fullscreen_button=False,
                                 interactive=False,
                             )
                             gr.Markdown("### Smart Regeneration", elem_classes="start-feature-item-title")
@@ -3720,7 +3714,7 @@ def create_app():
             outputs=[start_resources_state, start_resources_display],
         )
 
-    return app
+    return app, custom_css, custom_js
 
 
 def check_deployment_status():
@@ -3766,15 +3760,14 @@ def main():
 
     logger.info(f"Server: {server_name}:{server_port}")
 
-    app = create_app()
-
+    app, custom_css, custom_js = create_app()
 
     if args.dev:
         logging.basicConfig(level=logging.DEBUG)
-        app.launch(server_name=server_name, server_port=server_port, mcp_server=True, pwa=True, share=False)
+        app.launch(server_name=server_name, server_port=server_port, mcp_server=True, pwa=True, share=False, css=custom_css, head=custom_js)
     else:
         logging.basicConfig(level=logging.INFO)
-        app.launch(server_name=server_name, server_port=server_port, mcp_server=True, pwa=True)
+        app.launch(server_name=server_name, server_port=server_port, mcp_server=True, pwa=True, css=custom_css, head=custom_js)
 
 
 if __name__ == "__main__":

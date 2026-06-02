@@ -33,7 +33,7 @@ Document Generator is a web-based application that helps users create comprehens
 
    # Update environment variables
    cp .env.example .env
-   # Fill in your LLM provider's API key (e.g., OPENAI_API_KEY)
+   # Fill in your Anthropic API key (RECIPE_EXECUTOR_ANTHROPIC_API_KEY)
    
    # Run
    document-generator-app
@@ -126,7 +126,7 @@ document-generator/
 
 - **Frontend**: Gradio 5.30+ with custom theming
 - **Backend**: Python 3.11+, FastAPI (via Gradio)
-- **AI Integration**: OpenAI/Azure OpenAI API
+- **AI Integration**: Anthropic Claude API (OpenAI/Azure OpenAI also supported)
 - **Processing**: Recipe-executor framework
 - **Package Management**: uv/pip
 

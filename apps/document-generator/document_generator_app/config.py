@@ -11,8 +11,8 @@ class Settings:
     app_description: str = "Create structured documents with AI assistance"
 
     # LLM Configuration
-    llm_provider: str = os.getenv("LLM_PROVIDER", "openai")  # "openai" or "azure"
-    default_model: str = os.getenv("DEFAULT_MODEL", "gpt-4o")
+    llm_provider: str = os.getenv("LLM_PROVIDER", "anthropic")  # "anthropic", "openai", or "azure"
+    default_model: str = os.getenv("DEFAULT_MODEL", "claude-sonnet-4-20250514")
 
     @property
     def model_id(self) -> str:
