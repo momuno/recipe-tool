@@ -33,7 +33,7 @@ Document Generator is a web-based application that helps users create comprehens
 
    # Update environment variables
    cp .env.example .env
-   # Fill in your Anthropic API key (RECIPE_EXECUTOR_ANTHROPIC_API_KEY)
+   # Fill in your Anthropic API key (ANTHROPIC_API_KEY)
    
    # Run
    document-generator-app
