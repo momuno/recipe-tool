@@ -1,0 +1,24 @@
+{
+  "steps": [
+    {
+      "type": "execute_recipe",
+      "config": {
+        "recipe_path": "{{ recipe_root }}/recipes/read_document.json"
+      }
+    },
+    {
+      "type": "set_context",
+      "config": {
+        "key": "document",
+        "value": "\n\n{{ section.title }}\n\n{% for resource in resources %}{% if resource.key == section.resource_key %}{{ resource.content }}{% endif %}{% endfor %}",
+        "if_exists": "merge"
+      }
+    },
+    {
+      "type": "execute_recipe",
+      "config": {
+        "recipe_path": "{{ recipe_root }}/recipes/write_document.json"
+      }
+    }
+  ]
+}

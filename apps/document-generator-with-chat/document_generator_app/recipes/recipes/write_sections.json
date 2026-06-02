@@ -1,0 +1,59 @@
+{
+  "steps": [
+    {
+      "type": "loop",
+      "config": {
+        "items": "sections",
+        "item_key": "section",
+        "result_key": "section.content",
+        "substeps": [
+          {
+            "type": "conditional",
+            "config": {
+              "condition": "{% if section.resource_key %}true{% else %}false{% endif %}",
+              "if_true": {
+                "steps": [
+                  {
+                    "type": "execute_recipe",
+                    "config": {
+                      "recipe_path": "{{ recipe_root }}/recipes/write_content.json"
+                    }
+                  }
+                ]
+              },
+              "if_false": {
+                "steps": [
+                  {
+                    "type": "execute_recipe",
+                    "config": {
+                      "recipe_path": "{{ recipe_root }}/recipes/write_section.json"
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "type": "conditional",
+            "config": {
+              "condition": "{% assign has_children = section | has: 'sections' %}{% if has_children %}true{% else %}false{% endif %}",
+              "if_true": {
+                "steps": [
+                  {
+                    "type": "execute_recipe",
+                    "config": {
+                      "recipe_path": "{{ recipe_root }}/recipes/write_sections.json",
+                      "context_overrides": {
+                        "sections": "{{ section.sections | json: indent: 2 }}"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "steps": [
+    {
+      "type": "write_files",
+      "config": {
+        "files": [
+          {
+            "path": "{{ document_filename }}.md",
+            "content_key": "document"
+          }
+        ],
+        "root": "{{ output_root }}"
+      }
+    }
+  ]
+}

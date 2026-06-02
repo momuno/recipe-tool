@@ -1,0 +1,18 @@
+{
+  "steps": [
+    {
+      "type": "read_files",
+      "config": {
+        "path": "{{ outline_file }}",
+        "content_key": "outline"
+      }
+    },
+    {
+      "type": "set_context",
+      "config": {
+        "key": "toc",
+        "value": "{% capture toc %}\n## Table of Contents\n\n{% for sec in outline.sections %}\n- {{ sec.title | escape }}\n{% if sec.sections %}\n  {% for child in sec.sections %}\n  - {{ child.title | escape }}\n  {% endfor %}\n{% endif %}\n{% endfor %}\n{% endcapture %}\n{{ toc }}"
+      }
+    }
+  ]
+}

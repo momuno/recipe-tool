@@ -1,0 +1,49 @@
+{
+  "steps": [
+    {
+      "type": "execute_recipe",
+      "config": {
+        "recipe_path": "{{ recipe_root }}/recipes/read_document.json"
+      }
+    },
+    {
+      "type": "set_context",
+      "config": {
+        "key": "rendered_prompt",
+        "value": "{{ section.prompt }}",
+        "nested_render": true
+      }
+    },
+    {
+      "type": "llm_generate",
+      "config": {
+        "model": "{{ model }}",
+        "prompt": "Generate a section for the <DOCUMENT> based upon the following prompt:\n<PROMPT>\n{{ rendered_prompt }}\n</PROMPT>\n\nGeneral instruction:\n{{ outline.general_instruction }}\n\nAvailable references:\n<REFERENCE_DOCS>\n{% for ref in section.refs %}{% for resource in resources %}{% if resource.key == ref %}<{{ resource.key | upcase }}><DESCRIPTION>{{ resource.description }}</DESCRIPTION><CONTENT>{{ resource.content }}</CONTENT></{{ resource.key | upcase }}>{% endif %}{% endfor %}{% endfor %}\n</REFERENCE_DOCS>\n\nHere is the content of the <DOCUMENT> so far:\n<DOCUMENT>\n{{ document }}\n</DOCUMENT>\n\nFor awareness, here is the full outline so that you can see what will generally be coming in future sections:\n<OUTLINE>\n{{ outline }}\n</OUTLINE>\n\nThat said, please write ONLY THE NEW `{{ section.title }}` SECTION requested in your PROMPT, in the same style as the rest of the document. Make sure to properly format the section title at the correct level per the provided outline.",
+        "output_format": {
+          "type": "object",
+          "properties": {
+            "content": {
+              "type": "string",
+              "description": "The generated content for the section."
+            }
+          }
+        },
+        "output_key": "generated"
+      }
+    },
+    {
+      "type": "set_context",
+      "config": {
+        "key": "document",
+        "value": "\n\n{{ generated.content }}",
+        "if_exists": "merge"
+      }
+    },
+    {
+      "type": "execute_recipe",
+      "config": {
+        "recipe_path": "{{ recipe_root }}/recipes/write_document.json"
+      }
+    }
+  ]
+}

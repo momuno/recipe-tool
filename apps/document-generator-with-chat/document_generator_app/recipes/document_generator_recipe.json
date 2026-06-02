@@ -1,0 +1,84 @@
+{
+  "name": "Document Generator",
+  "description": "Generates a document from an outline, using LLMs to fill in sections and assemble the final document.",
+  "inputs": {
+    "outline_file": {
+      "description": "Path to outline json file.",
+      "type": "string"
+    },
+    "model": {
+      "description": "LLM model to use for generation.",
+      "type": "string",
+      "default": "openai/gpt-4o"
+    },
+    "output_root": {
+      "description": "Directory to save the generated document.",
+      "type": "string",
+      "default": "output"
+    }
+  },
+  "steps": [
+    {
+      "type": "set_context",
+      "config": {
+        "key": "model",
+        "value": "{{ model | default: 'openai/gpt-4o' }}"
+      }
+    },
+    {
+      "type": "set_context",
+      "config": {
+        "key": "output_root",
+        "value": "{{ output_root | default: 'output' }}"
+      }
+    },
+    {
+      "type": "set_context",
+      "config": {
+        "key": "recipe_root",
+        "value": "{{ recipe_root | default: 'recipes/document_generator' }}"
+      }
+    },
+    {
+      "type": "set_context",
+      "config": {
+        "key": "document_filename",
+        "value": "{{ outline_file | default: 'document' | replace: '\\', '/' | split: '/' | last | split: '.' | first | snakecase | upcase }}"
+      }
+    },
+    {
+      "type": "execute_recipe",
+      "config": {
+        "recipe_path": "{{ recipe_root }}/recipes/load_outline.json"
+      }
+    },
+    {
+      "type": "execute_recipe",
+      "config": {
+        "recipe_path": "{{ recipe_root }}/recipes/load_resources.json"
+      }
+    },
+    {
+      "type": "set_context",
+      "config": {
+        "key": "document",
+        "value": "# {{ outline.title }}\n\n[document-generator]\n\n**Date:** {{ 'now' | date: '%-m/%-d/%Y %I:%M:%S %p' }}"
+      }
+    },
+    {
+      "type": "execute_recipe",
+      "config": {
+        "recipe_path": "{{ recipe_root }}/recipes/write_document.json"
+      }
+    },
+    {
+      "type": "execute_recipe",
+      "config": {
+        "recipe_path": "{{ recipe_root }}/recipes/write_sections.json",
+        "context_overrides": {
+          "sections": "{{ outline.sections | json: indent: 2 }}"
+        }
+      }
+    }
+  ]
+}
