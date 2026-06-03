@@ -1645,8 +1645,8 @@ async def handle_start_draft_click(prompt, resources, session_id=None):
                                         block["resources"].append(resource)
                                         break
                     else:
-                        # Text block
-                        block["type"] = "text"
+                        # Default to AI block (consistent with import_outline)
+                        block["type"] = "ai"
                         block["content"] = ""
 
                     blocks.append(block)
