@@ -101,7 +101,6 @@ def markdown_to_docx(markdown_content: str, output_path: str) -> str:
             "docx",
             format="md",
             outputfile=output_path,
-            extra_args=["--extract-media=."],  # Extract images to current directory
         )
         return output_path
     except Exception as e:
