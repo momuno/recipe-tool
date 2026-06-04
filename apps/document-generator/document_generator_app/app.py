@@ -230,7 +230,6 @@ def add_ai_block(blocks, focused_block_id=None):
     return blocks + [new_block]
 
 
-
 def add_text_block(blocks, focused_block_id=None):
     """Add a text block."""
     new_block = {
@@ -1312,7 +1311,9 @@ def create_docpack_from_current_state():
 
 def render_block_resources(block_resources, block_type, block_id):
     """Render the resources inside a block."""
-    logger.debug(f"render_block_resources for block {block_id}: {len(block_resources) if block_resources else 0} resources")
+    logger.debug(
+        f"render_block_resources for block {block_id}: {len(block_resources) if block_resources else 0} resources"
+    )
 
     if block_type == "text":
         # Text blocks always show the drop zone, never show resources
@@ -2154,7 +2155,10 @@ def create_app():
                                         return '<div class="start-resources-list"></div>'
 
                             # Upload area - full width
-                            gr.Markdown("**Add reference files for AI context.** (.docx, .md, .csv, .py, .json, .txt, etc.)", elem_classes="resource-drop-label")
+                            gr.Markdown(
+                                "**Add reference files for AI context.** (.docx, .md, .csv, .py, .json, .txt, etc.)",
+                                elem_classes="resource-drop-label",
+                            )
                             # File upload dropzone
                             start_file_upload = gr.File(
                                 label="Drop files here or click to upload",
@@ -2863,10 +2867,16 @@ def create_app():
                         # Hidden components for download functionality
                         docx_file_path = gr.State(None)
                         markdown_file_path = gr.State(None)
-                        download_format_trigger = gr.Button(visible=True, elem_id="download-format-trigger", elem_classes="hidden-component")
-                        download_format_input = gr.Textbox(visible=True, elem_id="download-format-input", elem_classes="hidden-component")
+                        download_format_trigger = gr.Button(
+                            visible=True, elem_id="download-format-trigger", elem_classes="hidden-component"
+                        )
+                        download_format_input = gr.Textbox(
+                            visible=True, elem_id="download-format-input", elem_classes="hidden-component"
+                        )
                         # Hidden download button for actual downloads
-                        save_doc_btn = gr.DownloadButton(visible=True, elem_id="hidden-download-btn", elem_classes="hidden-component")
+                        save_doc_btn = gr.DownloadButton(
+                            visible=True, elem_id="hidden-download-btn", elem_classes="hidden-component"
+                        )
 
                     # Debug panel for JSON display (collapsible)
                     with gr.Column(elem_classes="debug-panel", elem_id="debug-panel-container"):
@@ -2904,37 +2914,37 @@ def create_app():
             """Update the collapse/expand button to reflect current block states."""
             # Check if any block is expanded (collapsed = False)
             any_expanded = any(not block.get("collapsed", False) for block in blocks if block)
-            
+
             if any_expanded:
                 # Some sections open - show up pointing (rotated -90deg)
                 return gr.update(value="»", elem_classes="workspace-collapse-btn collapse-mode")
             else:
                 # All sections closed - show down pointing (rotated 90deg)
                 return gr.update(value="»", elem_classes="workspace-collapse-btn")
-        
+
         # Helper function to toggle all blocks
         def toggle_all_blocks(blocks):
             """Toggle between expand all and collapse all based on current state.
             If ANY block is expanded, collapse all. If ALL are collapsed, expand all."""
             # Check if any block is expanded (collapsed = False)
             any_expanded = any(not block.get("collapsed", False) for block in blocks if block)
-            
+
             # If any block is expanded, collapse all; otherwise expand all
             for block in blocks:
                 block["collapsed"] = any_expanded
-            
+
             # Update button to reflect NEW state after toggle
             # After toggling: if we collapsed all (any_expanded was True), now all are collapsed
             # After toggling: if we expanded all (any_expanded was False), now some are expanded
             new_state_all_collapsed = any_expanded  # If any were expanded, we collapsed them all
-            
+
             if new_state_all_collapsed:
                 # All sections now closed - show down chevron (normal)
                 elem_classes = "workspace-collapse-btn"
             else:
                 # Some sections now open - show up chevron (rotated)
                 elem_classes = "workspace-collapse-btn collapse-mode"
-            
+
             # Always use double angle quote, rotation is handled by CSS
             return blocks, gr.update(value="»", elem_classes=elem_classes)
 
@@ -2953,14 +2963,8 @@ def create_app():
 
         # Connect workspace collapse/expand toggle button
         workspace_collapse_btn.click(
-            fn=toggle_all_blocks, 
-            inputs=[blocks_state], 
-            outputs=[blocks_state, workspace_collapse_btn]
-        ).then(
-            fn=render_blocks, 
-            inputs=[blocks_state, focused_block_state], 
-            outputs=blocks_display
-        )
+            fn=toggle_all_blocks, inputs=[blocks_state], outputs=[blocks_state, workspace_collapse_btn]
+        ).then(fn=render_blocks, inputs=[blocks_state, focused_block_state], outputs=blocks_display)
 
         # Connect button click to add Text block
 
@@ -2990,9 +2994,7 @@ def create_app():
             fn=toggle_block_collapse, inputs=[blocks_state, toggle_block_id], outputs=blocks_state
         ).then(fn=set_focused_block, inputs=toggle_block_id, outputs=focused_block_state).then(
             fn=render_blocks, inputs=[blocks_state, toggle_block_id], outputs=blocks_display
-        ).then(
-            fn=update_collapse_button_state, inputs=[blocks_state], outputs=workspace_collapse_btn
-        )
+        ).then(fn=update_collapse_button_state, inputs=[blocks_state], outputs=workspace_collapse_btn)
 
         # Update heading handler
         update_heading_trigger.click(
@@ -3150,32 +3152,59 @@ def create_app():
 
         # Generate document handler - update to return the download button state
         async def handle_generate_and_update_download(title, description, resources, blocks, session_id):
-            """Generate document and update download button."""
+            """Generate document and update download button.
+
+            Async generator so Gradio streams two updates over a single .click() event:
+              1. Immediate loading state — disables buttons, shows spinner text in the HTML
+                 panel so the user knows work is in progress.
+              2. Final state — hides the HTML panel, shows the Markdown result, and
+                 re-enables / wires up the download controls.
+
+            Using a generator (yield instead of return) avoids the Gradio 5.x bug where
+            components listed in both a pre-click lambda's outputs AND a .then() handler's
+            outputs have their .then() updates silently dropped.  Wiring everything through
+            a single .click(fn=generator) keeps every component's update path unique.
+            """
+            # ── Step 1: loading state ────────────────────────────────────────────────
+            # Yield immediately so the browser reflects the "in progress" state before
+            # the (potentially long) LLM call begins.
+            yield (
+                gr.update(),  # json_output — no change yet
+                gr.update(visible=False),  # generated_content (Markdown) — hide
+                gr.update(  # generated_content_html — show loading message
+                    value="<em>Generating document, please wait…</em><br><br><br>",
+                    visible=True,
+                ),
+                gr.update(),  # save_doc_btn — no change
+                gr.update(interactive=False),  # download_btn_display — disable
+                gr.update(interactive=False),  # generate_doc_btn — disable
+                gr.update(),  # docx_file_path — no change
+                gr.update(),  # markdown_file_path — no change
+            )
+
+            # ── Step 2: run generation ───────────────────────────────────────────────
             json_str, content, docx_path, markdown_path = await handle_document_generation(
                 title, description, resources, blocks, session_id
             )
 
-            # Hide HTML component and show Markdown component
+            # ── Step 3: final state ──────────────────────────────────────────────────
+            # Hide the HTML loading panel, show Markdown with the generated content.
             html_update = gr.update(visible=False)
             markdown_update = gr.update(value=content, visible=True)
 
             if docx_path:
-                # Keep the DOCX path as default for the hidden download button
                 download_update = gr.update(value=docx_path)
-                # Enable the display button
                 display_btn_update = gr.update(interactive=True)
             else:
                 download_update = gr.update()
                 display_btn_update = gr.update(interactive=False)
 
-            # Re-enable the generate button
             generate_btn_update = gr.update(interactive=True)
 
             logger.debug(f"Returning DOCX path to state: {docx_path}")
             logger.debug(f"Returning Markdown path to state: {markdown_path}")
 
-            # Return both file paths for state storage
-            return (
+            yield (
                 json_str,
                 markdown_update,
                 html_update,
@@ -3186,17 +3215,13 @@ def create_app():
                 markdown_path,
             )
 
+        # Wire the generate button directly to the async generator.
+        # The generator's first yield supplies the loading state; the second yield
+        # supplies the final result.  A single .click() with no chained .then() means
+        # no component can appear in two separate handlers' output lists, which avoids
+        # the Gradio 5.x issue where overlapping outputs cause .then() updates to be
+        # silently discarded.
         generate_doc_btn.click(
-            fn=lambda: [
-                gr.update(interactive=False),  # Disable generate button
-                gr.update(visible=False),  # Hide markdown content
-                gr.update(
-                    value="<em></em><br><br><br>", visible=True
-                ),  # Show HTML with empty content but structure intact
-                gr.update(interactive=False),  # Disable display download button
-            ],
-            outputs=[generate_doc_btn, generated_content, generated_content_html, download_btn_display],
-        ).then(
             fn=handle_generate_and_update_download,
             inputs=[doc_title, doc_description, resources_state, blocks_state, session_state],
             outputs=[
@@ -3763,10 +3788,20 @@ def main():
 
     if args.dev:
         logging.basicConfig(level=logging.DEBUG)
-        app.launch(server_name=server_name, server_port=server_port, mcp_server=True, pwa=True, share=False, css=custom_css, head=custom_js)
+        app.launch(
+            server_name=server_name,
+            server_port=server_port,
+            mcp_server=True,
+            pwa=True,
+            share=False,
+            css=custom_css,
+            head=custom_js,
+        )
     else:
         logging.basicConfig(level=logging.INFO)
-        app.launch(server_name=server_name, server_port=server_port, mcp_server=True, pwa=True, css=custom_css, head=custom_js)
+        app.launch(
+            server_name=server_name, server_port=server_port, mcp_server=True, pwa=True, css=custom_css, head=custom_js
+        )
 
 
 if __name__ == "__main__":
