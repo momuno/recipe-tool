@@ -1678,7 +1678,10 @@ async def handle_start_draft_click(prompt, resources, session_id=None):
                 outline,  # outline_state
                 json_str,  # json_output
                 session_id,  # session_state
-                gr.update(visible=False),  # generated_content_html
+                gr.update(
+                    value="<em>Click '▷ Generate' to see the generated content here.</em><br><br><br>",
+                    visible=True,
+                ),  # generated_content_html — reset to placeholder (always visible to avoid transition issues)
                 gr.update(visible=False),  # generated_content
                 gr.update(interactive=False),  # save_doc_btn
                 gr.update(visible=True, value=f"SWITCH_TO_DRAFT_TAB_{int(time.time() * 1000)}"),  # switch_tab_trigger
@@ -3188,9 +3191,41 @@ def create_app():
             )
 
             # ── Step 3: final state ──────────────────────────────────────────────────
-            # Hide the HTML loading panel, show Markdown with the generated content.
-            html_update = gr.update(visible=False)
-            markdown_update = gr.update(value=content, visible=True)
+            # Render the markdown as HTML and update generated_content_html
+            # (always visible).
+            # Root cause fix (round 2): Gradio 5.x has TWO generator-yield bugs:
+            #   1. Visibility transitions (visible=False→True) are unreliable in
+            #      yields.  Fixed by keeping generated_content_html always
+            #      visible=True.
+            #   2. The FINAL yield of an async generator can be silently dropped —
+            #      the SSE stream closes before the client processes the last
+            #      update, leaving the component showing only <!---> comment nodes.
+            #      Fixed by yielding the final state TWICE with a small async sleep
+            #      between them, ensuring at least one update reaches the client.
+            import asyncio
+
+            try:
+                rendered_html = pypandoc.convert_text(
+                    content, "html5", format="md"
+                )
+                display_html = f'<div class="generated-document">{rendered_html}</div>'
+            except Exception as html_err:
+                logger.warning(f"Failed to render markdown as HTML for display: {html_err}")
+                import html as _html_lib
+
+                display_html = (
+                    '<div class="generated-document">'
+                    '<pre style="white-space: pre-wrap; word-wrap: break-word;">'
+                    f"{_html_lib.escape(content)}"
+                    "</pre></div>"
+                )
+
+            logger.info(f"Rendered HTML for display (length: {len(display_html)})")
+
+            # Keep generated_content_html visible — just swap in the rendered document.
+            html_update = gr.update(value=display_html, visible=True)
+            # Markdown component stays hidden; HTML component owns the display now.
+            markdown_update = gr.update(visible=False)
 
             if docx_path:
                 download_update = gr.update(value=docx_path)
@@ -3204,7 +3239,7 @@ def create_app():
             logger.debug(f"Returning DOCX path to state: {docx_path}")
             logger.debug(f"Returning Markdown path to state: {markdown_path}")
 
-            yield (
+            final_output = (
                 json_str,
                 markdown_update,
                 html_update,
@@ -3214,6 +3249,14 @@ def create_app():
                 docx_path,
                 markdown_path,
             )
+
+            # Yield the final state, then sleep and yield again.  Gradio 5.x
+            # can silently drop the last yield of an async generator — the
+            # redundant yield ensures the client receives the update at least
+            # once.
+            yield final_output
+            await asyncio.sleep(0.15)
+            yield final_output
 
         # Wire the generate button directly to the async generator.
         # The generator's first yield supplies the loading state; the second yield
@@ -3415,7 +3458,10 @@ def create_app():
                 initial_outline,  # outline_state
                 initial_json,  # json_output
                 new_session_id,  # session_state
-                gr.update(value="", visible=False),  # generated_content_html
+                gr.update(
+                    value="<em>Click '▷ Generate' to see the generated content here.</em><br><br><br>",
+                    visible=True,
+                ),  # generated_content_html — reset to placeholder (always visible to avoid transition issues)
                 gr.update(value="", visible=False),  # generated_content
                 gr.update(interactive=False),  # save_doc_btn
                 None,  # focused_block_state

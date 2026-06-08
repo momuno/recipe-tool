@@ -2774,7 +2774,9 @@
     color: #bbbbc2;  /* --neutral-400: #bbbbc2 used for placeholders in gradio */
 }
 
-/* Hide scrollbar for HTML content (loading state) but keep for Markdown */
+/* Hide scrollbar on the HTML component itself — the outer .generate-display
+   container handles scrolling with overflow-y: auto.  This prevents a double
+   scrollbar when the rendered document is taller than the panel. */
 .generate-display .gradio-html,
 .generate-display .gradio-html *,
 .generated-content {
@@ -2787,6 +2789,80 @@
 .generate-display .gradio-html *::-webkit-scrollbar,
 .generated-content::-webkit-scrollbar {
     display: none !important;  /* Chrome, Safari and Opera */
+}
+
+/* Rendered document HTML (produced by pypandoc markdown→HTML conversion) */
+.generated-document {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 14px;
+    line-height: 1.6;
+    color: #374151;
+}
+.generated-document h1,
+.generated-document h2,
+.generated-document h3,
+.generated-document h4,
+.generated-document h5,
+.generated-document h6 {
+    font-weight: 600;
+    margin-top: 1.5em;
+    margin-bottom: 0.5em;
+    color: #111827;
+}
+.generated-document h1 { font-size: 1.8em; }
+.generated-document h2 { font-size: 1.5em; }
+.generated-document h3 { font-size: 1.25em; }
+.generated-document p { margin-bottom: 1em; }
+.generated-document ul,
+.generated-document ol {
+    margin-bottom: 1em;
+    padding-left: 1.5em;
+}
+.generated-document li { margin-bottom: 0.25em; }
+.generated-document code {
+    background: #f3f4f6;
+    padding: 0.2em 0.4em;
+    border-radius: 3px;
+    font-size: 0.875em;
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+}
+.generated-document pre {
+    background: #f3f4f6;
+    padding: 1em;
+    border-radius: 6px;
+    overflow-x: auto;
+    margin-bottom: 1em;
+}
+.generated-document pre code {
+    background: none;
+    padding: 0;
+    font-size: 0.875em;
+}
+.generated-document blockquote {
+    border-left: 4px solid #e5e7eb;
+    padding-left: 1em;
+    color: #6b7280;
+    margin: 0 0 1em 0;
+}
+.generated-document table {
+    border-collapse: collapse;
+    width: 100%;
+    margin-bottom: 1em;
+}
+.generated-document th,
+.generated-document td {
+    border: 1px solid #e5e7eb;
+    padding: 0.5em 1em;
+    text-align: left;
+}
+.generated-document th {
+    background: #f9fafb;
+    font-weight: 600;
+}
+.generated-document hr {
+    border: none;
+    border-top: 1px solid #e5e7eb;
+    margin: 1.5em 0;
 }
 
 /* Generate Document - buttons*/

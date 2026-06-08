@@ -54,7 +54,7 @@ Document Generator is a web-based application that helps users create comprehens
    document-generator-app --dev
    ```
 
-2. Open locally running webapp in your browser. (localhost:8000)
+2. Open locally running webapp in your browser. (http://localhost:8000/)
 3. Start with one of three approaches:
    - **Start with a Prompt**: Type what document you want to create or try an example prompt
    - **Build Manually**: Create your template section by section
