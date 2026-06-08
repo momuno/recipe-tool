@@ -2880,6 +2880,12 @@ def create_app():
                         save_doc_btn = gr.DownloadButton(
                             visible=True, elem_id="hidden-download-btn", elem_classes="hidden-component"
                         )
+                        # Hidden HTML element for JS-based direct download (bypasses
+                        # Gradio 5.x DownloadButton programmatic-click limitation)
+                        download_path_signal = gr.HTML(
+                            value="", visible=True, elem_id="download-path-signal",
+                            elem_classes="hidden-component"
+                        )
 
                     # Debug panel for JSON display (collapsible)
                     with gr.Column(elem_classes="debug-panel", elem_id="debug-panel-container"):
@@ -3283,28 +3289,38 @@ def create_app():
 
         # Handle download format selection
         def handle_download_format(format_type, docx_path, markdown_path):
-            """Handle download based on selected format."""
-            logger.debug(f"Download format selected: {format_type}")
-            logger.debug(f"DOCX path: {docx_path}")
-            logger.debug(f"Markdown path: {markdown_path}")
+            """Handle download based on selected format.
+
+            Returns updates for both the DownloadButton (legacy) and a hidden
+            HTML signal element.  The signal element carries the raw file path
+            as a data-attribute so client-side JS can trigger a direct browser
+            download via Gradio's /file= endpoint — this bypasses the Gradio
+            5.x limitation where programmatic .click() on a hidden
+            DownloadButton does not initiate a real browser download.
+            """
+            logger.info(f"Download format selected: '{format_type}'")
+            logger.info(f"DOCX path: {docx_path}")
+            logger.info(f"Markdown path: {markdown_path}")
+
+            import time as _time
+            ts = int(_time.time() * 1000)
 
             if format_type == "markdown" and markdown_path:
-                logger.debug(f"Setting download to markdown: {markdown_path}")
-                # Return the markdown file path for download
-                return gr.update(value=markdown_path)
+                logger.info(f"Setting download to markdown: {markdown_path}")
+                signal_html = f'<div data-download-path="{markdown_path}" data-ts="{ts}"></div>'
+                return gr.update(value=markdown_path), gr.update(value=signal_html)
             elif format_type == "docx" and docx_path:
-                logger.debug(f"Setting download to DOCX: {docx_path}")
-                # Return the DOCX file path for download
-                return gr.update(value=docx_path)
+                logger.info(f"Setting download to DOCX: {docx_path}")
+                signal_html = f'<div data-download-path="{docx_path}" data-ts="{ts}"></div>'
+                return gr.update(value=docx_path), gr.update(value=signal_html)
             else:
-                logger.debug("No valid format or path, keeping current state")
-                # Keep current state
-                return gr.update()
+                logger.warning(f"Download failed: format_type='{format_type}', docx_path={docx_path}, markdown_path={markdown_path}")
+                return gr.update(), gr.update()
 
         download_format_trigger.click(
             fn=handle_download_format,
             inputs=[download_format_input, docx_file_path, markdown_file_path],
-            outputs=[save_doc_btn],
+            outputs=[save_doc_btn, download_path_signal],
         )
 
         # Import file handler
@@ -3842,11 +3858,13 @@ def main():
             share=False,
             css=custom_css,
             head=custom_js,
+            allowed_paths=["/tmp"],
         )
     else:
         logging.basicConfig(level=logging.INFO)
         app.launch(
-            server_name=server_name, server_port=server_port, mcp_server=True, pwa=True, css=custom_css, head=custom_js
+            server_name=server_name, server_port=server_port, mcp_server=True, pwa=True,
+            css=custom_css, head=custom_js, allowed_paths=["/tmp"],
         )
 
 
