@@ -35,9 +35,10 @@ Document Generator is a web-based application that helps users create comprehens
    cp .env.example .env
 
    # For anthropic:
-   # comment out RECIPE_EXECUTOR_OPENAI_API_KEY= and uncomment ANTHROPIC_API_KEY=
+   # comment out RECIPE_EXECUTOR_OPENAI_API_KEY=
    # Add:
    #
+   # ANTHROPIC_API_KEY=<your-api-key>
    # LLM_PROVIDER=anthropic
    # DEFAULT_MODEL=claude-sonnet-4-20250514
 
