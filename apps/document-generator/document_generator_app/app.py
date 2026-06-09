@@ -635,6 +635,7 @@ def update_document_metadata(title, description, resources, blocks):
 
 def update_block_resources(blocks, block_id, resource_json, title, description, resources):
     """Update a block's resources when a resource is dropped on it."""
+    logger.info(f"update_block_resources called: block_id='{block_id}', resource_json='{resource_json[:100] if resource_json else None}'")
 
     # Parse the resource data
     resource_data = json.loads(resource_json)
@@ -1540,7 +1541,7 @@ async def handle_start_draft_click(prompt, resources, session_id=None):
     if not prompt or not prompt.strip():
         error_msg = "Please enter a description of what you'd like to create."
         logger.debug(f"No prompt provided, returning error: {error_msg}")
-        # Return 15 values to match outputs (added loading message and button)
+        # Return 14 values to match outputs
         return (
             gr.update(),  # doc_title
             gr.update(),  # doc_description
@@ -1694,7 +1695,7 @@ async def handle_start_draft_click(prompt, resources, session_id=None):
         else:
             error_msg = "Failed to generate outline. Please try again."
             logger.debug(f"No outline generated, returning error: {error_msg}")
-            # Return 15 values to match outputs
+            # Return 14 values to match outputs
             return (
                 gr.update(),  # doc_title
                 gr.update(),  # doc_description
@@ -1728,7 +1729,7 @@ async def handle_start_draft_click(prompt, resources, session_id=None):
         error_msg = f"Error: {str(e)}"
         logger.error(f"ERROR in handle_start_draft_click: {error_msg}")
         logger.debug(f"Traceback: {traceback.format_exc()}")
-        # Return 15 values to match outputs
+        # Return 14 values to match outputs
         return (
             gr.update(),  # doc_title
             gr.update(),  # doc_description
@@ -2524,10 +2525,10 @@ def create_app():
                                                     scale=1,
                                                 )
 
-                                                # Filename display
+                                                # Filename display — also serves as the drag handle
                                                 gr.HTML(
-                                                    elem_classes="resource-filename",
-                                                    value=f"<div>  {resource['name']}</div>",
+                                                    elem_classes="resource-filename drag-handle",
+                                                    value=f'<div class="drag-handle" data-path="{resource["path"]}" title="Drag to add to a section">⠿ {resource["name"]}</div>',
                                                 )
 
                                         # File replacement upload area

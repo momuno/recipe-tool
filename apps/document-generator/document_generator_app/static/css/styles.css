@@ -1135,7 +1135,28 @@
 }
 
 /* Ensure the download button itself is right-aligned */
-.download-container .download-btn {
+.download-container /* Drag handle on resource filename - shows grab cursor and indicates draggability */
+.drag-handle {
+    cursor: grab !important;
+    user-select: none;
+    padding: 2px 4px;
+    border-radius: 3px;
+    transition: background-color 0.15s;
+}
+.drag-handle:hover {
+    background-color: #f0f0f0;
+}
+.drag-handle:active {
+    cursor: grabbing !important;
+}
+/* Ensure resource textboxes are NOT affected by parent drag state */
+.resource-item-gradio input,
+.resource-item-gradio textarea {
+    cursor: text !important;
+    pointer-events: auto !important;
+}
+
+.download-btn {
     margin-left: auto !important;
 }
 

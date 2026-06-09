@@ -2128,15 +2128,18 @@ function setupFileUploadDragAndDrop() {
 function setupDragAndDrop() {
     console.log('Setting up drag and drop...');
 
-    // Setup draggable resources - now look for Gradio resource components
+    // Setup draggable resources via DRAG HANDLES only.
+    // Setting draggable="true" on the entire .resource-item-gradio container
+    // blocks child input/textarea elements from receiving focus in Chrome.
+    // Instead, only the .drag-handle element inside each item is draggable.
     const resourceItems = document.querySelectorAll('.resource-item-gradio');
     console.log('Found Gradio resource items:', resourceItems.length);
 
     resourceItems.forEach((item, index) => {
-        // Make sure the item is draggable
-        item.setAttribute('draggable', 'true');
+        // Do NOT set draggable on the container — it breaks textbox interaction
+        item.removeAttribute('draggable');
 
-        // Just store the path on the element for reference during drag
+        // Store the path on the container for reference
         const pathHidden = item.querySelector('.resource-path-hidden');
         if (pathHidden) {
             const path = pathHidden.getAttribute('data-path') || pathHidden.textContent.trim();
@@ -2144,19 +2147,24 @@ function setupDragAndDrop() {
             console.log(`Resource ${index} path:`, path);
         }
 
-        // Also make child elements not draggable to prevent conflicts
-        const inputs = item.querySelectorAll('input, textarea, button');
-        inputs.forEach(input => {
-            input.setAttribute('draggable', 'false');
-        });
+        // Find the drag handle (filename display)
+        const dragHandle = item.querySelector('.drag-handle');
+        if (dragHandle) {
+            dragHandle.setAttribute('draggable', 'true');
+            dragHandle.style.cursor = 'grab';
 
-        // Remove existing listeners to avoid duplicates
-        item.removeEventListener('dragstart', handleDragStart);
-        item.removeEventListener('dragend', handleDragEnd);
+            // Remove existing listeners to avoid duplicates
+            dragHandle.removeEventListener('dragstart', handleDragStart);
+            dragHandle.removeEventListener('dragend', handleDragEnd);
 
-        // Add new listeners
-        item.addEventListener('dragstart', handleDragStart);
-        item.addEventListener('dragend', handleDragEnd);
+            // Add drag listeners to the handle
+            dragHandle.addEventListener('dragstart', handleDragStart);
+            dragHandle.addEventListener('dragend', handleDragEnd);
+        } else {
+            console.warn(`Resource ${index}: no .drag-handle found`);
+        }
+
+        item.dataset.dragListenerAttached = 'true';
     });
 
     // Setup drop zones
@@ -2192,6 +2200,7 @@ function setupDropZones(dropZones) {
 
         // Add data attribute to help debug
         zone.setAttribute('data-drop-zone-index', index);
+        zone.dataset.dropListenerAttached = 'true';
         console.log(`Set up drop zone ${index} on element:`, zone);
     });
 }
@@ -2654,6 +2663,35 @@ function setupDownloadDropdown() {
     
     console.log('=== DOWNLOAD DROPDOWN SETUP COMPLETE ===');
 }
+
+// Periodic drag-and-drop health check.
+// Gradio 5.x re-renders blocks asynchronously (via gr.HTML value updates)
+// which removes event listeners from .block-resources drop zones.
+// The MutationObserver catches most re-renders, but timing can vary.
+// This poller ensures drop zones always have listeners by checking every 2s.
+setInterval(() => {
+    const dropZones = document.querySelectorAll('.block-resources');
+    const resourceItems = document.querySelectorAll('.resource-item-gradio');
+
+    if (dropZones.length > 0 && resourceItems.length > 0) {
+        // Check if any drop zone is missing a listener by testing for our marker
+        let needsSetup = false;
+        dropZones.forEach(zone => {
+            if (!zone.dataset.dropListenerAttached) {
+                needsSetup = true;
+            }
+        });
+        resourceItems.forEach(item => {
+            if (!item.dataset.dragListenerAttached) {
+                needsSetup = true;
+            }
+        });
+        if (needsSetup) {
+            console.log('[DnD health] Re-attaching drag-and-drop listeners');
+            setupDragAndDrop();
+        }
+    }
+}, 2000);
 
 // Set up observer for workspace collapse button changes
 // No longer needed since we handle the class in Python
