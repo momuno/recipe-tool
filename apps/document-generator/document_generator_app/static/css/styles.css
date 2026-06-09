@@ -2795,21 +2795,15 @@
     color: #bbbbc2;  /* --neutral-400: #bbbbc2 used for placeholders in gradio */
 }
 
-/* Hide scrollbar on the HTML component itself — the outer .generate-display
-   container handles scrolling with overflow-y: auto.  This prevents a double
-   scrollbar when the rendered document is taller than the panel. */
+/* Let generated content flow naturally so the parent .generate-display
+   (height: 680px; overflow-y: auto) handles scrolling.  The inner Gradio
+   HTML wrapper and its children must NOT clip overflow, otherwise the parent
+   never sees content exceeding its height and never shows a scrollbar. */
 .generate-display .gradio-html,
-.generate-display .gradio-html *,
 .generated-content {
-    overflow: hidden !important;
-    -ms-overflow-style: none !important;  /* IE and Edge */
-    scrollbar-width: none !important;  /* Firefox */
-}
-
-.generate-display .gradio-html::-webkit-scrollbar,
-.generate-display .gradio-html *::-webkit-scrollbar,
-.generated-content::-webkit-scrollbar {
-    display: none !important;  /* Chrome, Safari and Opera */
+    overflow: visible !important;
+    max-height: none !important;
+    height: auto !important;
 }
 
 /* Rendered document HTML (produced by pypandoc markdown→HTML conversion) */
