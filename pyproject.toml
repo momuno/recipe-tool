@@ -5,6 +5,7 @@ members = [
     "docpack-file",
     "shared/gradio-components",
     "apps/document-generator",
+    "apps/document-generator-with-chat",
     "apps/experimental/document-generator-v1",
     "apps/recipe-executor",
     "apps/recipe-tool",
@@ -21,6 +22,7 @@ docpack-file = { workspace = true }
 gradio-components = { workspace = true }
 # Apps
 document-generator-app = { workspace = true }
+document-generator-with-chat = { workspace = true }
 document-generator-v1-app = { workspace = true }
 recipe-executor-app = { workspace = true }
 recipe-tool-app = { workspace = true }
