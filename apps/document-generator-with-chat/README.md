@@ -47,7 +47,7 @@ Document Generator is a web-based application that helps users create comprehens
    # Fill in your appropriate API key
 
    # Run
-   document-generator-app
+   document-generator-app-chat
    ```
 
    > NOTE: If the deployment step `make build` has been run, instead run the app with the `--dev` option.
