@@ -19,6 +19,8 @@ from .models.outline import Outline, Resource, Section
 from .session import session_manager
 from .assistant import DocumentAssistant, create_chatbot_interface, handle_chat_message
 
+logger = logging.getLogger(__name__)
+
 # Load environment variables from .env file
 load_dotenv()
 
@@ -97,7 +99,6 @@ def markdown_to_docx(markdown_content: str, output_path: str) -> str:
             "docx",
             format="md",
             outputfile=output_path,
-            extra_args=["--extract-media=."],  # Extract images to current directory
         )
         return output_path
     except Exception as e:
@@ -1837,7 +1838,10 @@ async def handle_start_draft_click(prompt, resources, session_id=None):
                 outline,  # outline_state
                 json_str,  # json_output
                 session_id,  # session_state
-                gr.update(visible=False),  # generated_content_html
+                gr.update(
+                    value="<em>Click '▷ Generate' to see the generated content here.</em><br><br><br>",
+                    visible=True,
+                ),  # generated_content_html — reset to placeholder (always visible to avoid transition issues)
                 gr.update(visible=False),  # generated_content
                 gr.update(interactive=False),  # save_doc_btn
                 gr.update(visible=True, value=f"SWITCH_TO_DRAFT_TAB_{int(time.time() * 1000)}"),  # switch_tab_trigger
@@ -3048,6 +3052,12 @@ def create_app():
                         save_doc_btn = gr.DownloadButton(
                             visible=True, elem_id="hidden-download-btn", elem_classes="hidden-component"
                         )
+                        # Hidden HTML element for JS-based direct download (bypasses
+                        # Gradio 5.x DownloadButton programmatic-click limitation)
+                        download_path_signal = gr.HTML(
+                            value="", visible=True, elem_id="download-path-signal",
+                            elem_classes="hidden-component"
+                        )
 
                     # Debug panel for JSON display (collapsible)
                     with gr.Column(elem_classes="debug-panel", elem_id="debug-panel-container"):
@@ -3424,9 +3434,41 @@ def create_app():
             )
 
             # ── Step 3: final state ──────────────────────────────────────────────────
-            # Hide the HTML loading panel, show Markdown with the generated content.
-            html_update = gr.update(visible=False)
-            markdown_update = gr.update(value=content, visible=True)
+            # Render the markdown as HTML and update generated_content_html
+            # (always visible).
+            # Root cause fix (round 2): Gradio 5.x has TWO generator-yield bugs:
+            #   1. Visibility transitions (visible=False→True) are unreliable in
+            #      yields.  Fixed by keeping generated_content_html always
+            #      visible=True.
+            #   2. The FINAL yield of an async generator can be silently dropped —
+            #      the SSE stream closes before the client processes the last
+            #      update, leaving the component showing only <!---> comment nodes.
+            #      Fixed by yielding the final state TWICE with a small async sleep
+            #      between them, ensuring at least one update reaches the client.
+            import asyncio
+
+            try:
+                rendered_html = pypandoc.convert_text(
+                    content, "html5", format="md"
+                )
+                display_html = f'<div class="generated-document">{rendered_html}</div>'
+            except Exception as html_err:
+                logger.warning(f"Failed to render markdown as HTML for display: {html_err}")
+                import html as _html_lib
+
+                display_html = (
+                    '<div class="generated-document">'
+                    '<pre style="white-space: pre-wrap; word-wrap: break-word;">'
+                    f"{_html_lib.escape(content)}"
+                    "</pre></div>"
+                )
+
+            logger.info(f"Rendered HTML for display (length: {len(display_html)})")
+
+            # Keep generated_content_html visible — just swap in the rendered document.
+            html_update = gr.update(value=display_html, visible=True)
+            # Markdown component stays hidden; HTML component owns the display now.
+            markdown_update = gr.update(visible=False)
 
             if docx_path:
                 download_update = gr.update(value=docx_path)
@@ -3440,7 +3482,7 @@ def create_app():
             print(f"DEBUG: Returning DOCX path to state: {docx_path}")
             print(f"DEBUG: Returning Markdown path to state: {markdown_path}")
 
-            yield (
+            final_output = (
                 json_str,
                 markdown_update,
                 html_update,
@@ -3450,6 +3492,14 @@ def create_app():
                 docx_path,
                 markdown_path,
             )
+
+            # Yield the final state, then sleep and yield again.  Gradio 5.x
+            # can silently drop the last yield of an async generator — the
+            # redundant yield ensures the client receives the update at least
+            # once.
+            yield final_output
+            await asyncio.sleep(0.15)
+            yield final_output
 
         # Wire the generate button directly to the async generator.
         # The generator's first yield supplies the loading state; the second yield
@@ -3477,27 +3527,29 @@ def create_app():
         # Handle download format selection
         def handle_download_format(format_type, docx_path, markdown_path):
             """Handle download based on selected format."""
-            print(f"Download format selected: {format_type}")
-            print(f"DOCX path: {docx_path}")
-            print(f"Markdown path: {markdown_path}")
+            logger.info(f"Download format selected: '{format_type}'")
+            logger.info(f"DOCX path: {docx_path}")
+            logger.info(f"Markdown path: {markdown_path}")
+
+            import time as _time
+            ts = int(_time.time() * 1000)
 
             if format_type == "markdown" and markdown_path:
-                print(f"Setting download to markdown: {markdown_path}")
-                # Return the markdown file path for download
-                return gr.update(value=markdown_path)
+                logger.info(f"Setting download to markdown: {markdown_path}")
+                signal_html = f'<div data-download-path="{markdown_path}" data-ts="{ts}"></div>'
+                return gr.update(value=markdown_path), gr.update(value=signal_html)
             elif format_type == "docx" and docx_path:
-                print(f"Setting download to DOCX: {docx_path}")
-                # Return the DOCX file path for download
-                return gr.update(value=docx_path)
+                logger.info(f"Setting download to DOCX: {docx_path}")
+                signal_html = f'<div data-download-path="{docx_path}" data-ts="{ts}"></div>'
+                return gr.update(value=docx_path), gr.update(value=signal_html)
             else:
-                print("No valid format or path, keeping current state")
-                # Keep current state
-                return gr.update()
+                logger.warning(f"Download failed: format_type='{format_type}', docx_path={docx_path}, markdown_path={markdown_path}")
+                return gr.update(), gr.update()
 
         download_format_trigger.click(
             fn=handle_download_format,
             inputs=[download_format_input, docx_file_path, markdown_file_path],
-            outputs=[save_doc_btn],
+            outputs=[save_doc_btn, download_path_signal],
         )
 
         # Import file handler
@@ -3651,7 +3703,10 @@ def create_app():
                 initial_outline,  # outline_state
                 initial_json,  # json_output
                 new_session_id,  # session_state
-                gr.update(value="", visible=False),  # generated_content_html
+                gr.update(
+                    value="<em>Click '▷ Generate' to see the generated content here.</em><br><br><br>",
+                    visible=True,
+                ),  # generated_content_html — reset to placeholder (always visible to avoid transition issues)
                 gr.update(value="", visible=False),  # generated_content
                 gr.update(interactive=False),  # save_doc_btn
                 None,  # focused_block_state
@@ -4093,10 +4148,10 @@ def main():
 
     if args.dev:
         logging.basicConfig(level=logging.DEBUG)
-        app.launch(server_name=server_name, server_port=server_port, mcp_server=True, pwa=True, share=False)
+        app.launch(server_name=server_name, server_port=server_port, mcp_server=True, pwa=True, share=False, allowed_paths=["/tmp"])
     else:
         logging.basicConfig(level=logging.INFO)
-        app.launch(server_name=server_name, server_port=server_port, mcp_server=True, pwa=True)
+        app.launch(server_name=server_name, server_port=server_port, mcp_server=True, pwa=True, allowed_paths=["/tmp"])
 
 
 if __name__ == "__main__":
