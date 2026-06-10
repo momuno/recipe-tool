@@ -30,13 +30,13 @@ dev = [
 ]
 
 [project.scripts]
-document-generator-app-chat = "document_generator_app.app:main"
+document-generator-app-chat = "document_generator_app_chat.app:main"
 
 [tool.uv]
 package = true
 
 [tool.hatch.build.targets.wheel]
-packages = ["document_generator_app"]
+packages = ["document_generator_app_chat"]
 
 [build-system]
 requires = ["hatchling"]

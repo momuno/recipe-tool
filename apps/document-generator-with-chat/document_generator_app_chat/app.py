@@ -1,6 +1,7 @@
 import argparse
 import asyncio
 import json
+import logging
 import os
 import tempfile
 import time
@@ -4143,8 +4144,6 @@ def main():
     print(f"Server: {server_name}:{server_port}")
 
     app = create_app()
-
-    import logging
 
     if args.dev:
         logging.basicConfig(level=logging.DEBUG)

@@ -53,7 +53,7 @@ Document Generator is a web-based application that helps users create comprehens
    > NOTE: If the deployment step `make build` has been run, instead run the app with the `--dev` option.
 
    ```
-   document-generator-app --dev
+   document-generator-app-chat --dev
    ```
 
 2. Open locally running webapp in your browser. (http://localhost:8000/)
