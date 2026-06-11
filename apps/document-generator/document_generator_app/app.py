@@ -2068,7 +2068,7 @@ def create_app():
     # Wrap JS in script tags for head injection
     custom_js = f"<script>{js_content}</script>"
 
-    with gr.Blocks(title="Document Generator") as app:
+    with gr.Blocks(title="Document Generator", css=custom_css, head=custom_js) as app:
         # Needed to declare up front, so elements will appear in deployed DOM
         gr.DownloadButton(visible=True, elem_classes="hidden-component")
         gr.File(visible=True, elem_classes="hidden-component")
@@ -3857,15 +3857,13 @@ def main():
             mcp_server=True,
             pwa=True,
             share=False,
-            css=custom_css,
-            head=custom_js,
             allowed_paths=["/tmp"],
         )
     else:
         logging.basicConfig(level=logging.INFO)
         app.launch(
             server_name=server_name, server_port=server_port, mcp_server=True, pwa=True,
-            css=custom_css, head=custom_js, allowed_paths=["/tmp"],
+            allowed_paths=["/tmp"],
         )
 
 
