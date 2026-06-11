@@ -12,7 +12,7 @@ The image above shows the added chat-driven functionality to generate a document
 > NOTE: Part of the original work for this chat protype was unintentionally discarded. This work has since been recreated.
 
 <br>
-The image below shows the protoype (without chat) exploring decomposition and regeneration of a document from sectio modules.
+The image below shows the protoype (without chat) exploring decomposition and regeneration of a document from section modules.
 <br>
 <br>
 
