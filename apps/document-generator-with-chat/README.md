@@ -1,5 +1,5 @@
 
-# Document Generator
+# Document Generator With Chat
 
 A powerful AI document generation tool that creates structured documents from outlines and resource files using Large Language Models.
 
