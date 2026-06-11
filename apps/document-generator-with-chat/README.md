@@ -1,8 +1,20 @@
+
 # Document Generator
 
 A powerful AI document generation tool that creates structured documents from outlines and resource files using Large Language Models.
 
-> **Note — Prototype Status**: This app is a prototype for exploring AI-powered document generation. The core workflow (prompt → outline → generate → download) is fully functional. The **resource panel** (editing resource titles/descriptions, drag-and-drop of resources into workspace blocks) has known interactivity issues with Gradio 5.x and is not being actively fixed at this time.
+<img width="1499" height="909" alt="Screenshot 2026-06-10 165447" src="https://github.com/user-attachments/assets/c820afc6-9c77-49e5-88cb-4358e20f21ac" />
+<br>
+<br>
+The image above shows the added chat-driven functionality to generate a document and interact with the app. 
+<br>
+
+> NOTE: Part of the original work for this chat protype was unintentionally discarded. This work has since been recreated.
+
+<br>
+The image below shows the protoype (without chat) exploring decomposition and regeneration of a document from sectio modules.
+<br>
+<br>
 
 <img width="1838" height="898" alt="image" src="https://github.com/user-attachments/assets/56db6bf3-ac91-49b3-b7d3-92c32a5af2df" />
 
