@@ -2212,6 +2212,10 @@ def replace_resource_file_gradio(resources, old_resource_path, new_file, title, 
         return resources, None, "{}", None, gr.update(value=warning_html, visible=True)
 
 
+# Keep a module-level reference for use inside create_app (avoids shadowing by local reset_document)
+reset_document_module = reset_document
+
+
 def create_app():
     """Create and return the Document Builder Gradio app."""
 
@@ -2598,6 +2602,11 @@ def create_app():
                         elem_id="import-file-input",
                         elem_classes="hidden-component",
                     )
+
+            # Assistant - AI-powered chatbot interface
+            with gr.Row(elem_classes="assistant-section"):
+                with gr.Column():
+                    chatbot, msg_input, send_btn, clear_btn = create_chatbot_interface()
 
             # Document title and description
             with gr.Row(elem_classes="header-section"):
@@ -3060,31 +3069,26 @@ def create_app():
                             elem_classes="hidden-component"
                         )
 
-                    # Debug panel for JSON display (collapsible)
-                    with gr.Column(elem_classes="debug-panel", elem_id="debug-panel-container"):
-                        with gr.Row(elem_classes="debug-panel-header"):
-                            gr.HTML("""
-                                <div class="debug-panel-title" onclick="toggleDebugPanel()">
-                                    <span>Debug Panel (JSON Output)</span>
-                                    <span class="debug-collapse-icon" id="debug-collapse-icon">⌵</span>
-                                </div>
-                            """)
+            # Debug panel for JSON display (collapsible)
+            with gr.Column(elem_classes="debug-panel", elem_id="debug-panel-container"):
+                with gr.Row(elem_classes="debug-panel-header"):
+                    gr.HTML("""
+                        <div class="debug-panel-title" onclick="toggleDebugPanel()">
+                            <span>Debug Panel (JSON Output)</span>
+                            <span class="debug-collapse-icon" id="debug-collapse-icon">⌵</span>
+                        </div>
+                    """)
 
-                        with gr.Column(elem_classes="debug-panel-content", elem_id="debug-panel-content", visible=True):
-                            json_output = gr.Code(
-                                value=initial_json,
-                                language="json",
-                                elem_classes="json-debug-output",
-                                wrap_lines=True,
-                                lines=20,
-                            )
+                with gr.Column(elem_classes="debug-panel-content", elem_id="debug-panel-content", visible=True):
+                    json_output = gr.Code(
+                        value=initial_json,
+                        language="json",
+                        elem_classes="json-debug-output",
+                        wrap_lines=True,
+                        lines=20,
+                    )
 
-        # Assistant Tab - AI-powered chatbot interface
-        with gr.Tab("Assistant", id="assistant_tab"):
-            # Create chatbot interface
-            chatbot, msg_input, send_btn, clear_btn = create_chatbot_interface()
-
-            # Create a dictionary of app functions the assistant can call
+            # Wire up chatbot handlers (defined after all UI components)
             app_functions = {
                 "handle_start_draft_click": handle_start_draft_click,
                 "add_ai_block": add_ai_block,
@@ -3093,55 +3097,50 @@ def create_app():
                 "update_block_content": update_block_content,
                 "update_block_heading": update_block_heading,
                 "handle_document_generation": handle_document_generation,
-                "handle_download_click": handle_download_click,
-                "reset_document": reset_document,  # Use the local reset_document function
+                "handle_download_click": lambda blocks, fmt: None,  # TODO: wire to handle_download_format when available
+                "reset_document": lambda: reset_document_module(None),
             }
 
-            # Wire up chatbot handlers
             def process_chat(message, history, blocks, resources, session, focused_block):
                 """Process chat message and update app state"""
                 if not message:
-                    return history, blocks, resources, ""
-
-                # Pass current state and functions to handler
+                    return history, blocks, resources, "", gr.update(), gr.update()
                 new_history, new_blocks, new_resources, response = handle_chat_message(
                     message,
                     history,
                     blocks,
                     resources,
-                    session.session_id if session else str(uuid.uuid4()),
+                    session if session else str(uuid.uuid4()),
                     focused_block,
                     app_functions,
                 )
+                # Check if generated content is available
+                gen_html_update = gr.update()
+                gen_md_update = gr.update()
+                if hasattr(handle_chat_message, '_last_generated_content'):
+                    content = handle_chat_message._last_generated_content
+                    if content:
+                        gen_html_update = gr.update(value="", visible=False)
+                        gen_md_update = gr.update(value=content, visible=True)
+                        handle_chat_message._last_generated_content = None
+                return new_history, new_blocks, new_resources, "", gen_html_update, gen_md_update
 
-                return new_history, new_blocks, new_resources, ""
-
-            # Connect chat input to handler
             msg_input.submit(
                 fn=process_chat,
                 inputs=[msg_input, chatbot, blocks_state, resources_state, session_state, focused_block_state],
-                outputs=[chatbot, blocks_state, resources_state, msg_input],
+                outputs=[chatbot, blocks_state, resources_state, msg_input, generated_content_html, generated_content],
             ).then(
-                # Update the blocks display after chat command
                 fn=render_blocks,
                 inputs=[blocks_state, focused_block_state],
                 outputs=blocks_display,
-            ).then(
-                # Update resources display if needed
-                fn=lambda resources: render_resources(resources),
-                inputs=[resources_state],
-                outputs=resources_display,
             )
 
             send_btn.click(
                 fn=process_chat,
                 inputs=[msg_input, chatbot, blocks_state, resources_state, session_state, focused_block_state],
-                outputs=[chatbot, blocks_state, resources_state, msg_input],
-            ).then(fn=render_blocks, inputs=[blocks_state, focused_block_state], outputs=blocks_display).then(
-                fn=lambda resources: render_resources(resources), inputs=[resources_state], outputs=resources_display
-            )
+                outputs=[chatbot, blocks_state, resources_state, msg_input, generated_content_html, generated_content],
+            ).then(fn=render_blocks, inputs=[blocks_state, focused_block_state], outputs=blocks_display)
 
-            # Clear chat history
             clear_btn.click(fn=lambda: ([], ""), outputs=[chatbot, msg_input])
 
         # Helper function to add AI block and regenerate outline

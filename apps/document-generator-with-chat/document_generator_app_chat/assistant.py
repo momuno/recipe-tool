@@ -21,6 +21,8 @@ except ImportError:
             for k, v in kwargs.items():
                 setattr(self, k, v)
 
+from .config import settings
+
 
 class CommandIntent(BaseModel):
     """Parsed user intent from chatbot"""
@@ -37,29 +39,38 @@ class DocumentAssistant:
         # Initialize the AI agent for parsing intents if available
         if PYDANTIC_AI_AVAILABLE:
             try:
+                model_id = f"{settings.llm_provider}:{settings.default_model}"
                 self.agent = Agent(
-                    'openai:gpt-4o-mini',
+                    model_id,
                     system_prompt="""You are a document assistant that helps users create and manage documents.
                     Parse user requests into specific actions with parameters.
                     
                     Available actions:
-                    - create_outline: Create a new document outline from a prompt
-                    - add_ai_block: Add an AI-generated section
-                    - add_text_block: Add a manual text section
-                    - delete_block: Remove a section
-                    - update_block: Update section content
-                    - generate_document: Generate the full document
-                    - export_markdown: Export as Markdown
-                    - export_docx: Export as Word document
-                    - upload_resource: Handle file upload
-                    - assign_resource: Assign resource to a section
-                    - reset_document: Clear and start over
-                    - help: Show available commands
+                    - create_outline: Create a new document outline from a prompt. Parameters: {"topic": "the topic"}
+                    - add_ai_block: Add an AI-generated section. Parameters: {"topic": "section topic"}
+                    - add_text_block: Add a manual text section. Parameters: {}
+                    - delete_block: Remove a section. Parameters: {}
+                    - update_block: Update section content. Parameters: {}
+                    - generate_document: Generate the full document. Parameters: {}
+                    - export_markdown: Export as Markdown. Parameters: {}
+                    - export_docx: Export as Word document. Parameters: {}
+                    - reset_document: Clear and start over. Parameters: {}
+                    - help: Show available commands. Parameters: {}
                     
-                    Return a JSON with: action, parameters, confidence (0-1), and a friendly response message.
-                    """
+                    You MUST respond with ONLY a JSON object (no markdown, no explanation) with these keys:
+                    - "action": one of the actions above
+                    - "parameters": dict of parameters for that action
+                    - "confidence": float 0-1 how confident you are
+                    - "response": a friendly message to show the user about what you're doing
+                    
+                    Example input: "Create a document about machine learning"
+                    Example output: {"action": "create_outline", "parameters": {"topic": "machine learning"}, "confidence": 0.95, "response": "Creating a document outline about machine learning..."}
+                    """,
+                    result_type=str,
                 )
-            except Exception:
+                print(f"DocumentAssistant: using model {model_id}")
+            except Exception as e:
+                print(f"DocumentAssistant: failed to init agent: {e}")
                 self.agent = None
         else:
             self.agent = None
@@ -86,17 +97,25 @@ class DocumentAssistant:
         
         if self.agent:
             try:
-                # Try AI parsing first
                 result = await self.agent.run(
                     f"Parse this command: {message}\nCurrent context: Has {len(context.get('blocks', []))} blocks"
                 )
                 
-                # Parse AI response
-                if isinstance(result.data, str):
-                    intent_data = json.loads(result.data)
+                response_text = result.data
+                print(f"AI agent result: {response_text}")
+                
+                # Strip markdown code fencing if present
+                if isinstance(response_text, str):
+                    text = response_text.strip()
+                    if text.startswith("```"):
+                        text = re.sub(r"^```(?:json)?\s*", "", text)
+                        text = re.sub(r"\s*```$", "", text)
+                    intent_data = json.loads(text)
                     return CommandIntent(**intent_data)
             except Exception as e:
                 print(f"AI parsing failed: {e}, falling back to patterns")
+        else:
+            print("No AI agent available, using pattern matching")
         
         # Fallback to pattern matching
         message_lower = message.lower().strip()
@@ -105,6 +124,7 @@ class DocumentAssistant:
             match = re.search(pattern, message_lower)
             if match:
                 params = param_extractor(match)
+                print(f"Pattern matched: action={action}, params={params}")
                 return CommandIntent(
                     action=action,
                     parameters=params,
@@ -158,16 +178,17 @@ class DocumentAssistant:
             ),
             "add_ai_block": lambda: app_functions["add_ai_block"](
                 current_state.get("blocks", []),
-                current_state.get("focused_block_id"),
-                initial_content=f"Write about {intent.parameters.get('topic', '')}"
+                current_state.get("focused_block_id")
             ),
             "add_text_block": lambda: app_functions["add_text_block"](
                 current_state.get("blocks", []),
                 current_state.get("focused_block_id")
             ),
             "generate_document": lambda: app_functions["handle_document_generation"](
-                current_state.get("blocks", []),
+                "",  # title
+                "",  # description
                 current_state.get("resources", []),
+                current_state.get("blocks", []),
                 current_state.get("session_id")
             ),
             "export_docx": lambda: app_functions["handle_download_click"](
@@ -187,8 +208,11 @@ class DocumentAssistant:
         
         if intent.action in action_mapping:
             try:
-                # Don't await since these are sync functions
+                import inspect
                 result = action_mapping[intent.action]()
+                # Await if the function returned a coroutine
+                if inspect.iscoroutine(result):
+                    result = await result
                 return result, intent.response
             except Exception as e:
                 return None, f"Error executing command: {str(e)}"
@@ -204,7 +228,7 @@ def create_chatbot_interface():
         gr.Markdown("Ask me to help create, edit, or manage your document!")
         
         chatbot = gr.Chatbot(
-            height=400,
+            height=150,
             placeholder="Type a command to get started...",
             bubble_full_width=False,
             elem_classes="assistant-chatbot"
@@ -245,6 +269,13 @@ def create_chatbot_interface():
     return chatbot, msg_input, send_btn, clear_btn
 
 
+async def _async_handle(assistant, message, context, app_functions):
+    """Async helper to parse intent and execute command."""
+    intent = await assistant.parse_intent(message, context)
+    result, response = await assistant.execute_command(intent, app_functions, context)
+    return intent, result, response
+
+
 def handle_chat_message(
     message: str,
     history: List[List[str]],
@@ -259,6 +290,9 @@ def handle_chat_message(
     if not message:
         return history, blocks_state, resources_state, None
     
+    # Reset generated content tracker
+    handle_chat_message._last_generated_content = None
+    
     # Initialize assistant (could cache this)
     assistant = DocumentAssistant()
     
@@ -270,39 +304,54 @@ def handle_chat_message(
         "focused_block_id": focused_block_id
     }
     
-    # Parse intent using asyncio.run for sync context
-    intent = asyncio.run(assistant.parse_intent(message, context))
-    
-    # Execute command
-    result, response = asyncio.run(assistant.execute_command(
-        intent, app_functions, context
-    ))
+    # Run async code - use nest_asyncio-style approach for running inside existing loop
+    try:
+        loop = asyncio.get_running_loop()
+        # We're inside an existing event loop (Gradio's), use a new thread
+        import concurrent.futures
+        with concurrent.futures.ThreadPoolExecutor() as pool:
+            future = pool.submit(asyncio.run, _async_handle(assistant, message, context, app_functions))
+            intent, result, response = future.result()
+    except RuntimeError:
+        # No running loop, safe to use asyncio.run
+        intent, result, response = asyncio.run(_async_handle(assistant, message, context, app_functions))
     
     # Update history
     history.append([message, response])
     
     # Return updated states based on action
     if intent.action == "create_outline" and result:
-        # Result should be new blocks
-        return history, result, resources_state, response
+        # handle_start_draft_click returns a large tuple for Gradio outputs
+        # Extract blocks (index 3) and resources (index 2) from the tuple
+        if isinstance(result, tuple) and len(result) >= 4:
+            new_blocks = result[3]
+            new_resources = result[2]
+            # gr.update() objects aren't usable - check for actual list data
+            if isinstance(new_blocks, list):
+                return history, new_blocks, resources_state, response
+            if isinstance(new_resources, list):
+                return history, blocks_state, new_resources, response
+        return history, blocks_state, resources_state, response
     elif intent.action in ["add_ai_block", "add_text_block", "delete_block"] and result:
-        # Result should be updated blocks
-        return history, result, resources_state, response
+        # These return updated blocks list directly
+        if isinstance(result, list):
+            return history, result, resources_state, response
+        return history, blocks_state, resources_state, response
     elif intent.action == "generate_document" and result:
-        # Result should be updated blocks with generated content
-        return history, result, resources_state, response
+        # handle_document_generation returns (json_str, generated_content, docx_path, md_path)
+        if isinstance(result, tuple) and len(result) >= 2:
+            generated_content = result[1]
+            if generated_content and isinstance(generated_content, str):
+                handle_chat_message._last_generated_content = generated_content
+        return history, blocks_state, resources_state, response
     elif intent.action in ["export_docx", "export_markdown"] and result:
-        # Result is a file path, response includes download info
         return history, blocks_state, resources_state, f"{response}\n\nFile ready: {result}"
     elif intent.action == "reset_document" and result:
-        # reset_document returns multiple values, extract blocks and resources
         if isinstance(result, tuple) and len(result) >= 4:
-            # Result is (title, desc, resources, blocks, outline, json, session, ...)
-            new_resources = result[2]  # resources_state
-            new_blocks = result[3]     # blocks_state
-            return history, new_blocks, new_resources, response
-        else:
-            return history, [], [], response
+            new_resources = result[2]
+            new_blocks = result[3]
+            if isinstance(new_blocks, list):
+                return history, new_blocks, new_resources if isinstance(new_resources, list) else [], response
+        return history, [], [], response
     else:
-        # No state change
         return history, blocks_state, resources_state, response
